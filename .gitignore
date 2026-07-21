@@ -1,0 +1,31 @@
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# --- secrets / env (never commit) ---
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.dev.vars
+.mcp.json
+secrets/
+
+# --- node / build (for the future monorepo; harmless now) ---
+node_modules/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+coverage/
+.pnpm-store/
+
+# --- logs / tmp ---
+*.log
+tmp/
+.cache/
