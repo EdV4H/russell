@@ -7,7 +7,7 @@
 ## 共通フロー
 
 ```
-検知 → 封じ込め（/ryo stop or env フラグ, kill-switch.md）
+検知 → 封じ込め（/russell stop or env フラグ, kill-switch.md）
      → 影響範囲の特定（event_log で全アクション追跡, §3.1）
      → 復旧（config_version rollback / 記憶の来歴で汚染追跡, §12-5）
      → 事後（原因・再発防止・報告者への還元）
@@ -15,13 +15,13 @@
 
 - 検知したら**まず封じ込め**。原因分析は封じ込めの後（暴走は時間とともに被害が増える）。
 - event_log は追記専用の監査ログ（§3.1）。「誰が/何を/いつ/trust_label」が残るので、影響特定はここを起点にする。
-- 対応の記録自体も `#ryo-管理` に残し、後で事後レビューできるようにする。
+- 対応の記録自体も `#russell-管理` に残し、後で事後レビューできるようにする。
 
 ## 役割
 
 | ロール | 責務 |
 |---|---|
-| 発見者 | 検知・一次封じ込め（`/ryo stop`）・`#ryo-管理` へ第一報 |
+| 発見者 | 検知・一次封じ込め（`/russell stop`）・`#russell-管理` へ第一報 |
 | インシデント指揮（オーナー） | 影響判断・復旧承認・対外連絡の要否判断 |
 | 実装/運用担当 | ログ追跡・rollback 実行・原因除去 |
 | プライバシーオーナー | 機微情報流出時の労務/法務対応（A-1） |
@@ -34,8 +34,8 @@
 
 | 段階 | 誰が | 何をする |
 |---|---|---|
-| 検知 | 発見者（住人含む） | `#ryo-管理` へ第一報。何が/どこに出たかを添える |
-| 封じ込め | 発見者/運用 | `/ryo stop <個体名>`。連投なら outbound circuit breaker（§12-8）が効いているか確認、効いていなければ全体停止 |
+| 検知 | 発見者（住人含む） | `#russell-管理` へ第一報。何が/どこに出たかを添える |
+| 封じ込め | 発見者/運用 | `/russell stop <個体名>`。連投なら outbound circuit breaker（§12-8）が効いているか確認、効いていなければ全体停止 |
 | 影響特定 | 運用 | event_log で送信内容・宛先・件数を洗う。機微情報が含まれるか判定 |
 | 復旧 | 運用 | 誤投稿を削除（可能なら）。原因が設定なら temperament/channel_settings を直し config_version を rollback（§6.1）。原因が後段フィルタの穴なら [`../initial-data/prompts/journal-and-report.md`](../initial-data/prompts/journal-and-report.md) のガードを強化 |
 | 事後 | オーナー/プライバシーオーナー | 機微情報流出なら A-1 の労務/法務対応。再発防止をガード/フィルタに反映。dryrun に落として再検証（§6.5） |
@@ -62,7 +62,7 @@
 | 段階 | 誰が | 何をする |
 |---|---|---|
 | 検知 | 運用/自動 | outbound 多層上限（§12-8）超過、使用量台帳アラート（[`cost-budget.md`](./cost-budget.md)）、platform_bug の連発（[`../initial-data/finding-dictionary.md`](../initial-data/finding-dictionary.md)） |
-| 封じ込め | 発見者 | **全体キルスイッチ**（`/ryo stop --all`、効かなければ env フラグ, [`kill-switch.md`](./kill-switch.md)）。DB 障害が絡むなら fail-closed で送信は自動停止しているはず（§12-7） |
+| 封じ込め | 発見者 | **全体キルスイッチ**（`/russell stop --all`、効かなければ env フラグ, [`kill-switch.md`](./kill-switch.md)）。DB 障害が絡むなら fail-closed で送信は自動停止しているはず（§12-7） |
 | 影響特定 | 運用 | event_log でループの起点を特定（どの routine/finding が回っているか）。self-issue の暴発なら circuit breaker が効いているか確認（§6.4） |
 | 復旧 | 運用 | 暴走している routine/finding を disable。原因の config_version を rollback。上限値（daily_speak_cap・件数上限・並列度）を見直す |
 | 事後 | オーナー | circuit breaker / outbound 上限のしきい値を調整。バッチが対話予算を食い潰していたなら並列度分離を点検（§2） |
@@ -71,7 +71,7 @@
 
 ## 事後レビュー（全タイプ共通）
 
-- 時系列・原因・影響・対応・再発防止を `#ryo-管理` にまとめる（軽量ポストモーテム）。
+- 時系列・原因・影響・対応・再発防止を `#russell-管理` にまとめる（軽量ポストモーテム）。
 - 再発防止は「プロンプトで気をつける」ではなく**決定論的ゲート/上限/ガードの強化**に落とす（§12 プロンプトガードレールの欺瞞）。
 - 報告のきっかけをくれた住人がいれば感謝を返す（§6.4 の思想を運用にも）。
 

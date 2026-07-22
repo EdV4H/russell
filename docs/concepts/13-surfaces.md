@@ -1,15 +1,15 @@
 # 通信面（Surfaces）
 
-**Ryo の本質は「一人の同僚がそこにいる」であって、それがどの面に現れるかは本質ではない**
+**Russell の本質は「記憶を構成物として持つ個体がそこにいる」ことであって、それがどの面に現れるかは本質ではない**
 （[`../design/plugin-first-reinterpretation.md`](../design/plugin-first-reinterpretation.md)）。
 通信面（surface）はコアから剥がしてプラグインにする。**Slack は `surface` プラグインの一実装にすぎない。**
 
 元設計書 [`../design/human-like-agent-design.md`](../design/human-like-agent-design.md) §2・§10 は「Slack 常駐」を前提に書かれているが、
-本リポジトリでは §10 の内容を `@edv4h/ryo-plugin-surface-slack` の仕様として読む。
+本リポジトリでは §10 の内容を `@edv4h/russell-plugin-surface-slack` の仕様として読む。
 
 ## surface とは
 
-`SurfaceDefinition` は3つの責務を持つ（[`../reference/30-ryo-plugin-contract.md`](../reference/30-ryo-plugin-contract.md)）:
+`SurfaceDefinition` は3つの責務を持つ（[`../reference/30-russell-plugin-contract.md`](../reference/30-russell-plugin-contract.md)）:
 
 - **受信** — `start(sink)` で正規化した受信イベントをコアへ流す購読を開始
 - **送信** — `send(out)` でスレッド/宛先へ発話。冪等キー対応
@@ -24,7 +24,7 @@ surface プラグインは `ctx.surfaces.register(def)` で自己分類する。
 
 ## Slack surface（§10）
 
-`@edv4h/ryo-plugin-surface-slack` は数ある surface の1つ。設計書 §10 の仕様をそのまま実装する。
+`@edv4h/russell-plugin-surface-slack` は数ある surface の1つ。設計書 §10 の仕様をそのまま実装する。
 
 - **Bolt for JavaScript / Socket Mode** — サーバーの inbound 開放不要。スケール要件が出たら HTTP Events API へ移行
 - **購読** — `app_mention`, `message.im`, 参加チャンネルの `message.channels`
@@ -57,6 +57,6 @@ untrusted 変数が特権ツール引数に入るとブロックする信頼ラ�
 
 ## 関連
 
-- `SurfaceRegistry` の型：[`../reference/30-ryo-plugin-contract.md`](../reference/30-ryo-plugin-contract.md)
+- `SurfaceRegistry` の型：[`../reference/30-russell-plugin-contract.md`](../reference/30-russell-plugin-contract.md)
 - Policy Gate と HITL：[`15-policy-gate-and-security.md`](./15-policy-gate-and-security.md)
 - 気づき（受信 → Finding）：[`16-findings-and-proactivity.md`](./16-findings-and-proactivity.md)

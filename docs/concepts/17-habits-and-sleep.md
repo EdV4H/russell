@@ -67,6 +67,6 @@ MAGMA の Slow Path 相当。**重い LLM 処理はすべてここに寄せ**、
 
 ## 関連
 
-- `RoutineRegistry` の型：[`../reference/30-ryo-plugin-contract.md`](../reference/30-ryo-plugin-contract.md)
+- `RoutineRegistry` の型：[`../reference/30-russell-plugin-contract.md`](../reference/30-russell-plugin-contract.md)
 - モード・キルスイッチの再検査：[`../reference/31-core-api.md`](../reference/31-core-api.md)
 - データモデル（`routines` / `journal_entries` / `playbooks` / `interests`）：[`19-data-model.md`](./19-data-model.md)

@@ -12,7 +12,7 @@
 | デプロイ先 | Cloud Run（min-instances=1）or Fly.io | TODO 決定 |
 | DB | Postgres + pgvector | TODO 契約 |
 | Slack アプリ | Socket Mode・最小スコープ | TODO 作成 |
-| GitHub | ryo 本体 + セルフイシュー起票先 | TODO 作成 |
+| GitHub | russell 本体 + セルフイシュー起票先 | TODO 作成 |
 | シークレット管理 | env or Secret Manager | TODO 決定 |
 
 ---
@@ -60,14 +60,14 @@
 
 ## 4. GitHub リポジトリ + CI
 
-- [ ] **ryo 本体リポジトリ**を作成（このプレップリポの後継 or 同一。pnpm + Turborepo モノレポ、[`../../reference/33-package-layout.md`](../../reference/33-package-layout.md)）
-- [ ] **セルフイシュー起票先リポジトリ**を確定（§6.4。原則 ryo 本体と同一。`github.issues` 装備は self-repo-only, [`../initial-data/equipment-ledger.md`](../initial-data/equipment-ledger.md)）
-- [ ] Ryo 用の GitHub トークン（Fine-grained PAT / GitHub App）を発行し、**対象リポを起票先に限定**（スコープをトークン側でも二重強制）
+- [ ] **russell 本体リポジトリ**を作成（このプレップリポの後継 or 同一。pnpm + Turborepo モノレポ、[`../../reference/33-package-layout.md`](../../reference/33-package-layout.md)）
+- [ ] **セルフイシュー起票先リポジトリ**を確定（§6.4。原則 russell 本体と同一。`github.issues` 装備は self-repo-only, [`../initial-data/equipment-ledger.md`](../initial-data/equipment-ledger.md)）
+- [ ] Russell 用の GitHub トークン（Fine-grained PAT / GitHub App）を発行し、**対象リポを起票先に限定**（スコープをトークン側でも二重強制）
 - [ ] CI 方針: typecheck / test / lint（biome）を PR で回す。**policy/ ・装備スコープ・プロンプトは人間レビュー必須**（外注任せにしない, A-3）
 - [ ] 装備 conformance suite（A-2）を CI に組み込む枠を用意（全 MCP 装備共通テスト）
 - [ ] シークレットを CI に置く場合は最小権限のデプロイ用トークンに限定
 
-> [!TODO] ryo 本体リポの置き場所（個人 org / 会社 org）とセルフイシュー起票先の確定、CI サービス（GitHub Actions 想定）の決定 — 承認者: リポジトリ管理者。公開/非公開の別も決める（セルフイシュー本文は公開リポでも安全な内容に限定, §6.4）。
+> [!TODO] russell 本体リポの置き場所（個人 org / 会社 org）とセルフイシュー起票先の確定、CI サービス（GitHub Actions 想定）の決定 — 承認者: リポジトリ管理者。公開/非公開の別も決める（セルフイシュー本文は公開リポでも安全な内容に限定, §6.4）。
 
 ## 5. シークレット管理
 

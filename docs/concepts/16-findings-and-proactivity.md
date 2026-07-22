@@ -1,6 +1,6 @@
 # 気づきと自発性（Findings）
 
-気づき（自発性）は「一人の同僚がそこにいる」を成立させる中核（設計書
+気づき（自発性）は「そこに個体が"いる"」感覚（同僚のように働く振る舞い）を成立させる中核（設計書
 [`../design/human-like-agent-design.md`](../design/human-like-agent-design.md) §6）。
 plugin-first では気づきの**種別（kind）ごと**に検知器をプラグイン化する。`finding-*` プラグインが
 `ctx.findings.register(kindDef)` で kind の検知器を登録し、`ctx.events` で受信イベントを購読する
@@ -66,7 +66,7 @@ Finding の一種 `kind='platform_bug'` として実装し、`finding-platform-b
   再発時は既存 Issue にコメント追記
 - **PII 除外** — Issue 本文は Finding から生成（症状/再現情報の run id・config_version 参照/頻度/影響/修正案）。
   会話の生ログや PII は書かず内部 run id 参照に留める（公開リポでも安全な内容に限定）
-- **装備スコープで制御** — `github.issues` は Ryo 自身のリポジトリのみに限定支給。効果分類は `external_write` なので、
+- **装備スコープで制御** — `github.issues` は Russell 自身のリポジトリのみに限定支給。効果分類は `external_write` なので、
   スコープ付き事前承認（対象リポ × 週あたり件数上限、例: 3件/週）の範囲でのみ自動起票
 - **ループガード** — platform_bug 起票は circuit breaker 対象。untrusted 由来テキストを根拠にした自動起票は禁止
   （自動経路は内部テレメトリのみ）
@@ -96,6 +96,6 @@ Slack でもらった FB（「この通知うざい」「昨日の要約、数�
 ## 関連
 
 - Finding / SourceResult のドメイン型：[`../reference/32-domain-types.md`](../reference/32-domain-types.md)
-- `FindingRegistry` の型：[`../reference/30-ryo-plugin-contract.md`](../reference/30-ryo-plugin-contract.md)
+- `FindingRegistry` の型：[`../reference/30-russell-plugin-contract.md`](../reference/30-russell-plugin-contract.md)
 - 習慣・夜間バッチ（気づきの昇格元）：[`17-habits-and-sleep.md`](./17-habits-and-sleep.md)
 - データモデル（`findings`）：[`19-data-model.md`](./19-data-model.md)

@@ -23,7 +23,7 @@
 - **fail-closed**（ポリシー情報が読めなければ送信・書込みしない側に倒す）
 
 装備・ツールは `ctx.policy.declareEffect(toolName, effect)` で効果分類を申告する
-（[`../reference/30-ryo-plugin-contract.md`](../reference/30-ryo-plugin-contract.md)）。
+（[`../reference/30-russell-plugin-contract.md`](../reference/30-russell-plugin-contract.md)）。
 
 ## 2. HITL 承認 と スコープ付き事前承認
 
@@ -50,7 +50,7 @@
 ## 4. キルスイッチ（別経路）
 
 > [!IMPORTANT]
-> `/ryo stop` コマンド + 環境変数フラグで全自発行動を即凍結（個体単位・全体の両方）。
+> `/russell stop` コマンド + 環境変数フラグで全自発行動を即凍結（個体単位・全体の両方）。
 > **キルスイッチは DB 障害時にも効く別経路（env / プロセスシグナル）を持つ**（§12-7）。
 > `runtime.killSwitch()` がこの別経路を含み、副作用の直前に再検査される
 > （[`../reference/31-core-api.md`](../reference/31-core-api.md)）。
@@ -87,5 +87,5 @@ Slack トークンはスコープ最小、DB はアプリ用ロールのみ、�
 ## 関連
 
 - 装備と効果分類：[`14-equipment.md`](./14-equipment.md)
-- `PolicyRegistry` の型：[`../reference/30-ryo-plugin-contract.md`](../reference/30-ryo-plugin-contract.md)
+- `PolicyRegistry` の型：[`../reference/30-russell-plugin-contract.md`](../reference/30-russell-plugin-contract.md)
 - モード・キルスイッチの実行時契約：[`../reference/31-core-api.md`](../reference/31-core-api.md)

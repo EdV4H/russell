@@ -5,7 +5,7 @@
 共通スケルトンは [`20-authoring-a-plugin.md`](./20-authoring-a-plugin.md) を先に。本ガイドは `EquipmentDefinition` と Policy Gate への申告に絞る。
 
 > [!NOTE] 提案仕様
-> コードは docs-only 段階の提案。型は実装時に `@edv4h/ryo-shared` で確定する。
+> コードは docs-only 段階の提案。型は実装時に `@edv4h/russell-shared` で確定する。
 
 ## EquipmentDefinition
 
@@ -42,7 +42,7 @@ setup(ctx: AgentContext) {
   const unregister = ctx.equipment.register({
     id: "github",
     mcpServer: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"] },
-    scopes: [{ kind: "repo", value: "edv4h/ryo", access: "issues" }],
+    scopes: [{ kind: "repo", value: "edv4h/russell", access: "issues" }],
     dangerLevel: 2, // external_write から導出
     tools: () => [
       { name: "github.issues.create", effect: "external_write" },
@@ -106,7 +106,7 @@ switch (res.status) {
 ```ts
 ctx.policy.registerPreApproval({
   operation: "github.issues.create",
-  target: { kind: "repo", value: "edv4h/ryo" },
+  target: { kind: "repo", value: "edv4h/russell" },
   configVersion: ctx.runtime.configVersion, // この設定版に限定
   limit: { count: 3, per: "week" },          // 例: 3件/週
   expiresAt: "2026-09-30T00:00:00Z",
@@ -117,9 +117,9 @@ ctx.policy.registerPreApproval({
 
 ## 例: equipment-github（セルフイシュー）
 
-`@edv4h/ryo-plugin-equipment-github`。個体が自分の基盤の不具合を自分で GitHub Issue に起票する経路（設計書 §6.4）。装備側の要点:
+`@edv4h/russell-plugin-equipment-github`。個体が自分の基盤の不具合を自分で GitHub Issue に起票する経路（設計書 §6.4）。装備側の要点:
 
-- **対象は Ryo 自身のリポジトリのみに限定支給**（`scopes` を1リポに絞る）。他リポは持たせない。
+- **対象は Russell 自身のリポジトリのみに限定支給**（`scopes` を1リポに絞る）。他リポは持たせない。
 - 効果分類は `external_write`（danger_level 2）。よって**スコープ付き事前承認（対象リポ × 3件/週）の範囲でのみ自動起票**。それ以外は dryrun（管理チャンネルに下書き提示）から始める。
 - 同じ不具合で複数 Issue を立てない: 再発時は新規起票ではなく既存 Issue へコメント追記（`github.issues.comment`）。この dedup 判定は finding 側の `finding_key`（エラーシグネチャのハッシュ）が担う → [`23-authoring-a-finding.md`](./23-authoring-a-finding.md)。
 - ループガード: 起票機能自体の不具合で Issue が暴発しないよう circuit breaker 対象。untrusted 由来テキスト（Slack 発言）を根拠にした自動起票は禁止（自動経路は内部テレメトリのみ）。

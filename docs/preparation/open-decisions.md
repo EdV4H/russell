@@ -60,7 +60,7 @@
 | B2-1 | Anthropic 契約主体（社内組織/新規）・支払い方法 | PO・経理 | ⬜ | [setup-checklist](infra/setup-checklist.md) |
 | B2-2 | デプロイ先（Cloud Run vs Fly.io）・Postgres プロバイダ | PO・インフラ | ⬜ | 〃 |
 | B2-3 | Slack ワークスペース管理者承認・個体=botの対応関係 | Slack管理者・PO | ⬜ | 〃 |
-| B2-4 | ryo本体リポの置き場所（個人/会社org）・公開非公開・CIサービス | リポ管理者 | ⬜ | 〃 |
+| B2-4 | russell本体リポの置き場所（個人/会社org）・公開非公開・CIサービス | リポ管理者 | ⬜ | 〃 |
 | B2-5 | シークレット管理方式（env vs Secret Manager） | インフラ・セキュリティ | ⬜ | 〃 |
 
 ## C-1. ドッグフーディング
@@ -76,7 +76,7 @@
 | # | 決めること | 承認者 | 状態 | ドキュメント |
 |---|---|---|---|---|
 | C2-1 | 承認者（オーナー）ロールの担当者名 | PO | ⬜ | [ownership-and-approval](operations/ownership-and-approval.md) |
-| C2-2 | 承認の記録先（event_log ＋ #ryo-管理 ピン留め / Notion 台帳） | 実装担当 | ⬜ | 〃 |
+| C2-2 | 承認の記録先（event_log ＋ #russell-管理 ピン留め / Notion 台帳） | 実装担当 | ⬜ | 〃 |
 | C2-3 | キルスイッチ権限者・オンコール担当・連絡先 | PO | ⬜ | [kill-switch](operations/kill-switch.md) |
 | C2-4 | 凍結粒度（mention応答も止めるか）・env フラグ名・シグナル | 実装担当・PO | ⬜ | 〃 |
 | C2-5 | インシデント各ロール担当者・就業時間外連絡フロー | PO | ⬜ | [incident-response](operations/incident-response.md) |

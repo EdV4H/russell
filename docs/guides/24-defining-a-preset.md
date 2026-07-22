@@ -1,12 +1,12 @@
 # ガイド: プリセットを定義する（プラグインの組み立て）
 
-usketch では `apps/web/app.tsx` がプラグイン配列を組む。Ryo ではその役割を**プリセット**が担う。
+usketch では `apps/web/app.tsx` がプラグイン配列を組む。Russell ではその役割を**プリセット**が担う。
 プリセットは個体を起動するときに「**どのプラグインを・どの config で・どの順に**」配列へ並べ、`createAgent` に渡す組み立てレシピだ。
 
-前提: [`../concepts/10-plugin-architecture.md`](../concepts/10-plugin-architecture.md)、契約 [`../reference/30-ryo-plugin-contract.md`](../reference/30-ryo-plugin-contract.md)、ライフサイクル [`../reference/31-core-api.md`](../reference/31-core-api.md)。
+前提: [`../concepts/10-plugin-architecture.md`](../concepts/10-plugin-architecture.md)、契約 [`../reference/30-russell-plugin-contract.md`](../reference/30-russell-plugin-contract.md)、ライフサイクル [`../reference/31-core-api.md`](../reference/31-core-api.md)。
 
 > [!NOTE] 提案仕様
-> コードは docs-only 段階の提案。型は実装時に `@edv4h/ryo-shared` / `@edv4h/ryo-core` で確定する。
+> コードは docs-only 段階の提案。型は実装時に `@edv4h/russell-shared` / `@edv4h/russell-core` で確定する。
 
 ## プリセットとは何か（そして何でないか）
 
@@ -26,13 +26,13 @@ usketch では `apps/web/app.tsx` がプラグイン配列を組む。Ryo では
 
 ```ts
 // apps/agent/presets/editor.ts
-import { createAgent } from "@edv4h/ryo-core";
-import { createPgMemoryPlugin } from "@edv4h/ryo-plugin-memory-pg";
-import { createClaudeModelPlugin } from "@edv4h/ryo-plugin-model-claude";
-import { createNotionEquipmentPlugin } from "@edv4h/ryo-plugin-equipment-notion";
-import { createGithubDocsEquipmentPlugin } from "@edv4h/ryo-plugin-equipment-github-docs";
-import { createSlackSurfacePlugin } from "@edv4h/ryo-plugin-surface-slack";
-import type { Temperament } from "@edv4h/ryo-shared";
+import { createAgent } from "@edv4h/russell-core";
+import { createPgMemoryPlugin } from "@edv4h/russell-plugin-memory-pg";
+import { createClaudeModelPlugin } from "@edv4h/russell-plugin-model-claude";
+import { createNotionEquipmentPlugin } from "@edv4h/russell-plugin-equipment-notion";
+import { createGithubDocsEquipmentPlugin } from "@edv4h/russell-plugin-equipment-github-docs";
+import { createSlackSurfacePlugin } from "@edv4h/russell-plugin-surface-slack";
+import type { Temperament } from "@edv4h/russell-shared";
 
 const editorTemperament: Temperament = {
   name: "詩織",
@@ -57,7 +57,7 @@ export function assembleEditor(agentId: string, configVersion: string) {
       createClaudeModelPlugin({ model: "sonnet" }),   // 賢さ: Sonnet
       // ── 装備（最小権限で支給） ──
       createNotionEquipmentPlugin({ scopes: ["docs.write"] }),
-      createGithubDocsEquipmentPlugin({ repo: "edv4h/ryo", scopes: ["docs.pr"] }),
+      createGithubDocsEquipmentPlugin({ repo: "edv4h/russell", scopes: ["docs.pr"] }),
       // ── surface ──
       createSlackSurfacePlugin({ /* … */ }),
       // ── findings は surface より後（emit を購読するため） ──

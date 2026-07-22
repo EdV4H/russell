@@ -1,6 +1,6 @@
 # データモデル
 
-Ryo の永続化は **Postgres + pgvector** に1本化する。記憶・キュー（pg-boss）・監査を1つに同居させ、
+Russell の永続化は **Postgres + pgvector** に1本化する。記憶・キュー（pg-boss）・監査を1つに同居させ、
 マイクロサービス化しない（設計書 [`../design/human-like-agent-design.md`](../design/human-like-agent-design.md) §2・§11）。
 本章は §3.1・§6.1・§6.2・§8.2・§9.1 に散在するテーブル定義を1か所に集約したリファレンス。
 

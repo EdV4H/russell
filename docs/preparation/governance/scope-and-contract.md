@@ -36,7 +36,7 @@
 
 ## 2. plugin-first を踏まえた発注境界（どのプラグインを外注し、どこを内製するか）
 
-[`plugin-first-reinterpretation.md`](../../design/plugin-first-reinterpretation.md) により、Ryo は **極小コア + プラグイン**で構成される。発注境界はプラグイン境界で切れる。
+[`plugin-first-reinterpretation.md`](../../design/plugin-first-reinterpretation.md) により、Russell は **極小コア + プラグイン**で構成される。発注境界はプラグイン境界で切れる。
 
 ### 原則（ドラフト）
 

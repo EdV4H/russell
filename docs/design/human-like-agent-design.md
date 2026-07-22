@@ -3,6 +3,8 @@
 > `pdftotext` で抽出し、表・コードブロック・図を手作業で復元したものです。**差異があれば原本を正とします。**
 > このリポジトリにおける **source of truth** はこの設計書ですが、Slack の位置づけについては
 > [`plugin-first-reinterpretation.md`](./plugin-first-reinterpretation.md) が本書 §2・§10 の「Slack常駐」前提を上書きします。
+>
+> **【改称】** 本プロジェクトは **Ryo（僚） → Russell** に改称し、中心メタファーを「一人の同僚がそこにいる」から「**世界5分前仮説**」へ張り替えました。本設計書は原本 PDF の忠実復元のため **Ryo / 同僚 表記を残します**。用語対応と背景は [`plugin-first-reinterpretation.md`](./plugin-first-reinterpretation.md) 冒頭を参照（Ryo = Russell、`@edv4h/ryo-*` = `@edv4h/russell-*`）。
 
 # 技術設計書：人間らしい業務エージェント基盤「Ryo」
 
@@ -288,7 +290,7 @@ CREATE TABLE channel_settings (
 
 - 人格プロンプトは起動時に temperament から生成する（テンプレート + 値の埋め込み）。人格の深さは値を足すだけで調整可能
 - チャンネル別上書きで「雑談チャンネルでは饒舌、実務チャンネルでは控えめ」を表現
-- 変更は `/ryo config` コマンド（管理者のみ）から。変更履歴は `event_log` へ
+- 変更は `/russell config` コマンド（管理者のみ）から。変更履歴は `event_log` へ
 - **公開版方式（Frank v2から採用）** — temperament・プリセット・ルーティン等の設定は下書き→公開の2段階。公開ごとに不変の `config_version` を発行し、各実行（会話・習慣・気づき）は開始時に版をpinして使用版を記録する。実行途中で設定が変わっても1回の実行内で版が混ざらない。ロールバック = 過去版の再公開
 
 コールドスタート時の interests は役割定義（システムプロンプト）からシード。以降は日記から成長する。
@@ -498,7 +500,7 @@ CREATE TABLE issuances (         -- 支給台帳
 > [!IMPORTANT]
 > 本章は原本のまま「Slack = 常駐先」を前提に書かれている。本リポジトリでは
 > [`plugin-first-reinterpretation.md`](./plugin-first-reinterpretation.md) に従い、**Slack は `surface` プラグインの一実装**として扱う。
-> 以下の内容は `@edv4h/ryo-plugin-surface-slack` の仕様として読むこと。
+> 以下の内容は `@edv4h/russell-plugin-surface-slack` の仕様として読むこと。
 
 - Bolt for JavaScript / Socket Mode（サーバーのinbound開放不要。スケール要件が出たらHTTP Events APIへ移行）
 - 購読: `app_mention`, `message.im`, 参加チャンネルの `message.channels`
@@ -541,7 +543,7 @@ CREATE TABLE issuances (         -- 支給台帳
 1. **Policy Gate（決定論的）** — 不可逆アクション（メッセージ削除、外部送信、DB書き込み以外の副作用）はLLMの判断ではなくコード側のallowlistで判定。未許可はモデルが何を言おうと遮断
 2. **HITL承認** — 破壊的・対外的アクションはSlackボタン承認が通るまで関数自体が発火しない。定常運転のものはスコープ付き事前承認（操作種別 × 対象範囲 × config_version × 件数上限 × 有効期限）として記録する。例：「編集者のNotion更新は、ルーティンをliveに公開する承認をもって、その設定版・その棚の範囲で事前承認済み」— 毎回ボタンを押させない代わりに、承認の範囲を厳密に限定する（Frank v2から採用）
 3. **信頼ラベル伝播（FIDES簡易版）** — 外部由来テキスト（他人の発言、URL先）は `untrusted`。untrusted変数が特権ツール引数に入ったらブロック
-4. **キルスイッチ** — `/ryo stop` コマンド + 環境変数フラグで全自発行動を即凍結（個体単位・全体の両方）
+4. **キルスイッチ** — `/russell stop` コマンド + 環境変数フラグで全自発行動を即凍結（個体単位・全体の両方）
 5. **記憶の来歴** — 夜間バッチは日記に来歴（どのイベント由来か）を必ず残す。記憶汚染の監査可能性
 6. **最小権限** — 装備の支給台帳（§9）がそのまま権限境界。Slackトークンはスコープ最小、DBはアプリ用ロールのみ、バックアップは別環境に不変保存
 7. **fail-closed（Frank v2から採用）** — ポリシー情報・承認記録・キルスイッチがDB障害等で読めないときは、外部送信・書き込みを行わない側に倒す。キルスイッチはDB障害時にも効く別経路（env / プロセスシグナル）を持つ

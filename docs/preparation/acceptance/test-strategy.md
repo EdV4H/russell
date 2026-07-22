@@ -56,7 +56,7 @@
 - [ ] 前提: A-1 合意済み（[`../governance/privacy-and-memory-policy.md`](../governance/privacy-and-memory-policy.md)）
 
 > [!TODO]
-> **P1-1 の想起テスト正答率目標の確定。決定オーナー: 発注側技術責任者 + ドッグフーディング推進者。** 「昨日の件が通じる」は Ryo の中核価値であり、ここを緩くすると人間らしさ評価（残課題2）が空洞化する。85% は叩き台。P1-5 の検知漏れ許容も [`../governance/sensitive-info-guard.md`](../governance/sensitive-info-guard.md) と同期して確定する。
+> **P1-1 の想起テスト正答率目標の確定。決定オーナー: 発注側技術責任者 + ドッグフーディング推進者。** 「昨日の件が通じる」は Russell の中核価値であり、ここを緩くすると人間らしさ評価（残課題2）が空洞化する。85% は叩き台。P1-5 の検知漏れ許容も [`../governance/sensitive-info-guard.md`](../governance/sensitive-info-guard.md) と同期して確定する。
 
 ---
 
@@ -113,6 +113,6 @@
 - [ ] 全装備／プラグインが [`equipment-conformance-suite.md`](./equipment-conformance-suite.md) を通過
 - [ ] Policy Gate: 未許可・未分類・未知リソースが default-deny（§9.2・§12）
 - [ ] fail-closed: ポリシー／承認記録／キルスイッチが読めないとき外部送信・書き込みをしない（§12-7）
-- [ ] キルスイッチ: `/ryo stop` + env フラグで全自発行動を即凍結、DB 障害時も別経路で効く（§12-4/-7）
+- [ ] キルスイッチ: `/russell stop` + env フラグで全自発行動を即凍結、DB 障害時も別経路で効く（§12-4/-7）
 - [ ] 監査ログ: 全アクションが event_log に trust_label 付きで残る（§3.1・§12）
 - [ ] マイグレーション: 起動時 CREATE TABLE をせず expand→backfill→contract（§11）

@@ -79,7 +79,7 @@ Slack・GitHub・Notion・サンドボックスターミナル — 個体が使�
 
 ## 関連
 
-- `EquipmentRegistry` の型：[`../reference/30-ryo-plugin-contract.md`](../reference/30-ryo-plugin-contract.md)
+- `EquipmentRegistry` の型：[`../reference/30-russell-plugin-contract.md`](../reference/30-russell-plugin-contract.md)
 - 効果分類・OperationResult のドメイン型：[`../reference/32-domain-types.md`](../reference/32-domain-types.md)
 - Policy Gate：[`15-policy-gate-and-security.md`](./15-policy-gate-and-security.md)
 - セルフイシュー（`github.issues` 装備の使い方）：[`16-findings-and-proactivity.md`](./16-findings-and-proactivity.md)

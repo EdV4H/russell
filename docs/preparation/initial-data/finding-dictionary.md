@@ -2,7 +2,7 @@
 
 > [!NOTE]
 > 準備物 B-1。設計書 [`../../design/human-like-agent-design.md`](../../design/human-like-agent-design.md) §6.2（Findingモデル）・§6.4（セルフイシュー）・§9（効果分類）が源泉。
-> plugin-first（[`../../design/plugin-first-reinterpretation.md`](../../design/plugin-first-reinterpretation.md)）では各 kind は `finding-*` プラグイン（`ryo-plugin-finding-{kind}`）として `findings` レジストリに register される検知器。この辞書はその初期セットの契約。
+> plugin-first（[`../../design/plugin-first-reinterpretation.md`](../../design/plugin-first-reinterpretation.md)）では各 kind は `finding-*` プラグイン（`russell-plugin-finding-{kind}`）として `findings` レジストリに register される検知器。この辞書はその初期セットの契約。
 
 ## Finding の骨格（§6.2 再掲）
 
