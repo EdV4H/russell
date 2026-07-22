@@ -2,7 +2,7 @@
 
 > [!NOTE]
 > 準備物 B-1。設計書 [`../../design/human-like-agent-design.md`](../../design/human-like-agent-design.md) §9（Equipment）が源泉。
-> plugin-first（[`../../design/plugin-first-reinterpretation.md`](../../design/plugin-first-reinterpretation.md)）では装備＝`equipment-*` プラグイン（`ryo-plugin-equipment-{name}`）で、`equipment` レジストリに register する。台帳は §9.1 の `equipment` / `issuances` テーブルの初期投入データにあたる。
+> plugin-first（[`../../design/plugin-first-reinterpretation.md`](../../design/plugin-first-reinterpretation.md)）では装備＝`equipment-*` プラグイン（`russell-plugin-equipment-{name}`）で、`equipment` レジストリに register する。台帳は §9.1 の `equipment` / `issuances` テーブルの初期投入データにあたる。
 
 ## 装備の実装単位（§9.1）
 
@@ -18,7 +18,7 @@
 | equipment id | MCPサーバー | 主なスコープ | danger_level | 効果分類 | 支給先プリセット |
 |---|---|---|---|---|---|
 | `slack` | surface 兼装備（[`presets.md`](./presets.md) 参照） | `chat:write` / `reactions:write` / `*:history` | 1 | `external_send` | 全プリセット |
-| `github.issues` | GitHub MCP（自リポ限定） | issues:write（**Ryo 自身のリポのみ**） | 2 | `external_write` | 編集者・石橋（+ 全個体のセルフイシュー §6.4） |
+| `github.issues` | GitHub MCP（自リポ限定） | issues:write（**Russell 自身のリポのみ**） | 2 | `external_write` | 編集者・石橋（+ 全個体のセルフイシュー §6.4） |
 | `notion` | Notion MCP | read / write（別スコープ） | 2 | `external_write` | 編集者 |
 | `terminal` | サンドボックス shell MCP | コマンド実行（**サンドボックスVM限定**） | 3 | `irreversible_write` | 初期は誰にも支給しない |
 
@@ -51,7 +51,7 @@ Slack 通信面。§10 は plugin-first では `surface-slack` プラグイン�
 
 ## github.issues
 
-セルフイシュー（§6.4）と編集者の doc PR/Issue に使う。**Ryo 自身のリポジトリのみに限定支給。**
+セルフイシュー（§6.4）と編集者の doc PR/Issue に使う。**Russell 自身のリポジトリのみに限定支給。**
 
 ```json
 {
@@ -67,7 +67,7 @@ Slack 通信面。§10 は plugin-first では `surface-slack` プラグイン�
 }
 ```
 
-- **対象リポは Ryo 本体のセルフイシュー起票先に限定**（§6.4）。他リポへの起票はスコープ外で default deny。
+- **対象リポは Russell 本体のセルフイシュー起票先に限定**（§6.4）。他リポへの起票はスコープ外で default deny。
 - 自動起票はスコープ付き事前承認（対象リポ × 週あたり件数上限、例 3件/週、§6.4・§12-2）の範囲でのみ。再発は新規起票せず既存 Issue にコメント追記。
 - untrusted 由来テキスト（Slack 発言）を根拠にした自動起票は禁止。user_feedback は本人確認 HITL 経路のみ（[`finding-dictionary.md`](./finding-dictionary.md)）。
 
@@ -140,4 +140,4 @@ INSERT INTO issuances (agent_id, equipment_id, proficiency, granted_by) VALUES
 
 > [!TODO] 個体1号にセルフイシュー用の `github.issues` を初期支給するか、P3（気づき）まで凍結するかの決定 — 承認者: プロダクトオーナー + リポ管理者。§13 の段階解禁では、まず slack のみで P0〜P2 を回し、Issue 自動起票は dryrun 並走を経てから live にするのが安全。
 
-関連: [`presets.md`](./presets.md) / [`finding-dictionary.md`](./finding-dictionary.md) / [`../infra/setup-checklist.md`](../infra/setup-checklist.md)（MCP 接続情報のシークレット管理）/ [`../../reference/30-ryo-plugin-contract.md`](../../reference/30-ryo-plugin-contract.md)（EquipmentDefinition）
+関連: [`presets.md`](./presets.md) / [`finding-dictionary.md`](./finding-dictionary.md) / [`../infra/setup-checklist.md`](../infra/setup-checklist.md)（MCP 接続情報のシークレット管理）/ [`../../reference/30-russell-plugin-contract.md`](../../reference/30-russell-plugin-contract.md)（EquipmentDefinition）

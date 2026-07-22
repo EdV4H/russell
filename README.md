@@ -1,7 +1,9 @@
-# Ryo — 準備リポジトリ
+# Russell — 準備リポジトリ
 
-**Ryo（僚）**は「一人の同僚がそこにいる」をコンセプトにした、人間らしい業務エージェント基盤。
-人間らしさを性格の演技ではなく、**記憶の道具**（メモ帳・日記・本棚・書庫）と**生活リズム**（習慣・睡眠・忘却）という内部機構として実装する。
+**Russell** は「**世界5分前仮説**」に着想を得た、人間らしい業務エージェント基盤。
+ラッセルの思考実験〈世界は5分前に、記憶や記録ごと丸ごと出現したかもしれない〉になぞらえ、**記憶を「所与のDB」ではなく「起動時に構成される道具」として扱う**。人間らしさを性格の演技ではなく、**記憶の道具**（メモ帳・日記・本棚・書庫）と**生活リズム**（習慣・睡眠・忘却）という内部機構として実装する。
+
+> 旧称 **Ryo（僚）** から改称。中心メタファーを「同僚」から「世界5分前仮説」へ張り替えたもので、設計内容そのものは同じ。パッケージは `@edv4h/russell-*`。原本設計書（PDF復元）は忠実性のため Ryo 表記を残す（[用語対応](docs/getting-started/01-introduction.md)）。
 
 このリポジトリは実装着手前の **準備リポジトリ** で、コードはまだ含まない。設計書を外注に渡して実装を始める前に、発注側にしか用意できない準備物（社内合意・受け入れ基準・スコープ契約・初期データ・インフラ手配）を揃え、進捗を1画面で追う。
 
@@ -9,7 +11,7 @@
 
 > **Slack常駐はコアのコンセプトではない。Slack はコミュニケーションツールというプラグインの一つに過ぎない。**
 
-コアはエージェント（認知ループ + 記憶 + 生活リズム + Policy Gate原値）だけを持ち、**通信面(surface)・装備(equipment)・記憶(memory)・気づき(finding)・習慣(routine)・モデル(model)はすべてプラグイン**として外に出す。手本は同一モノレポ親 `~/Projects/usketch` の PluginParty アーキテクチャ。npm 公開前提でパッケージは `@edv4h/ryo-*`。
+コアはエージェント（認知ループ + 記憶 + 生活リズム + Policy Gate原値）だけを持ち、**通信面(surface)・装備(equipment)・記憶(memory)・気づき(finding)・習慣(routine)・モデル(model)はすべてプラグイン**として外に出す。手本は同一モノレポ親 `~/Projects/usketch` の PluginParty アーキテクチャ。npm 公開前提でパッケージは `@edv4h/russell-*`。
 
 詳細 → [`docs/design/plugin-first-reinterpretation.md`](docs/design/plugin-first-reinterpretation.md) / [`docs/concepts/10-plugin-architecture.md`](docs/concepts/10-plugin-architecture.md)
 
@@ -20,7 +22,7 @@
 | [docs/getting-started/](docs/getting-started/) | 概要・用語 |
 | [docs/concepts/](docs/concepts/) | アーキテクチャの why / what（プラグイン基盤・記憶・装備・気づき・Policy Gate 等） |
 | [docs/guides/](docs/guides/) | プラグイン／プリセットの作り方 |
-| [docs/reference/](docs/reference/) | RyoPlugin契約・コアAPI・ドメイン型・パッケージ構成 |
+| [docs/reference/](docs/reference/) | RussellPlugin契約・コアAPI・ドメイン型・パッケージ構成 |
 | [docs/design/](docs/design/) | 原本設計書・準備物チェックリスト・plugin-first 再解釈 |
 | [docs/preparation/](docs/preparation/) | 発注準備物（下記ダッシュボード） |
 

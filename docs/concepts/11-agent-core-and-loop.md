@@ -1,6 +1,6 @@
 # エージェントコアと認知ループ
 
-Ryo の**コアは極小**で、具体的な機能を一切参照しない（[`10-plugin-architecture.md`](./10-plugin-architecture.md)）。
+Russell の**コアは極小**で、具体的な機能を一切参照しない（[`10-plugin-architecture.md`](./10-plugin-architecture.md)）。
 コアが持つのは (1) レジストリ群と `AgentContext` のライフサイクル、(2) **認知ループ**、(3) **Policy Gate の決定論的原値**の3つだけ。
 記憶・通信面・装備・モデルはすべてプラグインが供給する。本章は設計書
 [`../design/human-like-agent-design.md`](../design/human-like-agent-design.md) §2・§3・§11 を plugin-first で読み直す。
@@ -96,7 +96,7 @@ Lost-in-the-Middle への解答になる。
 
 ## 関連
 
-- プラグイン契約：[`../reference/30-ryo-plugin-contract.md`](../reference/30-ryo-plugin-contract.md)
+- プラグイン契約：[`../reference/30-russell-plugin-contract.md`](../reference/30-russell-plugin-contract.md)
 - コアAPI・起動シーケンス：[`../reference/31-core-api.md`](../reference/31-core-api.md)
 - 記憶システム：[`12-memory-system.md`](./12-memory-system.md)
 - データモデル：[`19-data-model.md`](./19-data-model.md)

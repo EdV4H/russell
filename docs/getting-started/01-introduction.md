@@ -1,11 +1,14 @@
-# はじめに — Ryo とは
+# はじめに — Russell とは
 
-Ryo（僚）は「**一人の同僚がそこにいる**」をコンセプトにした、人間らしい業務エージェント基盤。
-人間らしさを性格の演技ではなく、**記憶の道具**（メモ帳・日記・本棚・書庫）と**生活リズム**（習慣・睡眠・忘却）という内部機構として実装する。
+**Russell** は「**世界5分前仮説**」に着想を得た、人間らしい業務エージェント基盤。
+バートランド・ラッセルの思考実験〈世界は5分前に、記憶や記録ごと丸ごと出現したかもしれず、それを否定する術はない〉になぞらえ、**記憶を「所与のDB」ではなく「起動時に構成される道具」として扱う**。個体は temperament と本棚を積んで“記録付きで”立ち上がり、日記は夜間バッチが後から書き、使われない記憶は忘却曲線で書庫に沈む。過去そのものではなく、いま手元にある構成された記憶で振る舞う——それが人間らしさの機構になる。
 
-Ryo は「素体」であり、**プリセット**（スポンジ／編集者／番頭／石橋）を適用して多様な同僚個体（例：覚、詩織）を派生させる。挙動の違いは演技ではなく認知アーキテクチャのパラメータ差から生まれる。
+人間らしさを性格の演技ではなく、**記憶の道具**（メモ帳・日記・本棚・書庫）と**生活リズム**（習慣・睡眠・忘却）という内部機構として実装する。この設計思想の中身は元設計書と同じで、変わったのは**呼び名（Russell）と、それを束ねる中心メタファー（同僚 → 世界5分前仮説）**だけ。メタファーは実装の設計指針であって、ユーザーに見せる世界観ではない——個体はワークスペースに現れ、同僚のように働く。
 
-このリポジトリの詳細な設計思想は [`../design/human-like-agent-design.md`](../design/human-like-agent-design.md)（source of truth）を参照。
+Russell は「素体」であり、**プリセット**（スポンジ／編集者／番頭／石橋）を適用して多様な個体（例：覚、詩織）を派生させる。挙動の違いは演技ではなく認知アーキテクチャのパラメータ差から生まれる。
+
+> [!NOTE]
+> 本プロジェクトは旧称 **Ryo（僚）** から **Russell** に改称した。元設計書 [`../design/human-like-agent-design.md`](../design/human-like-agent-design.md) と準備物チェックリスト（PDF復元・source of truth）は原本の忠実性のため Ryo 表記を残す。用語対応: **Ryo = Russell（素体）**、パッケージ `@edv4h/ryo-*` = `@edv4h/russell-*`。改称の背景は [`../design/plugin-first-reinterpretation.md`](../design/plugin-first-reinterpretation.md) 冒頭。
 
 ## このリポジトリの目的
 
@@ -19,7 +22,7 @@ Ryo は「素体」であり、**プリセット**（スポンジ／編集者／
 > [!IMPORTANT]
 > **Slack常駐はコアのコンセプトではない。Slack はコミュニケーションツールというプラグインの一つに過ぎない。**
 
-Ryo は **極小コア＋プラグイン**で構成する。コアはエージェント（認知ループ＋記憶＋生活リズム＋Policy Gate原値）だけを持ち、通信面（surface）・装備（equipment）・記憶（memory）・気づき（finding）・習慣（routine）・モデル（model）はすべてプラグインとして外に出す。手本は同一モノレポ親 `~/Projects/usketch` の PluginParty アーキテクチャ。
+Russell は **極小コア＋プラグイン**で構成する。コアはエージェント（認知ループ＋記憶＋生活リズム＋Policy Gate原値）だけを持ち、通信面（surface）・装備（equipment）・記憶（memory）・気づき（finding）・習慣（routine）・モデル（model）はすべてプラグインとして外に出す。手本は同一モノレポ親 `~/Projects/usketch` の PluginParty アーキテクチャ。
 
 なぜこうするかは [`../design/plugin-first-reinterpretation.md`](../design/plugin-first-reinterpretation.md)、仕組みは [`../concepts/10-plugin-architecture.md`](../concepts/10-plugin-architecture.md) を参照。
 

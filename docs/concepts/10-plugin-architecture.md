@@ -1,6 +1,6 @@
 # プラグインアーキテクチャ（極小コア + プラグイン）
 
-Ryo は **極小コア + プラグイン**（PluginParty）で構成する。手本は同一モノレポ親 `~/Projects/usketch`
+Russell は **極小コア + プラグイン**（PluginParty）で構成する。手本は同一モノレポ親 `~/Projects/usketch`
 （全機能を統一プラグインAPIで実装するホワイトボード）。設計転換の背景は
 [`../design/plugin-first-reinterpretation.md`](../design/plugin-first-reinterpretation.md)。
 
@@ -17,7 +17,7 @@ Ryo は **極小コア + プラグイン**（PluginParty）で構成する。手
 
 ## 3つの登場人物
 
-### 1. コア（`@edv4h/ryo-core`）
+### 1. コア（`@edv4h/russell-core`）
 
 `createAgent(config, plugins[])` が:
 1. 直交する**レジストリ群**を生成する
@@ -28,15 +28,15 @@ Ryo は **極小コア + プラグイン**（PluginParty）で構成する。手
 
 コアはこのループと、認知ループ（記憶読出し→文脈構築→モデル呼出し→Policy Gateを通したツール実行→記憶書込み）、そして **Policy Gate の決定論的原値**だけを持つ。
 
-### 2. プラグイン契約（`RyoPlugin`）
+### 2. プラグイン契約（`RussellPlugin`）
 
 ```ts
-interface RyoPlugin {
+interface RussellPlugin {
   readonly id: string;
   readonly name: string;
-  setup(ctx: AgentContext): RyoTeardown | void | Promise<RyoTeardown | void>;
+  setup(ctx: AgentContext): RussellTeardown | void | Promise<RussellTeardown | void>;
 }
-type RyoTeardown = () => void | Promise<void>;
+type RussellTeardown = () => void | Promise<void>;
 ```
 
 - **種別フィールド（`type`/`kind`）は持たない。** プラグインは「`setup` の中でどのレジストリに register するか」で自己分類する。surface プラグインは `ctx.surfaces.register(...)`、装備プラグインは `ctx.equipment.register(...)` を呼ぶ。コアはプラグインの種類で分岐しない。
@@ -45,7 +45,7 @@ type RyoTeardown = () => void | Promise<void>;
 
 ### 3. プリセット = 組み立てレシピ
 
-usketch では `apps/web/app.tsx` がプラグイン配列を組む。Ryo ではその役割を**プリセット**が担う。
+usketch では `apps/web/app.tsx` がプラグイン配列を組む。Russell ではその役割を**プリセット**が担う。
 個体を起動するとき、プリセット（スポンジ/編集者/番頭/石橋）が temperament・記憶パラメータ・支給装備に応じて
 **どのプラグインを** どの config で配列に並べるかを決める。詳細は [`../guides/24-defining-a-preset.md`](../guides/24-defining-a-preset.md)。
 
@@ -66,7 +66,7 @@ usketch では `apps/web/app.tsx` がプラグイン配列を組む。Ryo では
 | `events` | イベントバス（型なしフォールバック） | 全プラグイン |
 | `services` | IoC（DB/pgvector・埋め込み・config_versionストア） | 基盤プラグイン |
 
-各レジストリの型は [`../reference/30-ryo-plugin-contract.md`](../reference/30-ryo-plugin-contract.md)。
+各レジストリの型は [`../reference/30-russell-plugin-contract.md`](../reference/30-russell-plugin-contract.md)。
 
 ## プラグイン間の疎結合（usketch の3経路 + α）
 
@@ -100,12 +100,12 @@ plugin-first でも、**Policy Gate の決定論的原値だけはコアが握�
 
 | 種別 | パッケージ名 | 例 |
 |---|---|---|
-| surface | `@edv4h/ryo-plugin-surface-{name}` | `ryo-plugin-surface-slack` |
-| equipment | `@edv4h/ryo-plugin-equipment-{name}` | `ryo-plugin-equipment-github` |
-| memory | `@edv4h/ryo-plugin-memory-{name}` | `ryo-plugin-memory-pg` |
-| finding | `@edv4h/ryo-plugin-finding-{name}` | `ryo-plugin-finding-deadline-risk` |
-| habit | `@edv4h/ryo-plugin-habit-{name}` | `ryo-plugin-habit-morning` |
-| model | `@edv4h/ryo-plugin-model-{name}` | `ryo-plugin-model-claude` |
+| surface | `@edv4h/russell-plugin-surface-{name}` | `russell-plugin-surface-slack` |
+| equipment | `@edv4h/russell-plugin-equipment-{name}` | `russell-plugin-equipment-github` |
+| memory | `@edv4h/russell-plugin-memory-{name}` | `russell-plugin-memory-pg` |
+| finding | `@edv4h/russell-plugin-finding-{name}` | `russell-plugin-finding-deadline-risk` |
+| habit | `@edv4h/russell-plugin-habit-{name}` | `russell-plugin-habit-morning` |
+| model | `@edv4h/russell-plugin-model-{name}` | `russell-plugin-model-claude` |
 
 ファイルは kebab-case、各プラグインは `createXxxPlugin()` ファクトリを default でなく named export。
 パッケージ全体像は [`../reference/33-package-layout.md`](../reference/33-package-layout.md)。

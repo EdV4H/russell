@@ -1,19 +1,19 @@
-# リファレンス: RyoPlugin 契約と AgentContext
+# リファレンス: RussellPlugin 契約と AgentContext
 
 > [!NOTE]
-> これは **提案仕様**（docs-only 段階）。実装時に `@edv4h/ryo-shared` の TypeScript 型として確定する。
+> これは **提案仕様**（docs-only 段階）。実装時に `@edv4h/russell-shared` の TypeScript 型として確定する。
 > usketch の `packages/shared/src/types/plugin.ts` が権威ソースの手本。
 
-## RyoPlugin
+## RussellPlugin
 
 ```ts
-export interface RyoPlugin {
-  readonly id: string;   // 一意。パッケージ名に揃える（例 "ryo-plugin-surface-slack"）
+export interface RussellPlugin {
+  readonly id: string;   // 一意。パッケージ名に揃える（例 "russell-plugin-surface-slack"）
   readonly name: string; // 人間向け表示名
-  setup(ctx: AgentContext): RyoTeardown | void | Promise<RyoTeardown | void>;
+  setup(ctx: AgentContext): RussellTeardown | void | Promise<RussellTeardown | void>;
 }
 
-export type RyoTeardown = () => void | Promise<void>;
+export type RussellTeardown = () => void | Promise<void>;
 ```
 
 規約:

@@ -1,7 +1,7 @@
 # リファレンス: コアAPI（createAgent とライフサイクル）
 
 > [!NOTE]
-> 提案仕様。実装時に `@edv4h/ryo-core` として確定。usketch の `packages/core/src/create-app.ts` が手本。
+> 提案仕様。実装時に `@edv4h/russell-core` として確定。usketch の `packages/core/src/create-app.ts` が手本。
 
 ## createAgent
 
@@ -15,7 +15,7 @@ export interface AgentConfig {
 
 export async function createAgent(
   config: AgentConfig,
-  plugins: RyoPlugin[],
+  plugins: RussellPlugin[],
 ): Promise<AgentHandle>;
 
 export interface AgentHandle {
@@ -61,4 +61,4 @@ export interface AgentHandle {
 - write 系ツールは実行前に `preflight`。非対応・権限不足は「手動操作の案内」へ段階的縮退（機能全滅にしない）。
 - `OperationResult=unknown`（timeout 等）の blind retry は禁止。idempotency key + read-after-write で解決。
 
-関連：[`30-ryo-plugin-contract.md`](./30-ryo-plugin-contract.md), [`../concepts/15-policy-gate-and-security.md`](../concepts/15-policy-gate-and-security.md)
+関連：[`30-russell-plugin-contract.md`](./30-russell-plugin-contract.md), [`../concepts/15-policy-gate-and-security.md`](../concepts/15-policy-gate-and-security.md)

@@ -1,8 +1,8 @@
 # リファレンス: ドメイン型（提案）
 
-契約 [`30-ryo-plugin-contract.md`](./30-ryo-plugin-contract.md) と各ガイドが参照する共有ドメイン型の定義。
+契約 [`30-russell-plugin-contract.md`](./30-russell-plugin-contract.md) と各ガイドが参照する共有ドメイン型の定義。
 
-> [!NOTE] 提案仕様（実装時に `@edv4h/ryo-shared` で確定）
+> [!NOTE] 提案仕様（実装時に `@edv4h/russell-shared` で確定）
 > docs-only 段階の提案。実際のコードは未作成。フィールドは設計書 `human-like-agent-design.md`（§6.1/§6.2/§9/§12）を写したもの。差異があれば設計書を正とする。
 
 ## EffectClass — 効果分類
@@ -92,7 +92,7 @@ export type FindingState =
 ```ts
 export interface EquipmentScope {
   kind: string;               // "repo" | "database" | "channel" | ...
-  value: string;              // 対象識別子（例 "edv4h/ryo"）
+  value: string;              // 対象識別子（例 "edv4h/russell"）
   access: string;             // "read" | "write" | "issues" | "docs.pr" | ...
 }
 ```
@@ -185,6 +185,6 @@ export interface OutboundMessage {
 
 ## 関連
 
-- 契約・レジストリ: [`30-ryo-plugin-contract.md`](./30-ryo-plugin-contract.md)
+- 契約・レジストリ: [`30-russell-plugin-contract.md`](./30-russell-plugin-contract.md)
 - コア API・ライフサイクル: [`31-core-api.md`](./31-core-api.md)
 - 各ガイド: [`../guides/22-authoring-equipment.md`](../guides/22-authoring-equipment.md), [`../guides/23-authoring-a-finding.md`](../guides/23-authoring-a-finding.md)

@@ -16,7 +16,7 @@
 | 機微情報が少なめ | 全公開設計（§10.1）のリスクが低いところから（A-1 の合意範囲内） |
 
 - 初期は**1チャンネルから**。P3 の live 昇格を経てから拡大する。
-- Ryo が読むチャンネルは A-1 の opt-in/opt-out 方針に従う（住人の同意のあるチャンネルのみ）。
+- Russell が読むチャンネルは A-1 の opt-in/opt-out 方針に従う（住人の同意のあるチャンネルのみ）。
 
 > [!TODO] 投入する実務チャンネルの選定 — 承認者: プロダクトオーナー + そのチャンネルのメンバー。候補チャンネルを2〜3挙げ、住人の同意（下記説明文）を得てから1つに決める。channel_id は [`../initial-data/temperament-unit-01.md`](../initial-data/temperament-unit-01.md) の channel_settings に反映する。
 
@@ -27,7 +27,7 @@
 ```text
 【お知らせ】このチャンネルに「AIの同僚」が入ります
 
-来週から、このチャンネルに Ryo という基盤で動く AI の同僚（名前: 覚）が参加します。
+来週から、このチャンネルに Russell という基盤で動く AI の同僚（名前: 覚）が参加します。
 一人の同僚として、読んで・書いて・覚えます。透明性を大事にしたいので、何をするか先に共有します。
 
 ■ 読むもの
@@ -57,12 +57,12 @@
 | チャンネル | 用途 | モードとの対応 |
 |---|---|---|
 | `#<個体名>-日報`（例 `#覚-日報`） | 日記の毎朝投稿・本棚/装備の変化（§10.1） | live 後も常時。日報は P1 から |
-| `#ryo-管理`（管理チャンネル） | **dryrun の出力先**（§6.5）・後段フィルタのエスカレーション・キルスイッチ通知 | dryrun 中の Finding 文面・習慣文面がここに出る |
+| `#russell-管理`（管理チャンネル） | **dryrun の出力先**（§6.5）・後段フィルタのエスカレーション・キルスイッチ通知 | dryrun 中の Finding 文面・習慣文面がここに出る |
 | 投入実務チャンネル | 本番の会話・mention 応答・live の気づき | P0 から mention 応答、気づきは P3 live 後 |
 
 - [ ] `#<個体名>-日報` を作成（住人が購読）
-- [ ] `#ryo-管理` を作成（実験関係者・オーナー・キルスイッチ権限者が購読, [`../operations/`](../operations/)）
-- [ ] dryrun 期間中は Finding・習慣・日報投稿の全文面が `#ryo-管理` にのみ出ることを確認（live の dedup 状態を汚さない, §6.5）
+- [ ] `#russell-管理` を作成（実験関係者・オーナー・キルスイッチ権限者が購読, [`../operations/`](../operations/)）
+- [ ] dryrun 期間中は Finding・習慣・日報投稿の全文面が `#russell-管理` にのみ出ることを確認（live の dedup 状態を汚さない, §6.5）
 
 ## 4. 成功指標
 
@@ -102,6 +102,6 @@
 | P0 | mention 応答のみ。メモの取り方（📝）を観察 | mention のみ |
 | P1 | `#日報` に日記投稿開始。「昨日の件」が通じるか | 日記投稿のみ |
 | P2 | 朝/夕/週次の習慣投稿。朝の投稿が邪魔でないか | ルーティン投稿 |
-| P3 | 気づきを `#ryo-管理` に dryrun 並走 → レビュー → live（proactivity 0.3 から週次で上げる） | dryrun→live |
+| P3 | 気づきを `#russell-管理` に dryrun 並走 → レビュー → live（proactivity 0.3 から週次で上げる） | dryrun→live |
 
 関連: [`../initial-data/temperament-unit-01.md`](../initial-data/temperament-unit-01.md) / [`../initial-data/prompts/journal-and-report.md`](../initial-data/prompts/journal-and-report.md) / [`../operations/kill-switch.md`](../operations/kill-switch.md) / [`../operations/ownership-and-approval.md`](../operations/ownership-and-approval.md)

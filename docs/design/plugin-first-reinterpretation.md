@@ -1,20 +1,33 @@
-# Plugin-First 再解釈ノート
+# 改称 & Plugin-First 再解釈ノート
 
 > [!IMPORTANT]
-> このノートは元設計書 [`human-like-agent-design.md`](./human-like-agent-design.md) の **§2（全体アーキテクチャ）と §10（Slack統合）が置いている「Slack常駐」前提を上書きする**、明示的な設計方針の転換記録です。
-> 元設計書の記憶・気づき・装備・プリセット等の**内容そのものは有効**で、変わるのは「それらをどう構造化するか」だけです。
+> このノートは元設計書 [`human-like-agent-design.md`](./human-like-agent-design.md) に対する2つの上書きを記録する:
+> 1. **改称とコンセプトの張り替え** — プロジェクト名を **Ryo（僚） → Russell**、中心メタファーを **「一人の同僚がそこにいる」 → 「世界5分前仮説」** に変更。
+> 2. **§2・§10 の「Slack常駐」前提の上書き** — Slack を第一級市民から `surface` プラグインの一実装へ降格。
+>
+> 元設計書の記憶・気づき・装備・プリセット等の**内容そのものは有効**。変わるのは呼び名・中心メタファー・構造化の仕方だけ。原本 PDF 復元（本設計書とチェックリスト）は忠実性のため Ryo 表記を残す。**用語対応: Ryo = Russell（素体）／`@edv4h/ryo-*` = `@edv4h/russell-*`／`/ryo` コマンド = `/russell`。**
+
+## なぜ「世界5分前仮説」か
+
+バートランド・ラッセルの思考実験〈世界は5分前に、記憶や記録ごと丸ごと出現したのかもしれず、それを反証する術はない〉。Russell の記憶アーキテクチャはこれそのものだ:
+
+- **日記は夜間バッチが後から書く**（§4）。個体が生きた過去そのものではなく、あとから構成された「過去の記録」。
+- **忘却曲線で書庫に沈み、deep_recall で掘り返す**（§3.4・§3.3）。記憶は所与のDBではなく、想起のたびに再構成される道具。
+- **個体は temperament と本棚を積んで起動する**（§8）。文字通り「記録付きで、その瞬間に立ち上がる」存在。
+
+「同僚」は個体がユーザーの前でどう**振る舞うか**（ワークスペースで同僚のように働く）を指す言葉として残るが、**基盤を貫く設計メタファーは5分前仮説**——記憶を構成物として扱う、という一点に収束する。設計書が明言する「メタファーは実装の設計指針であって、ユーザーに見せる世界観ではない」という原則とも一致する。
 
 ## 何を変えるか（一文）
 
-**Slack常駐はRyoのコアではない。Slackは「コミュニケーションツールというプラグインの一つ」に過ぎない。**
+**Slack常駐はRussellのコアではない。Slackは「コミュニケーションツールというプラグインの一つ」に過ぎない。**
 コアはエージェント（記憶＋生活リズム＋認知ループ）であり、通信面（surface）すら差し替え可能なプラグインとして外に出す。
 
-同一モノレポ親（`~/Projects/usketch`）の「PluginParty」アーキテクチャ — 全機能（ツール/シェイプ/背景/AI/プレゼン）を統一プラグインAPIで実装する — を手本に、Ryoも**極小コア＋プラグイン**で構成する。
+同一モノレポ親（`~/Projects/usketch`）の「PluginParty」アーキテクチャ — 全機能（ツール/シェイプ/背景/AI/プレゼン）を統一プラグインAPIで実装する — を手本に、Russellも**極小コア＋プラグイン**で構成する。
 
 ## なぜ変えるか
 
 - 元設計書は Slack Gateway をアーキ図の入口に固定し、Slack を第一級市民として扱っている（§2, §10, §11 の技術スタックも Bolt/Socket Mode を前提）。
-- しかし Ryo の本質は「一人の同僚がそこにいる」であって、それが**どの面に現れるか**（Slack / Discord / CLI / Web / 音声）は本質ではない。
+- しかし Russell の本質は「記憶を構成物として持つ個体がそこにいる」ことであって、それが**どの面に現れるか**（Slack / Discord / CLI / Web / 音声）は本質ではない。
 - 通信面をコアから剥がすと、(1) Slackへのロックインが消え、(2) テストが `surface-cli` で完結し、(3) 「装備＝MCP」という既存の疎結合思想（§9）と設計が一枚岩になる。
 - 装備（§9）は既に「MCPサーバーを台帳に登録するだけで本体コード変更不要」という**事実上のプラグイン**として設計されている。この思想を surface・気づき・習慣・モデルにも一般化するだけ。
 
@@ -29,13 +42,13 @@
 5. **配列順は load-bearing**：`setup` は逐次実行、イベントバスはリプレイしない。provider は consumer より前に置く。
 6. **monorepo**：`packages/core`（カーネル）・`packages/shared`（契約/型）・`plugins/*`（全機能）・`examples/*`（テンプレ）・`apps/*`（組み立て + docs）。命名 `{scope}-plugin-{kind}-{name}`、ファイル kebab-case、`create*Plugin()` ファクトリ、`react` 等は peerDeps。
 
-## Ryo への写像
+## Russell への写像
 
-| usketch | Ryo |
+| usketch | Russell |
 |---|---|
 | `createApp(plugins[])` | `createAgent(plugins[])`（コア = 認知ループ + レジストリ + Policy Gate原値） |
 | `PluginContext` | `AgentContext`（下記レジストリの束） |
-| `UsketchPlugin {id,name,setup}` | `RyoPlugin {id,name,setup}` |
+| `UsketchPlugin {id,name,setup}` | `RussellPlugin {id,name,setup}` |
 | shape/tool/bg/ai plugin | surface / equipment / memory / finding / routine / model plugin |
 | `apps/web/app.tsx` がプラグイン配列を組む | **プリセット**が個体ごとにプラグイン配列 + config を組む |
 | `ctx.shapes.register(...)` | `ctx.equipment.register(...)`, `ctx.surfaces.register(...)`, … |
@@ -76,5 +89,5 @@
 ## 詳細仕様
 
 - コンセプト・契約：[`../concepts/10-plugin-architecture.md`](../concepts/10-plugin-architecture.md)
-- API リファレンス：[`../reference/30-ryo-plugin-contract.md`](../reference/30-ryo-plugin-contract.md), [`../reference/31-core-api.md`](../reference/31-core-api.md)
+- API リファレンス：[`../reference/30-russell-plugin-contract.md`](../reference/30-russell-plugin-contract.md), [`../reference/31-core-api.md`](../reference/31-core-api.md)
 - パッケージ構成：[`../reference/33-package-layout.md`](../reference/33-package-layout.md)

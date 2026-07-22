@@ -1,6 +1,8 @@
 > [!NOTE]
 > 原本 `ryo-preparation-checklist.md`（PDF: `~/Downloads/ryo-preparation-checklist.md.pdf`）を復元したもの。
 > 各項目の実務ドキュメントは [`../preparation/`](../preparation/) 以下に対応する。進捗は [`../../README.md`](../../README.md) のダッシュボードで追う。
+>
+> **【改称】** 本プロジェクトは **Ryo → Russell** に改称。本チェックリストは原本 PDF の忠実復元のため **Ryo 表記を残す**（用語対応は [`plugin-first-reinterpretation.md`](./plugin-first-reinterpretation.md)）。
 
 # Ryo 実装着手前の準備物リスト
 

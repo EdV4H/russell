@@ -9,7 +9,7 @@
 `temperament` は個体固有の config であり、プラグインではない。個体は「スポンジプリセット（= プラグイン配列 + config のレシピ、[`presets.md`](./presets.md) / [`../../guides/24-defining-a-preset.md`](../../guides/24-defining-a-preset.md)）」を土台に、この temperament を `overrides` として重ねて起動する。
 
 - 人格プロンプトは起動時に temperament から生成する（§6.1）。値を足すだけで人格の深さを調整できる。
-- 変更は `/ryo config`（管理者のみ）から。変更履歴は `event_log` へ、公開ごとに不変の `config_version` を発行する（§6.1 公開版方式）。
+- 変更は `/russell config`（管理者のみ）から。変更履歴は `event_log` へ、公開ごとに不変の `config_version` を発行する（§6.1 公開版方式）。
 - チャンネル別の饒舌さの差は `channel_settings` の上書きで表現する（後述）。
 
 ## 確定 temperament JSON（ドラフト）
@@ -32,7 +32,7 @@
 
 | キー | 値 | 根拠 |
 |---|---|---|
-| `name` | 覚 | 候補（下記 TODO）。「覚える」＝スポンジの性格と、Ryo（僚）の漢字文化に合わせた一字名 |
+| `name` | 覚 | 候補（下記 TODO）。「覚える」＝スポンジの性格と、Russell（僚）の漢字文化に合わせた一字名 |
 | `tone` | 丁寧・素直・絵文字控えめ | スポンジ＝「わからなければすぐ聞く」（§8.3）を口調に落とす |
 | `backstory` | 入社1年目のデータ分析係 | §6.1 のサンプル backstory を踏襲。新人＝習熟度が低い前提（§9.3）と整合 |
 | `proactivity` | 0.3 | §13「P3の気づきは proactivity を低め（0.3）から始めて週次で上げる」に厳密に従う初期値 |

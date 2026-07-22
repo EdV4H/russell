@@ -1,12 +1,12 @@
 # ガイド: 通信面（surface）プラグインを書く
 
-surface は Ryo 個体が「現れる面」だ。Slack / CLI / Web / 音声 — どこでユーザーと会話し、どこで HITL 承認を取るか。
+surface は Russell 個体が「現れる面」だ。Slack / CLI / Web / 音声 — どこでユーザーと会話し、どこで HITL 承認を取るか。
 **Slack はコアではなく、ここに register する一プラグインにすぎない**（設計転換の背景は [`../design/plugin-first-reinterpretation.md`](../design/plugin-first-reinterpretation.md)）。
 
 共通スケルトンは [`20-authoring-a-plugin.md`](./20-authoring-a-plugin.md) を先に読むこと。本ガイドはその上で `SurfaceDefinition` の実装に絞る。
 
 > [!NOTE] 提案仕様
-> コードは docs-only 段階の提案。型は実装時に `@edv4h/ryo-shared` で確定する。
+> コードは docs-only 段階の提案。型は実装時に `@edv4h/russell-shared` で確定する。
 > 元設計書 §10（Slack統合）を surface プラグインの仕様として読み替えたもの。
 
 ## SurfaceDefinition
@@ -30,11 +30,11 @@ export interface SurfaceDefinition {
 
 ```ts
 // src/plugin.ts
-import type { AgentContext, RyoPlugin, InboundMessage } from "@edv4h/ryo-shared";
+import type { AgentContext, RussellPlugin, InboundMessage } from "@edv4h/russell-shared";
 
-export function createCliSurfacePlugin(options?: CliSurfaceOptions): RyoPlugin {
+export function createCliSurfacePlugin(options?: CliSurfaceOptions): RussellPlugin {
   return {
-    id: "ryo-plugin-surface-cli",
+    id: "russell-plugin-surface-cli",
     name: "CLI Surface",
 
     setup(ctx: AgentContext) {
@@ -104,7 +104,7 @@ export function createCliSurfacePlugin(options?: CliSurfaceOptions): RyoPlugin {
 
 ### surface-slack
 
-`@edv4h/ryo-plugin-surface-slack`。Bolt for JavaScript / Socket Mode（サーバーの inbound 開放不要）。
+`@edv4h/russell-plugin-surface-slack`。Bolt for JavaScript / Socket Mode（サーバーの inbound 開放不要）。
 
 - 購読: `app_mention`, `message.im`, 参加チャンネルの `message.channels` → 正規化して `sink` へ。
 - スコープは最小権限: `app_mentions:read`, `channels:history`, `im:history`, `chat:write`, `reactions:write`。
@@ -114,7 +114,7 @@ export function createCliSurfacePlugin(options?: CliSurfaceOptions): RyoPlugin {
 
 ### surface-cli
 
-`@edv4h/ryo-plugin-surface-cli`。stdin/stdout だけの最小 surface。**テストはこの surface で完結**し、外部依存なしにコアと認知ループを検証できる（plugin-first の狙いの一つ）。上の骨格がほぼそのまま実装になる。
+`@edv4h/russell-plugin-surface-cli`。stdin/stdout だけの最小 surface。**テストはこの surface で完結**し、外部依存なしにコアと認知ループを検証できる（plugin-first の狙いの一つ）。上の骨格がほぼそのまま実装になる。
 
 ## チェックリスト
 

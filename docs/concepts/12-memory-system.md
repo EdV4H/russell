@@ -2,7 +2,7 @@
 
 記憶は自動で溜まる DB ではなく、エージェントが「自分は忘れる」と自覚して使う**道具**（設計書
 [`../design/human-like-agent-design.md`](../design/human-like-agent-design.md) §1・§3）。
-plugin-first では記憶は**コアの機能ではない**。`@edv4h/ryo-plugin-memory-pg` が記憶 capability を
+plugin-first では記憶は**コアの機能ではない**。`@edv4h/russell-plugin-memory-pg` が記憶 capability を
 `ctx.services.provide('memory', …)` で公開し、記憶ツールを `ctx.tools` に register する。
 コアの認知ループは `services.get('memory')` で capability を取得するだけで、Postgres も pgvector も知らない。
 

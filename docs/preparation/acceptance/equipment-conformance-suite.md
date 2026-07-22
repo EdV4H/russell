@@ -70,7 +70,7 @@ plugin-first 契約: teardown は `setup` の戻り値（[`plugin-first-reinterp
 
 ## 8. killswitch の尊重
 
-- [ ] キルスイッチ発動中（`/ryo stop` / env フラグ）は外部送信・書き込みを行わない（§12-4）
+- [ ] キルスイッチ発動中（`/russell stop` / env フラグ）は外部送信・書き込みを行わない（§12-4）
 - [ ] 副作用の直前にモードとキルスイッチを再検査する（§5.1）
 - [ ] DB 障害等でポリシー・承認・killswitch が読めないときは実行しない側（fail-closed）に倒れる（§12-7）
 - [ ] killswitch は DB 非依存の別経路（env / プロセスシグナル）でも効く

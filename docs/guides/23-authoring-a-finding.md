@@ -5,7 +5,7 @@ finding は「気づき」を一級のデータにする（設計書 §6.2）。
 共通スケルトンは [`20-authoring-a-plugin.md`](./20-authoring-a-plugin.md) を先に。本ガイドは `FindingKindDefinition` に絞る。
 
 > [!NOTE] 提案仕様
-> コードは docs-only 段階の提案。型は実装時に `@edv4h/ryo-shared` で確定する。
+> コードは docs-only 段階の提案。型は実装時に `@edv4h/russell-shared` で確定する。
 
 ## FindingKindDefinition
 
@@ -113,7 +113,7 @@ live 昇格は「dryrun の出力を人間が N 日分レビューして承認�
 
 ### finding-deadline-risk
 
-`@edv4h/ryo-plugin-finding-deadline-risk`。締切が近いのに進捗がないタスクを検知する。
+`@edv4h/russell-plugin-finding-deadline-risk`。締切が近いのに進捗がないタスクを検知する。
 
 - `finding_key = deadline_risk:{taskId}:overdue_risk`。
 - タスクソース（Notion 等）が `complete` のときだけ導出。partial なら沈黙。
@@ -121,7 +121,7 @@ live 昇格は「dryrun の出力を人間が N 日分レビューして承認�
 
 ### finding-platform-bug（セルフイシュー）
 
-`@edv4h/ryo-plugin-finding-platform-bug`。個体が**自分の実行基盤**の不具合を検知して GitHub Issue に起票する（設計書 §6.4）。
+`@edv4h/russell-plugin-finding-platform-bug`。個体が**自分の実行基盤**の不具合を検知して GitHub Issue に起票する（設計書 §6.4）。
 
 - 検知ソースは**内部テレメトリのみ**: ExecutionRun の degraded/failed の繰り返し、装備の `OperationResult=unknown/rejected` の頻発、Policy Gate の想定外ブロック。**untrusted 由来テキスト（Slack 発言）を根拠にした自動起票は禁止**。
 - `finding_key` はエラーシグネチャのハッシュ。再発時は新規起票せず既存 Issue にコメント追記（「また起きました。今回の run: …」）。

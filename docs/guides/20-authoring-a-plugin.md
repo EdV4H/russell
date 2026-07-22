@@ -1,31 +1,31 @@
 # ガイド: プラグインを書く（共通スケルトン）
 
-このガイドは、種別を問わずすべての Ryo プラグインが従う**共通の骨格**を示す。surface / equipment / finding など個別の書き方は、この骨格を前提に各専用ガイドで扱う:
+このガイドは、種別を問わずすべての Russell プラグインが従う**共通の骨格**を示す。surface / equipment / finding など個別の書き方は、この骨格を前提に各専用ガイドで扱う:
 
 - [`21-authoring-a-surface.md`](./21-authoring-a-surface.md) — 通信面
 - [`22-authoring-equipment.md`](./22-authoring-equipment.md) — 装備（MCP）
 - [`23-authoring-a-finding.md`](./23-authoring-a-finding.md) — 気づき種別
 - [`24-defining-a-preset.md`](./24-defining-a-preset.md) — プリセット（プラグインの組み立て）
 
-前提となる契約は [`../reference/30-ryo-plugin-contract.md`](../reference/30-ryo-plugin-contract.md)、
+前提となる契約は [`../reference/30-russell-plugin-contract.md`](../reference/30-russell-plugin-contract.md)、
 ライフサイクルは [`../reference/31-core-api.md`](../reference/31-core-api.md)、
 設計背景は [`../concepts/10-plugin-architecture.md`](../concepts/10-plugin-architecture.md) を参照。
 
 > [!NOTE] 提案仕様
-> 本ガイドのコードは docs-only 段階の**提案**であり、実装は未作成。型は実装時に `@edv4h/ryo-shared` で確定する。
+> 本ガイドのコードは docs-only 段階の**提案**であり、実装は未作成。型は実装時に `@edv4h/russell-shared` で確定する。
 > 手本は usketch の `plugins/*/src/plugin.tsx`（例: `usketch-plugin-bg-dots`, `usketch-plugin-tool-pan`）。
 
-## RyoPlugin は3つだけ
+## RussellPlugin は3つだけ
 
 プラグインは `{id, name, setup(ctx)}` の3要素しか持たない。**種別フィールド（`type`/`kind`）は存在しない。**
 
 ```ts
-export interface RyoPlugin {
-  readonly id: string;   // 一意。パッケージ名に揃える（例 "ryo-plugin-surface-slack"）
+export interface RussellPlugin {
+  readonly id: string;   // 一意。パッケージ名に揃える（例 "russell-plugin-surface-slack"）
   readonly name: string; // 人間向け表示名
-  setup(ctx: AgentContext): RyoTeardown | void | Promise<RyoTeardown | void>;
+  setup(ctx: AgentContext): RussellTeardown | void | Promise<RussellTeardown | void>;
 }
-export type RyoTeardown = () => void | Promise<void>;
+export type RussellTeardown = () => void | Promise<void>;
 ```
 
 - **自己分類**は「`setup` の中でどのレジストリに register するか」で決まる（後述）。コアはプラグインの種類で分岐しない。
@@ -38,11 +38,11 @@ export type RyoTeardown = () => void | Promise<void>;
 
 ```ts
 // src/plugin.ts
-import type { AgentContext, RyoPlugin } from "@edv4h/ryo-shared";
+import type { AgentContext, RussellPlugin } from "@edv4h/russell-shared";
 
-export function createExamplePlugin(options?: ExampleOptions): RyoPlugin {
+export function createExamplePlugin(options?: ExampleOptions): RussellPlugin {
   return {
-    id: "ryo-plugin-example",
+    id: "russell-plugin-example",
     name: "Example",
 
     setup(ctx: AgentContext) {
@@ -83,11 +83,11 @@ export { createExamplePlugin } from "./plugin.js";
 
 ## package.json の型
 
-依存は `@edv4h/ryo-shared`（契約・ドメイン型）、`@edv4h/ryo-core` は peer にする。装備プラグインなど MCP を使うものは `@edv4h/ryo-mcp-helpers` を足してよい。
+依存は `@edv4h/russell-shared`（契約・ドメイン型）、`@edv4h/russell-core` は peer にする。装備プラグインなど MCP を使うものは `@edv4h/russell-mcp-helpers` を足してよい。
 
 ```json
 {
-  "name": "@edv4h/ryo-plugin-example",
+  "name": "@edv4h/russell-plugin-example",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -95,17 +95,17 @@ export { createExamplePlugin } from "./plugin.js";
     ".": { "source": "./src/index.ts", "types": "./dist/index.d.ts", "import": "./dist/index.js" }
   },
   "dependencies": {
-    "@edv4h/ryo-shared": "workspace:*"
+    "@edv4h/russell-shared": "workspace:*"
   },
-  "peerDependencies": { "@edv4h/ryo-core": "workspace:*" }
+  "peerDependencies": { "@edv4h/russell-core": "workspace:*" }
 }
 ```
 
-外注・サードパーティは `@edv4h/ryo-shared` の契約にだけ依存して独立に publish でき、ホスト（`apps/agent`）が配列に足すだけで組み込める。パッケージ全体像は [`../reference/33-package-layout.md`](../reference/33-package-layout.md)。
+外注・サードパーティは `@edv4h/russell-shared` の契約にだけ依存して独立に publish でき、ホスト（`apps/agent`）が配列に足すだけで組み込める。パッケージ全体像は [`../reference/33-package-layout.md`](../reference/33-package-layout.md)。
 
 ## ファイル・命名規約
 
-- パッケージ名: `@edv4h/ryo-plugin-{kind}-{name}`（`kind` = `surface` / `equipment` / `memory` / `finding` / `habit` / `model`）。`kind` はコードで強制されない（契約に種別フィールドが無い）＝あくまで人間向けの整理。
+- パッケージ名: `@edv4h/russell-plugin-{kind}-{name}`（`kind` = `surface` / `equipment` / `memory` / `finding` / `habit` / `model`）。`kind` はコードで強制されない（契約に種別フィールドが無い）＝あくまで人間向けの整理。
 - ファイルは **kebab-case**（`plugin.ts`, `shapes/hexagon.ts` のように）。
 - ファクトリは `createXxxPlugin()` を **named export**（default export にしない）。
 - `id` はパッケージ名から `@edv4h/` を除いた文字列に揃える。

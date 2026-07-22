@@ -47,11 +47,11 @@
 候補機能:
 - Finding の一覧・状態遷移ビュー（detected/notified/acknowledged/resolved/suppressed, §6.2）
 - config_version の履歴・diff・ワンクリック rollback（§6.1）
-- 装備の支給/回収 UI（`issuances` 編集, §9。現状は `/ryo config` + 台帳直編集）
+- 装備の支給/回収 UI（`issuances` 編集, §9。現状は `/russell config` + 台帳直編集）
 - 使用量台帳の個体別コスト＝人件費ダッシュボード（§11・[`../operations/cost-budget.md`](../operations/cost-budget.md)）
-- dryrun 出力のレビュー UI（`#ryo-管理` の Slack 手作業を置き換え, §6.5・[`../dogfooding/plan.md`](../dogfooding/plan.md)）
+- dryrun 出力のレビュー UI（`#russell-管理` の Slack 手作業を置き換え, §6.5・[`../dogfooding/plan.md`](../dogfooding/plan.md)）
 
-> [!TODO] 管理画面の要否と範囲の決定 — 承認者: プロダクトオーナー。当面は Slack（`/ryo config` + `#ryo-管理`）+ 読み取り専用 Web UI で回し、運用負荷が上がってから投資する。
+> [!TODO] 管理画面の要否と範囲の決定 — 承認者: プロダクトオーナー。当面は Slack（`/russell config` + `#russell-管理`）+ 読み取り専用 Web UI で回し、運用負荷が上がってから投資する。
 
 ## 3. 設計書の英訳/図解（C-3・外注先が海外の場合）
 

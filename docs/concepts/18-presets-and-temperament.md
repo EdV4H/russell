@@ -1,6 +1,6 @@
 # プリセットと気質（Presets & Temperament）
 
-Ryo は**素体**（ベースアーキテクチャ）。プリセットを適用して多様なタイプの同僚個体を派生させる
+Russell は**素体**（ベースアーキテクチャ）。プリセットを適用して多様なタイプの個体を派生させる
 （設計書 [`../design/human-like-agent-design.md`](../design/human-like-agent-design.md) §8）。
 plugin-first では**プリセット = プラグイン配列 + config の組み立てレシピ**。usketch の `apps/web/app.tsx` が
 プラグイン配列を組むのと同じ役割をプリセットが担う（[`../design/plugin-first-reinterpretation.md`](../design/plugin-first-reinterpretation.md)）。
@@ -79,7 +79,7 @@ plugin-first では**プリセット = プラグイン配列 + config の組み�
 ### channel_settings（チャンネル別上書き）
 
 `channel_settings` で「雑談チャンネルでは饒舌、実務チャンネルでは控えめ」を表現する。temperament をチャンネル単位で上書きする。
-変更は `/ryo config` コマンド（管理者のみ）から。変更履歴は `event_log` へ。テーブル定義は [`19-data-model.md`](./19-data-model.md)。
+変更は `/russell config` コマンド（管理者のみ）から。変更履歴は `event_log` へ。テーブル定義は [`19-data-model.md`](./19-data-model.md)。
 
 ## config_version の公開版方式（§6.1、Frank v2 から採用）
 
