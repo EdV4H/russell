@@ -42,10 +42,10 @@
 |---|---|---|---|---|
 | A-1 | プライバシー・記憶保持方針（retention/削除範囲/opt-in）**パラメータ化＝機構確定**・opt-in確定 | 🔵 | 人事・法務（デフォルト値サインオフ） | [privacy-and-memory-policy](docs/preparation/governance/privacy-and-memory-policy.md) |
 | A-1 | 日記/日報の機微情報ガード**パラメータ化＝機構確定** | 🔵 | 人事・法務（デフォルト＆NGリスト承認） | [sensitive-info-guard](docs/preparation/governance/sensitive-info-guard.md) |
-| A-2 | 受け入れ基準（フェーズ別 機械判定） | 🟡 | `[!TODO]` | [test-strategy](docs/preparation/acceptance/test-strategy.md) |
-| A-2 | 装備/プラグイン conformance suite | 🟡 | `[!TODO]` | [equipment-conformance-suite](docs/preparation/acceptance/equipment-conformance-suite.md) |
-| A-2 | dryrun→live 昇格判定手順 | 🟡 | `[!TODO]` | [dryrun-to-live-promotion](docs/preparation/acceptance/dryrun-to-live-promotion.md) |
-| A-2 | 「人間らしさ」評価設計 | 🟡 | `[!TODO]` | [humanness-eval](docs/preparation/acceptance/humanness-eval.md) |
+| A-2 | 受け入れ基準（フェーズ別 機械判定）**v1バー確定** | 🔵 | latency実測再調整のみ | [test-strategy](docs/preparation/acceptance/test-strategy.md) |
+| A-2 | 装備/プラグイン conformance suite **共通ゲート採用** | 🔵 | terminal補遺/CI化は実装時 | [equipment-conformance-suite](docs/preparation/acceptance/equipment-conformance-suite.md) |
+| A-2 | dryrun→live 昇格判定手順 **数値確定** | 🔵 | レビュアー指名待ち | [dryrun-to-live-promotion](docs/preparation/acceptance/dryrun-to-live-promotion.md) |
+| A-2 | 「人間らしさ」評価設計 **cadence/閾値確定** | 🔵 | 実施担当指名待ち | [humanness-eval](docs/preparation/acceptance/humanness-eval.md) |
 | A-3 | スコープと契約（段階発注/裁量仕分け/レビュー体制） | 🟡 | `[!TODO]` | [scope-and-contract](docs/preparation/governance/scope-and-contract.md) |
 
 ### B. 発注時に渡すもの
