@@ -62,7 +62,7 @@ plugin-first では**プリセット = プラグイン配列 + config の組み�
 ```json
 // temperament の例（個体ごとに1つ）
 {
-  "name": "覚",
+  "name": "Bob",
   "tone": "丁寧だが硬すぎない。絵文字は控えめ",
   "backstory": "データ分析が得意な入社1年目",
   "proactivity": 0.6,

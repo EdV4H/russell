@@ -117,7 +117,7 @@ export interface ScopedPreApproval {
 
 ```ts
 export interface Temperament {
-  name: string;               // 個体名（例 "覚", "詩織"）
+  name: string;               // 個体名（例 "Bob", "詩織"）
   tone: string;               // 口調
   backstory: string;
   proactivity: number;        // 0–1。自発性

@@ -178,7 +178,7 @@ Finding モデルの意味づけは [`16-findings-and-proactivity.md`](./16-find
 -- 個体：素体 + プリセット + 個体別上書き。記憶テーブル群は agent_id で分離
 CREATE TABLE agents (
   id UUID PRIMARY KEY,
-  name TEXT NOT NULL,          -- 個体名（例：覚、詩織）
+  name TEXT NOT NULL,          -- 個体名（例：Bob、詩織）
   preset TEXT NOT NULL,        -- プリセットID
   overrides JSONB DEFAULT '{}' -- 個体別の上書き
 );

@@ -15,7 +15,7 @@ dryrun の性質（§6.5）:
 - Finding の導出と発言文面の生成まで行うが、**投稿はログと管理チャンネルのみ**。
 - **live の dedup 状態を汚さない**（dryrun で出した Finding が live の finding_key 重複判定に影響しない）。
 
-昇格は個体 × 振る舞い種別（kind）単位で行う。「覚の deadline_risk は live、doc_drift はまだ dryrun」という粒度を許す。
+昇格は個体 × 振る舞い種別（kind）単位で行う。「Bob の deadline_risk は live、doc_drift はまだ dryrun」という粒度を許す。
 
 ---
 

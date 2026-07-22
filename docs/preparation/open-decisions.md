@@ -47,7 +47,7 @@
 
 | # | 決めること | 承認者 | 状態 | ドキュメント |
 |---|---|---|---|---|
-| B1-1 | 個体1号の名前（候補: 覚）・Slack表示名/ハンドル・日報チャンネル名 | PO | ⬜ | [temperament-unit-01](initial-data/temperament-unit-01.md) |
+| B1-1 | 個体1号 = **Bob**（スポンジボブ由来）確定。表示名 Bob / `@bob` / `#bob-日報`。残: backstoryサインオフ・Slackハンドル可否確認 | PO | ✅ | [temperament-unit-01](initial-data/temperament-unit-01.md) |
 | B1-2 | 個体1号 backstory の最終サインオフ | PO・人事 | ⬜ | 〃 |
 | B1-3 | 初期リリースは個体1号のみか / 複数同時か | PO | ⬜ | [presets](initial-data/presets.md) |
 | B1-4 | platform_bug / user_feedback 自動起票の週あたり件数上限（例: 3件/週） | PO・リポ管理者 | ⬜ | [finding-dictionary](initial-data/finding-dictionary.md) |

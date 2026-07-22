@@ -52,7 +52,7 @@
 
 | # | 項目 | 状態 | 担当 | ドキュメント |
 |---|---|---|---|---|
-| B-1 | 個体1号 temperament 確定値 | 🟡 | `[!TODO]` 個体名 | [temperament-unit-01](docs/preparation/initial-data/temperament-unit-01.md) |
+| B-1 | 個体1号 temperament（**名前=Bob 確定**） | 🔵 | backstoryサインオフ | [temperament-unit-01](docs/preparation/initial-data/temperament-unit-01.md) |
 | B-1 | プリセット4種 JSONスキーマ+デフォルト | 🟡 | — | [presets](docs/preparation/initial-data/presets.md) |
 | B-1 | Finding kind / reason_code 初期辞書 | 🟡 | — | [finding-dictionary](docs/preparation/initial-data/finding-dictionary.md) |
 | B-1 | 装備台帳 初期リスト | 🟡 | `[!TODO]` MCP選定 | [equipment-ledger](docs/preparation/initial-data/equipment-ledger.md) |
