@@ -25,10 +25,14 @@
 
 | # | 決めること | 承認者 | 状態 | ドキュメント |
 |---|---|---|---|---|
-| A2-1 | フェーズ別 機械判定基準の閾値（P0レイテンシ/成功率、P1想起正答率、P3 Finding妥当率 等） | PO・実装担当 | ⬜ | [test-strategy](acceptance/test-strategy.md) |
-| A2-2 | 装備/プラグイン conformance suite の合格基準 | 実装担当 | ⬜ | [equipment-conformance-suite](acceptance/equipment-conformance-suite.md) |
-| A2-3 | dryrun→live 昇格判定（日数・レビュアー・合格率） | レビュアー・PO | ⬜ | [dryrun-to-live-promotion](acceptance/dryrun-to-live-promotion.md) |
-| A2-4 | 「人間らしさ」評価の実施頻度・担当（残課題2） | PO | ⬜ | [humanness-eval](acceptance/humanness-eval.md) |
+> **本ラウンドの決定（2026-07-22）:** 各フェーズの合格バーを **v1 採用値として確定**。残るのは (a) 実測依存値（latency）の再調整、(b) A1-6 連動（機微ガード検知漏れ目標）、(c) **レビュアー／実施担当の指名（人間）**のみ。
+
+| # | 決めること | 承認者 | 状態 | ドキュメント |
+|---|---|---|---|---|
+| A2-1 | フェーズ別 機械判定バー v1確定（P0 p95≤8s/成功率≥99%、P1想起≥85%、P3妥当率≥70% 等）＋latency実測再調整 | PO・実装担当 | 🔵 | [test-strategy](acceptance/test-strategy.md) |
+| A2-2 | 装備/プラグイン conformance suite を共通必須ゲートに採用（v1確定）＋terminal補遺/CI化は実装時 | 実装担当 | 🔵 | [equipment-conformance-suite](acceptance/equipment-conformance-suite.md) |
+| A2-3 | dryrun→live 昇格判定 数値確定（10営業日/20件/妥当率≥70%/誤検知≤15%/有害0）＋レビュアー指名待ち | レビュアー・PO | 🔵 | [dryrun-to-live-promotion](acceptance/dryrun-to-live-promotion.md) |
+| A2-4 | 「人間らしさ」評価 cadence/閾値確定（週1・5〜10問、同僚感≥3.5、うざさ≤2.0）＋実施担当指名待ち（残課題2） | PO | 🔵 | [humanness-eval](acceptance/humanness-eval.md) |
 
 ## A-3. スコープと契約
 
