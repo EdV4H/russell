@@ -40,8 +40,8 @@
 
 | # | 項目 | 状態 | 担当 | ドキュメント |
 |---|---|---|---|---|
-| A-1 | プライバシー・記憶保持方針（retention/削除範囲/opt-in） | 🟡 | `[!TODO]` 人事・法務 | [privacy-and-memory-policy](docs/preparation/governance/privacy-and-memory-policy.md) |
-| A-1 | 日記/日報の機微情報ガード線引き | 🟡 | `[!TODO]` | [sensitive-info-guard](docs/preparation/governance/sensitive-info-guard.md) |
+| A-1 | プライバシー・記憶保持方針（retention/削除範囲/opt-in）**パラメータ化＝機構確定**・opt-in確定 | 🔵 | 人事・法務（デフォルト値サインオフ） | [privacy-and-memory-policy](docs/preparation/governance/privacy-and-memory-policy.md) |
+| A-1 | 日記/日報の機微情報ガード**パラメータ化＝機構確定** | 🔵 | 人事・法務（デフォルト＆NGリスト承認） | [sensitive-info-guard](docs/preparation/governance/sensitive-info-guard.md) |
 | A-2 | 受け入れ基準（フェーズ別 機械判定） | 🟡 | `[!TODO]` | [test-strategy](docs/preparation/acceptance/test-strategy.md) |
 | A-2 | 装備/プラグイン conformance suite | 🟡 | `[!TODO]` | [equipment-conformance-suite](docs/preparation/acceptance/equipment-conformance-suite.md) |
 | A-2 | dryrun→live 昇格判定手順 | 🟡 | `[!TODO]` | [dryrun-to-live-promotion](docs/preparation/acceptance/dryrun-to-live-promotion.md) |
