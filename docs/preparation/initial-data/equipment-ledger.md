@@ -113,7 +113,7 @@ Slack 通信面。§10 は plugin-first では `surface-slack` プラグイン�
 ```
 
 - **サンドボックスVM限定。全コマンドを `event_log` へ記録。破壊系コマンドは HITL 必須**（§9.2）。
-- 支給/回収イベントは監査ログと日報の両方に載る（「覚さんに terminal が支給されました」§9.2）。
+- 支給/回収イベントは監査ログと日報の両方に載る（「Bobさんに terminal が支給されました」§9.2）。
 - 初期ラインナップ（[`presets.md`](./presets.md)）のどのプリセットにも支給しない。将来の運用エージェント向け。
 
 > [!TODO] terminal のサンドボックス基盤の選定 — 承認者: プロダクトオーナー + インフラ担当。候補: 使い捨てコンテナ / Firecracker microVM / 専用サンドボックスサービス。支給は当面凍結し、必要になった時点で改めて A-1/A-3 の承認プロセスを通す。
@@ -125,9 +125,9 @@ Slack 通信面。§10 は plugin-first では `surface-slack` プラグイン�
 `proficiency` は全個体 0.2（新人）から。習熟度が低いうちは確認質問が増え HITL 頻度が上がる（§9.3）。
 
 ```sql
--- 個体1号: 覚（スポンジ）— slack のみ
+-- 個体1号: Bob（スポンジ）— slack のみ
 INSERT INTO issuances (agent_id, equipment_id, proficiency, granted_by) VALUES
-  ('<覚のagent_id>', 'slack', 0.2, '<granted_by: オーナー>');
+  ('<Bobのagent_id>', 'slack', 0.2, '<granted_by: オーナー>');
 -- セルフイシューは全個体に github.issues を限定支給（自リポ・件数上限つき）
 --   ↑ 支給するか、P3まで凍結するかは下記TODO
 ```

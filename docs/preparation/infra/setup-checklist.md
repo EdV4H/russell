@@ -54,7 +54,7 @@
 - [ ] Interactivity 有効化（HITL 承認の Block Kit ボタン, §10・§12-2）
 - [ ] **ワークスペース管理者の承認**を取得（アプリのインストール・スコープ承認は管理者権限）
 - [ ] App-Level Token（Socket Mode 用, `connections:write`）と Bot Token を発行 → シークレット管理へ
-- [ ] 個体ごとに Bot ユーザーを分けるか（`@覚` と `@詩織` を別アプリ/別 bot にするか）を決める
+- [ ] 個体ごとに Bot ユーザーを分けるか（`@bob` と `@詩織` を別アプリ/別 bot にするか）を決める
 
 > [!TODO] Slack ワークスペース管理者の承認取得と、個体=bot の対応関係（1アプリ複数個体 or 個体ごとにアプリ）の決定 — 承認者: Slack ワークスペース管理者 + プロダクトオーナー。表示名・日報チャンネル名は [`../initial-data/temperament-unit-01.md`](../initial-data/temperament-unit-01.md) と揃える。
 
