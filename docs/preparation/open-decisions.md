@@ -10,14 +10,16 @@
 
 ## A-1. 社内合意（★最初に。結論次第で設計が変わる）
 
+> **本ラウンドの決定（2026-07-22）:** プライバシー方針（retention・「忘れて」削除範囲・機微ガード）は**固定せずパラメータ化**する（`config_version` で版管理・`channel_settings` で上書き、§6.1 公開版方式）。**機構は確定**し、各パラメータの**推奨デフォルト値をドラフト済み**。残るのは「デフォルト値と全公開前提そのものへの 人事・法務 サインオフ」。opt-in は既定として**確定**。
+
 | # | 決めること | 承認者 | 状態 | ドキュメント |
 |---|---|---|---|---|
-| A1-1 | 従業員Slack発言の記憶・要約・日報公開の労務/プライバシー可否 | 人事・法務 | ⬜ | [privacy-and-memory-policy](governance/privacy-and-memory-policy.md) |
-| A1-2 | retention 方針（保持期間・削除依頼対応手順） | 人事・法務 | ⬜ | 〃 |
-| A1-3 | 「忘れて」の削除範囲（本棚だけか / 日記も遡及消去か） | プライバシーオーナー | ⬜ | 〃 |
-| A1-4 | 参加チャンネルの opt-in / opt-out 方針 | プライバシーオーナー | ⬜ | 〃 |
-| A1-5 | 日記/日報の機微情報ガード具体 NG リスト（残課題1） | 人事・法務・PO | ⬜ | [sensitive-info-guard](governance/sensitive-info-guard.md) / [prompts/journal-and-report](initial-data/prompts/journal-and-report.md) |
-| A1-6 | 機微ガードの検知漏れ率・過剰保留率の目標値 | PO・実装担当 | ⬜ | [sensitive-info-guard](governance/sensitive-info-guard.md) |
+| A1-1 | 全公開前提そのものの労務/プライバシー可否（＋方針全体の最終承認者） | 人事・法務 | ⬜ | [privacy-and-memory-policy](governance/privacy-and-memory-policy.md) |
+| A1-2 | retention をパラメータ化（機構✅）＋デフォルト値（journal保持/書庫物理削除/退職者/SLA）のサインオフ | 法務・運用オーナー | 🔄 | 〃 §2 |
+| A1-3 | 「忘れて」を段階(L1/L2/L3)＋mode パラメータ化（機構✅、既定L2/delete）＋既定のサインオフ | 法務・運用オーナー | 🔄 | 〃 §3 |
+| A1-4 | 参加チャンネルは **opt-in 既定**（機構＋方針 確定） | プライバシーオーナー | ✅ | 〃 §4 |
+| A1-5 | 機微ガードをパラメータ化（strictness/filter_impl/categories/channel上書き、機構✅）＋デフォルト＆NGリストのサインオフ | 人事・法務・PO | 🔄 | [sensitive-info-guard](governance/sensitive-info-guard.md) / [prompts/journal-and-report](initial-data/prompts/journal-and-report.md) |
+| A1-6 | 機微ガードの検知漏れ率・過剰保留率・ゴールデン正答率の目標値 | PO・実装担当 | ⬜ | [sensitive-info-guard](governance/sensitive-info-guard.md) |
 
 ## A-2. 受け入れ基準
 

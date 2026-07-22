@@ -15,14 +15,37 @@
 - **一次生成時**: 夜間バッチ（§4、03:00 JST）が日記を書く際の生成プロンプトに「人が読む日報である」ことと DO-NOT-WRITE リストを明示する（§10.1）。本棚の読書カード・日報の生成プロンプトも同様（初期データ [`../initial-data/prompts/`](../initial-data/prompts/) で本文をドラフト）。
 - **二次フィルタ（推奨追加）**: 生成後の日記テキストに決定論的な検査（正規表現・辞書・分類器）を通し、DO-NOT-WRITE 該当が残っていれば投稿を保留し管理チャンネルへ回す。プロンプトだけに頼らない（設計書 §9.2「Prompt Guardrail Fallacy の回避」の思想を日記にも適用）。
 
+### 決定事項：ガードはパラメータ化する
+
+強度・対象カテゴリ・フィルタ実装を固定せず、`config_version` の `sensitive_guard` ブロックで調節し、`channel_settings` でチャンネル別に上書きする（[`privacy-and-memory-policy.md`](./privacy-and-memory-policy.md) のポリシー方針と同じく §6.1 公開版方式に載せる）。
+
+```json
+// config_version.sensitive_guard（例・調節可能）
+{
+  "strictness": "conservative",   // conservative（疑わしきは保留）/ balanced（明確NGのみ）
+  "filter_impl": "both",          // prompt（一次のみ）/ regex / classifier / both（一次+二次）
+  "fail_closed": true,            // ガードが読めない/落ちたら投稿しない側へ（§9.2 の思想を日記へ）
+  "categories": {                 // §1 の各カテゴリを個別トグル（true=書かない）
+    "personal_evaluation": true, "health": true, "hr": true, "salary": true,
+    "disciplinary": true, "sensitive_attributes": true,
+    "confidential_biz": true, "customer_secret": true, "credentials": true, "legal_dispute": true,
+    "negative_naming": true, "rumor_unverified": true, "dm_transcription": true
+  }
+}
+// channel_settings で例: 雑談ch は strictness=balanced、人事ch は購読自体を禁止（ブロックリスト）
+```
+
+- 既定は **strictness=conservative / filter_impl=both / fail_closed=true / 全カテゴリ ON**。全公開前提なので保守側から始め、運用実測（§2）で緩める。
+- `filter_impl` を `both` にすると一次（生成プロンプト）＋二次（決定論フィルタ）の二重化。プロンプトだけに頼らない（§9.2「Prompt Guardrail Fallacy の回避」を日記にも適用）。
+
 > [!TODO]
-> **一次（プロンプト）だけにするか、二次フィルタも入れるかを決定する。決定オーナー: 発注側技術責任者 + 法務。** 二次フィルタは検知漏れ時の被害（機微情報が公開チャンネルへ流出）を下げるが実装コストが増える。全公開設計であることを踏まえた許容リスクを判断すること。
+> **各パラメータの初期デフォルト値のサインオフ。決定オーナー: 人事 + 法務 + 発注側技術責任者。** 機構（パラメータ化・二重フィルタ・fail-closed）は確定。残るのは strictness の既定・filter_impl の既定（二次フィルタを P1 から入れるか）・カテゴリの過不足の承認。全公開設計での許容リスクを踏まえて判断する。
 
 ---
 
 ## 1. DO-NOT-WRITE リスト（ドラフト）
 
-日報・本棚の公開記述・索引カードの summary に **書かない** 情報カテゴリ。これは叩き台であり、最終版は §2 のサインオフを要する。
+日報・本棚の公開記述・索引カードの summary に **書かない** 情報カテゴリ。各カテゴリは §0 の `sensitive_guard.categories` のトグルキーに対応する（`true`=書かない）。これは叩き台であり、最終版は §2 のサインオフを要する。
 
 ### A. 人物に関する評価・機微
 
