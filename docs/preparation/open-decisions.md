@@ -82,15 +82,19 @@
 
 | # | 決めること | 承認者 | 状態 | ドキュメント |
 |---|---|---|---|---|
-| C2-1 | 承認者（オーナー）ロールの担当者名 | PO | ⬜ | [ownership-and-approval](operations/ownership-and-approval.md) |
-| C2-2 | 承認の記録先（event_log ＋ #russell-管理 ピン留め / Notion 台帳） | 実装担当 | ⬜ | 〃 |
-| C2-3 | キルスイッチ権限者・オンコール担当・連絡先 | PO | ⬜ | [kill-switch](operations/kill-switch.md) |
-| C2-4 | 凍結粒度（mention応答も止めるか）・env フラグ名・シグナル | 実装担当・PO | ⬜ | 〃 |
-| C2-5 | インシデント各ロール担当者・就業時間外連絡フロー | PO | ⬜ | [incident-response](operations/incident-response.md) |
-| C2-6 | 記憶汚染時の削除依頼対応と A-1「忘れて」範囲の一本化 | プライバシーオーナー | ⬜ | 〃 |
-| C2-7 | 月額上限（個体あたり・全体）・100%到達時の挙動（自発off / 完全停止） | PO・経理 | ⬜ | [cost-budget](operations/cost-budget.md) |
-| C2-8 | 使用量イベント台帳スキーマ（cost_usd 算出・単価テーブルの持ち方） | 実装担当 | ⬜ | 〃 |
-| ✅ | モデル単価の確定 | 実装担当 | ✅ | [cost-budget](operations/cost-budget.md)（Haiku 4.5 $1/$5・Sonnet 5 $3/$15(導入$2/$10)・Opus 4.8 $5/$25 で確定） |
+> **本ラウンドの決定（2026-07-23）:** 運用の**機構・ポリシーを確定**。RACI とキルスイッチ手順・コスト上限挙動を固め、**全ロールの氏名は [ownership-and-approval](operations/ownership-and-approval.md) の「担当者ロスター」1か所に集約**（A-2/A-3 の指名待ちもここへ）。残るのは氏名記入と金額サインオフ。
+
+| # | 決めること | 承認者 | 状態 | ドキュメント |
+|---|---|---|---|---|
+| C2-1 | 承認 RACI 確定＋担当者ロスター整備。残: **氏名記入**（A-2/A-3 の指名もここで一括） | PO | 🔵 | [ownership-and-approval](operations/ownership-and-approval.md) |
+| C2-2 | 承認の記録先 = **event_log ＋ #russell-管理 ピン留め**（Notionは任意）確定 | 実装担当 | ✅ | 〃 |
+| C2-3 | キルスイッチ発動基準・経路・連絡フロー確定。権限者氏名はロスターへ集約 | PO | 🔵 | [kill-switch](operations/kill-switch.md) |
+| C2-4 | 凍結粒度＋envフラグ確定（L1/2=自発off・mention継続、L3 `RUSSELL_KILL`=完全沈黙）。残: 別経路の起動テスト（実装時） | 実装担当・PO | ✅ | 〃 |
+| C2-5 | インシデント手順ドラフト済。担当者はロスターへ集約 | PO | 🔵 | [incident-response](operations/incident-response.md) |
+| C2-6 | 記憶汚染の削除対応を A1-3 の段階削除（L1/L2/L3＋mode）に一本化 | プライバシーオーナー | 🔵 | 〃 |
+| C2-7 | 上限到達時の挙動確定（80%警告/100%自発off・mention継続/150%全停止検討、閾値パラメータ化）。残: **金額サインオフ** | PO・経理 | 🔵 | [cost-budget](operations/cost-budget.md) |
+| C2-8 | 使用量イベント台帳スキーマ（cost_usd 算出・単価テーブルの持ち方） | 実装担当 | ⬜ | 〃（実装時） |
+| — | モデル単価の確定 | 実装担当 | ✅ | [cost-budget](operations/cost-budget.md)（Haiku 4.5 $1/$5・Sonnet 5 $3/$15(導入$2/$10)・Opus 4.8 $5/$25） |
 
 ## C-3. 将来整理（バックログ）
 
