@@ -128,8 +128,8 @@
 
 `SCREAMING_SNAKE_CASE`。kind 内で一意。将来 kind を追加するときは `reason_code` を必ずこの辞書に追記してから実装する（§9「未分類ツール・未知リソースは default deny」と同じ思想で、辞書にない reason_code は監査で弾く）。
 
-> [!TODO] platform_bug / user_feedback の自動起票の週あたり件数上限（例: 3件/週）の確定 — 承認者: プロダクトオーナー + リポジトリ管理者（§6.4・[`equipment-ledger.md`](./equipment-ledger.md) の `github.issues` スコープと一致させる）。
+> [!IMPORTANT] **決定（2026-07-23）: 自動起票の週あたり件数上限 = 既定 3 件/週**（`config` パラメータ `selfissue.max_per_week=3`、調節可）。kind 別ではなく合算。[`equipment-ledger.md`](./equipment-ledger.md) の `github.issues` スコープ付き事前承認と同値。超過分は起票せず `#russell-管理` に保留提示。実測後に PO が調整。
 
-> [!TODO] 追加提案 kind（stale_thread / memory_conflict）を初期辞書に含めるか、P3 以降に回すかの決定 — 承認者: プロダクトオーナー。
+> [!IMPORTANT] **決定（2026-07-23）: 初期辞書は上記コア kind のみ。** 追加提案 kind（`stale_thread` / `memory_conflict`）は **P3（気づき）以降に候補として検討**し初期には含めない。plugin-first なので finding プラグインを1つ足すだけで後から追加できる。
 
 関連: [`presets.md`](./presets.md)（proactivity.triggers との対応）/ [`equipment-ledger.md`](./equipment-ledger.md)（効果分類）/ [`../operations/incident-response.md`](../operations/incident-response.md)（memory_conflict と記憶汚染）

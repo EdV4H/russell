@@ -104,6 +104,6 @@
 - `(agent_id, routine_id, scheduled_for)` の一意制約で論理実行は1件。lease 切れでも二重投稿しない。
 - 学習される習慣（`origin='learned'`）は勝手に作らない。夜間バッチが反復を検出し「これ、毎週こちらでやっておきましょうか？」と Slack ボタンで提案 → 承認で追加（§5・HITL）。
 
-> [!TODO] cron 時刻・営業日カレンダーの確定 — 承認者: プロダクトオーナー。JST 前提で 9:00/18:00/金17:00 で問題ないか、祝日カレンダーをどう持つか（日本の祝日 API / 手動）。ドッグフーディング先チームの勤務時間に合わせる（[`../../dogfooding/plan.md`](../../dogfooding/plan.md)）。
+> [!IMPORTANT] **決定（2026-07-23）: cron 既定 = 朝の始業 `0 9 * * 1-5` / 夕方の振り返り `0 18 * * 1-5` / 週次レビュー `0 17 * * 5`（JST・§5）。** タイムゾーンは JST 固定、営業日は月〜金。**祝日は初期は手動カレンダー**（`config` の休業日リスト）で除外し、運用が乗ったら内閣府の祝日 CSV/API へ移行。値は `routines` の cron パラメータなので投入チームの勤務時間に合わせて調節可。実測後に PO が微調整。
 
 関連: [`journal-and-report.md`](./journal-and-report.md)（夜間バッチ・日報の prompt）/ [`../finding-dictionary.md`](../finding-dictionary.md) / [`../../../design/human-like-agent-design.md`](../../../design/human-like-agent-design.md) §5

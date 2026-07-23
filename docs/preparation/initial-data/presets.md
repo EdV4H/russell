@@ -168,6 +168,6 @@
 | finding | `finding-deadline-risk` ほか | `proactivity.triggers` に対応する検知器を選択 |
 | habit | `habit-morning` / `habit-evening` / `habit-weekly` | 番頭はリマインド習慣を追加 |
 
-> [!TODO] 初期リリースで作成する個体は個体1号（Bob / スポンジ）のみか、複数同時かの決定 — 承認者: プロダクトオーナー。段階解禁（§13）の観点では1体から始めるのが安全。他プリセットは P3 以降にドッグフーディングで追加する想定。
+> [!IMPORTANT] **決定（2026-07-23）: 初期リリースは個体1号 Bob（スポンジ）1体のみ。** 段階解禁（§13）に沿い、まず1体で P0→P3 を回す。編集者・番頭・石橋の各プリセットは P3 以降にドッグフーディングで順次追加（plugin-first なので「プラグイン配列＋config レシピ」を足すだけ）。他プリセット定義は本書に揃えてあるので、追加時はそのまま使える。
 
 関連: [`temperament-unit-01.md`](./temperament-unit-01.md) / [`equipment-ledger.md`](./equipment-ledger.md) / [`finding-dictionary.md`](./finding-dictionary.md)

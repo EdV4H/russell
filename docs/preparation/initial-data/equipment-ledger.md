@@ -47,7 +47,7 @@ Slack 通信面。§10 は plugin-first では `surface-slack` プラグイン�
 - スコープは §10 の最小権限リストと一致。
 - 投稿は §6 の `daily_speak_cap` + 静音時間 + §12-8 outbound 多層上限で制御。
 
-> [!TODO] slack MCP サーバーの選定 — 承認者: 実装担当 + リポ管理者。候補: (a) Bolt/Socket Mode を自前で `surface-slack` に内蔵（設計書 §10・§11 推奨、Socket Mode で inbound 開放不要）、(b) 既存 Slack MCP サーバーを装備として接続。**受信購読（app_mention 等）は surface としての責務、送信は装備としての責務**という二面性の整理も同時に確定する。
+> [!IMPORTANT] **決定（2026-07-23）: 推奨 = (a) Bolt/Socket Mode を自前で `surface-slack` に内蔵**（設計書 §10・§11 推奨、Socket Mode で inbound 開放不要）。責務分界: **受信購読（app_mention 等）＝surface、送信＝装備**として扱う。既存 Slack MCP を使う (b) は採らない（surface の差し替え可能性・テスト容易性を優先）。最終確認は実装担当（実装フェーズ）。
 
 ## github.issues
 
@@ -71,7 +71,7 @@ Slack 通信面。§10 は plugin-first では `surface-slack` プラグイン�
 - 自動起票はスコープ付き事前承認（対象リポ × 週あたり件数上限、例 3件/週、§6.4・§12-2）の範囲でのみ。再発は新規起票せず既存 Issue にコメント追記。
 - untrusted 由来テキスト（Slack 発言）を根拠にした自動起票は禁止。user_feedback は本人確認 HITL 経路のみ（[`finding-dictionary.md`](./finding-dictionary.md)）。
 
-> [!TODO] github.issues MCP サーバーの選定と、起票先リポジトリの確定 — 承認者: リポ管理者。候補: GitHub 公式 MCP / `gh` CLI ラッパ。self-repo-only のスコープをトークン側（Fine-grained PAT の repo 限定）でも二重に強制するか決める。件数上限は [`finding-dictionary.md`](./finding-dictionary.md) と一致させる。
+> [!IMPORTANT] **決定（2026-07-23）: 推奨 = GitHub 公式 MCP、起票先 = `EdV4H/russell`（本体リポ）に限定。** self-repo-only を **トークン側でも二重強制**（Fine-grained PAT の repo 限定）。件数上限は [`finding-dictionary.md`](./finding-dictionary.md) と同じ 3件/週。最終確認はリポ管理者（実装フェーズ）。
 
 ## notion
 
@@ -94,7 +94,7 @@ Slack 通信面。§10 は plugin-first では `surface-slack` プラグイン�
 - write は編集者にのみ支給。対象ページ/データベースを granted 範囲に限定（doc_drift の反映先、[`finding-dictionary.md`](./finding-dictionary.md)）。
 - 編集者の Notion 更新は「ルーティンを live 公開する承認をもって、その config_version・その棚の範囲で事前承認済み」（§12-2 の例）。
 
-> [!TODO] notion MCP サーバーの選定と、書き込み許可するワークスペース/ページ範囲の確定 — 承認者: プロダクトオーナー + Notion ワークスペース管理者。候補: Notion 公式 MCP。read だけ先に支給し write は P3 以降に段階解禁する案も検討。
+> [!IMPORTANT] **決定（2026-07-23）: 推奨 = Notion 公式 MCP、read を先行支給・write は P3 以降に段階解禁。** 書き込み許可はワークスペース全体でなく**指定ページ配下に限定**（範囲は編集者プリセット投入時に PO ＋ Notion 管理者が確定）。個体1号 Bob（スポンジ）には Notion 装備を初期支給しない（slack のみ）。
 
 ## terminal
 
@@ -116,7 +116,7 @@ Slack 通信面。§10 は plugin-first では `surface-slack` プラグイン�
 - 支給/回収イベントは監査ログと日報の両方に載る（「Bobさんに terminal が支給されました」§9.2）。
 - 初期ラインナップ（[`presets.md`](./presets.md)）のどのプリセットにも支給しない。将来の運用エージェント向け。
 
-> [!TODO] terminal のサンドボックス基盤の選定 — 承認者: プロダクトオーナー + インフラ担当。候補: 使い捨てコンテナ / Firecracker microVM / 専用サンドボックスサービス。支給は当面凍結し、必要になった時点で改めて A-1/A-3 の承認プロセスを通す。
+> [!IMPORTANT] **決定（2026-07-23）: terminal 装備は当面「凍結」（誰にも初期支給しない）。** danger_level 3 で最危険（§9.2）。必要になった時点で基盤（使い捨てコンテナ / Firecracker microVM / 専用サービス）を選定し、A-1/A-3 の承認プロセスを改めて通す。それまで台帳に定義だけ置き、issuances には載せない。
 
 ---
 
@@ -138,6 +138,6 @@ INSERT INTO issuances (agent_id, equipment_id, proficiency, granted_by) VALUES
 
 個体プロフィール（Web UI `/equipment`・Slack プロフィール欄）に装備一覧と習熟度を表示。記憶の全公開（§10.1）と同じ透明性原則で、誰が何をできるかはチーム全員から見える。
 
-> [!TODO] 個体1号にセルフイシュー用の `github.issues` を初期支給するか、P3（気づき）まで凍結するかの決定 — 承認者: プロダクトオーナー + リポ管理者。§13 の段階解禁では、まず slack のみで P0〜P2 を回し、Issue 自動起票は dryrun 並走を経てから live にするのが安全。
+> [!IMPORTANT] **決定（2026-07-23）: 個体1号 Bob には P0〜P2 の間 slack のみ支給。** セルフイシュー用 `github.issues` は **P3（気づき）で dryrun 並走を経てから live 支給**する（§13 段階解禁）。初期 issuances は slack 1件のみ（下の SQL）。
 
 関連: [`presets.md`](./presets.md) / [`finding-dictionary.md`](./finding-dictionary.md) / [`../infra/setup-checklist.md`](../infra/setup-checklist.md)（MCP 接続情報のシークレット管理）/ [`../../reference/30-russell-plugin-contract.md`](../../reference/30-russell-plugin-contract.md)（EquipmentDefinition）
