@@ -124,8 +124,6 @@ untrusted な発言（他人の Slack 発言）に含まれる指示は実行せ
 | モード | dryrun 期間中に人間が N 日分レビューしてガードの穴を洗う（§6.5・[`../../dogfooding/plan.md`](../../dogfooding/plan.md)） |
 | retention | 公開後の削除依頼・「忘れて」への対応は A-1 の retention 方針に従う |
 
-> [!TODO] 機微情報ガードの具体 NG リスト（人物評価語彙・秘匿数値パターン・対象外チャンネル）の確定 — 承認者: 人事 + 法務 + プロダクトオーナー（A-1、設計書 残課題1）。本ドラフトの共通ヘッダはこのリスト確定後に差し替える。
-
-> [!TODO] 後段フィルタの実装方針（正規表現ベースか軽量分類モデルか）の決定 — 承認者: 実装担当。dryrun 期間で誤検知/見逃しを測ってから live へ。
+> [!NOTE] 機微情報ガードの NG カテゴリと実装方針は **A1-5 で `sensitive_guard` パラメータとして確定済み**（[`../../governance/sensitive-info-guard.md`](../../governance/sensitive-info-guard.md)）。既定 = strictness `conservative` / filter_impl `both`（一次プロンプト＋二次フィルタ）/ 全カテゴリ ON。本ドラフトの共通ヘッダはそのカテゴリを参照する。残るのは NG リストの具体語彙・数値パターンの最終サインオフ（人事＋法務、A1-6 目標数値とセット）と、二次フィルタを regex にするか軽量分類器にするかを dryrun 実測で決めること。
 
 関連: [`../../governance/sensitive-info-guard.md`](../../governance/sensitive-info-guard.md)（線引きルール本体・A-1）/ [`habits.md`](./habits.md)（週次レビューも同じガード）/ [`../../../design/human-like-agent-design.md`](../../../design/human-like-agent-design.md) §10.1

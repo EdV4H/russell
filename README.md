@@ -53,22 +53,22 @@
 | # | 項目 | 状態 | 担当 | ドキュメント |
 |---|---|---|---|---|
 | B-1 | 個体1号 temperament（**名前=Bob 確定**） | 🔵 | backstoryサインオフ | [temperament-unit-01](docs/preparation/initial-data/temperament-unit-01.md) |
-| B-1 | プリセット4種 JSONスキーマ+デフォルト | 🟡 | — | [presets](docs/preparation/initial-data/presets.md) |
-| B-1 | Finding kind / reason_code 初期辞書 | 🟡 | — | [finding-dictionary](docs/preparation/initial-data/finding-dictionary.md) |
-| B-1 | 装備台帳 初期リスト | 🟡 | `[!TODO]` MCP選定 | [equipment-ledger](docs/preparation/initial-data/equipment-ledger.md) |
-| B-1 | ビルトイン習慣3種 プロンプト | 🟡 | — | [prompts/habits](docs/preparation/initial-data/prompts/habits.md) |
-| B-1 | 日記・読書カード・日報 生成プロンプト | 🟡 | — | [prompts/journal-and-report](docs/preparation/initial-data/prompts/journal-and-report.md) |
+| B-1 | プリセット4種 JSONスキーマ+デフォルト（**初期はBob1体**） | 🔵 | — | [presets](docs/preparation/initial-data/presets.md) |
+| B-1 | Finding辞書＋**自動起票3件/週・追加kindP3送り確定** | 🔵 | — | [finding-dictionary](docs/preparation/initial-data/finding-dictionary.md) |
+| B-1 | 装備台帳＋**MCP推奨確定・terminal凍結・セルフイシューP3** | 🔵 | 実装時にMCP最終確認 | [equipment-ledger](docs/preparation/initial-data/equipment-ledger.md) |
+| B-1 | 習慣プロンプト＋**cron確定（9/18/金17 JST）** | 🔵 | — | [prompts/habits](docs/preparation/initial-data/prompts/habits.md) |
+| B-1 | 日記・日報プロンプト（ガードはA1-5パラメータ） | 🔵 | NG語彙サインオフ | [prompts/journal-and-report](docs/preparation/initial-data/prompts/journal-and-report.md) |
 | B-2 | インフラ・アカウント準備 | 🟡 | `[!TODO]` | [setup-checklist](docs/preparation/infra/setup-checklist.md) |
 
 ### C. 並行で進められるもの
 
 | # | 項目 | 状態 | 担当 | ドキュメント |
 |---|---|---|---|---|
-| C-1 | ドッグフーディング設計 | 🟡 | `[!TODO]` チャンネル選定 | [dogfooding/plan](docs/preparation/dogfooding/plan.md) |
+| C-1 | ドッグフーディング設計（説明文/アンケート確定） | 🔵 | **投入チャンネル選定**（住人同意） | [dogfooding/plan](docs/preparation/dogfooding/plan.md) |
 | C-2 | 承認 RACI＋ロスター（**氏名の集約先**） | 🔵 | 氏名記入待ち | [ownership-and-approval](docs/preparation/operations/ownership-and-approval.md) |
 | C-2 | キルスイッチ **手順・粒度・envフラグ確定** | 🔵 | 権限者氏名（ロスター） | [kill-switch](docs/preparation/operations/kill-switch.md) |
 | C-2 | インシデント対応手順 | 🔵 | 担当者はロスター | [incident-response](docs/preparation/operations/incident-response.md) |
 | C-2 | コスト **上限挙動確定**（80/100/150%） | 🔵 | 金額サインオフ（経理） | [cost-budget](docs/preparation/operations/cost-budget.md) |
-| C-3 | 将来バックログ（P4/管理画面/英訳） | 🟡 | — | [backlog/future](docs/preparation/backlog/future.md) |
+| C-3 | 将来バックログ（**方針確定**: 2体後ディスカッション/管理画面不要/国内前提/追加プリセットは実証後） | 🔵 | — | [backlog/future](docs/preparation/backlog/future.md) |
 
 > 状態列は初期ドラフト投入時点の想定。各ドキュメント内の `> [!TODO]` を解消し、レビューを経て 🟢 に更新していく。

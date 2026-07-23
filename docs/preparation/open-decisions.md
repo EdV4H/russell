@@ -48,17 +48,17 @@
 | # | 決めること | 承認者 | 状態 | ドキュメント |
 |---|---|---|---|---|
 | B1-1 | 個体1号 = **Bob**（スポンジボブ由来）確定。表示名 Bob / `@bob` / `#bob-日報`。残: backstoryサインオフ・Slackハンドル可否確認 | PO | ✅ | [temperament-unit-01](initial-data/temperament-unit-01.md) |
-| B1-2 | 個体1号 backstory の最終サインオフ | PO・人事 | ⬜ | 〃 |
-| B1-3 | 初期リリースは個体1号のみか / 複数同時か | PO | ⬜ | [presets](initial-data/presets.md) |
-| B1-4 | platform_bug / user_feedback 自動起票の週あたり件数上限（例: 3件/週） | PO・リポ管理者 | ⬜ | [finding-dictionary](initial-data/finding-dictionary.md) |
-| B1-5 | 追加 Finding kind（stale_thread / memory_conflict）を初期辞書に含めるか | PO | ⬜ | 〃 |
-| B1-6 | slack MCP サーバー選定（自前 Bolt/Socket vs 既存 MCP）と surface/装備の責務分界 | 実装担当・リポ管理者 | ⬜ | [equipment-ledger](initial-data/equipment-ledger.md) |
-| B1-7 | github.issues MCP 選定・起票先リポ・self-repo-only スコープ強制方法 | リポ管理者 | ⬜ | 〃 |
-| B1-8 | notion MCP 選定・書き込み許可ワークスペース/ページ範囲 | PO・Notion管理者 | ⬜ | 〃 |
-| B1-9 | terminal サンドボックス基盤選定（当面凍結） | PO・インフラ | ⬜ | 〃 |
-| B1-10 | 個体1号にセルフイシュー装備を初期支給するか / P3まで凍結か | PO・リポ管理者 | ⬜ | 〃 |
-| B1-11 | 習慣 cron 時刻・営業日/祝日カレンダーの持ち方 | PO | ⬜ | [prompts/habits](initial-data/prompts/habits.md) |
-| B1-12 | 機微ガード後段フィルタの実装方針（正規表現 vs 軽量分類モデル） | 実装担当 | ⬜ | [prompts/journal-and-report](initial-data/prompts/journal-and-report.md) |
+| B1-2 | 個体1号 backstory の最終サインオフ（ドラフト確定・確認のみ） | PO・人事 | ⬜ | 〃 |
+| B1-3 | 初期リリース = **Bob 1体から**（他プリセットは P3 以降）確定 | PO | ✅ | [presets](initial-data/presets.md) |
+| B1-4 | 自動起票 件数上限 = **3件/週**（パラメータ化）確定 | PO・リポ管理者 | ✅ | [finding-dictionary](initial-data/finding-dictionary.md) |
+| B1-5 | 追加 Finding kind は **初期に含めず P3 以降**に確定 | PO | ✅ | 〃 |
+| B1-6 | slack = **自前 Bolt/Socket 内蔵（推奨確定）**・受信=surface/送信=装備の責務分界確定。実装時に最終確認 | 実装担当 | 🔵 | [equipment-ledger](initial-data/equipment-ledger.md) |
+| B1-7 | github.issues = **GitHub公式MCP・起票先 EdV4H/russell 限定・トークン二重強制（推奨確定）**。実装時に最終確認 | リポ管理者 | 🔵 | 〃 |
+| B1-8 | notion = **公式MCP・read先行/write P3・指定ページ限定（推奨確定）**。範囲は編集者投入時に確定 | PO・Notion管理者 | 🔵 | 〃 |
+| B1-9 | terminal = **当面凍結**（誰にも初期支給しない）確定 | PO・インフラ | ✅ | 〃 |
+| B1-10 | Bob は P0〜P2 slack のみ・セルフイシューは **P3 で dryrun 経て支給** 確定 | PO・リポ管理者 | ✅ | 〃 |
+| B1-11 | 習慣 cron = **9:00/18:00/金17:00 JST・祝日は初期手動カレンダー** 確定 | PO | ✅ | [prompts/habits](initial-data/prompts/habits.md) |
+| B1-12 | 機微ガード後段フィルタ = A1-5 `filter_impl=both` 確定。regex/分類器の別は dryrun 実測で | 実装担当 | 🔵 | [prompts/journal-and-report](initial-data/prompts/journal-and-report.md) |
 
 ## B-2. インフラ・アカウント
 
@@ -74,9 +74,9 @@
 
 | # | 決めること | 承認者 | 状態 | ドキュメント |
 |---|---|---|---|---|
-| C1-1 | 投入実務チャンネルの選定 | PO・チャンネルメンバー | ⬜ | [dogfooding/plan](dogfooding/plan.md) |
-| C1-2 | 住人向け説明文の最終文面・担当者 | PO・人事 | ⬜ | 〃 |
-| C1-3 | 週次アンケートの実施方法（Slack WF / Google Form）・タイミング | PO | ⬜ | 〃 |
+| C1-1 | 投入実務チャンネルの選定（唯一の真の残・住人同意が要る） | PO・チャンネルメンバー | ⬜ | [dogfooding/plan](dogfooding/plan.md) |
+| C1-2 | 住人向け説明文 = 文面確定（Bob反映）。残: 人事の表現レビュー・告知担当（ロスター） | PO・人事 | 🔵 | 〃 |
+| C1-3 | 週次アンケート = **Slack ワークフロー・金曜夕方** 確定 | PO | ✅ | 〃 |
 
 ## C-2. 運用体制
 
@@ -100,10 +100,10 @@
 
 | # | 決めること | 承認者 | 状態 | ドキュメント |
 |---|---|---|---|---|
-| C3-1 | ディスカッション機能の着手条件・ラリー上限初期値（残課題4） | PO | ⬜ | [backlog/future](backlog/future.md) |
-| C3-2 | 管理画面の要否と範囲 | PO | ⬜ | 〃 |
-| C3-3 | 外注先の言語・英訳/図解の要否 | PO | ⬜ | 〃 |
-| C3-4 | ムードメーカー等 間接価値プリセットを入れるか（残課題3） | PO | ⬜ | 〃 |
+| C3-1 | ディスカッション機能 = **2体live安定後に着手・6往復・Slackスレッド**（方針確定） | PO | 🔵 | [backlog/future](backlog/future.md) |
+| C3-2 | 管理画面 = **当面作らない**（Slack + 読み取りUIで運用）方針確定 | PO | 🔵 | 〃 |
+| C3-3 | 英訳/図解 = **国内発注前提で当面不要**（海外発注時のみ）方針確定 | PO | 🔵 | 〃 |
+| C3-4 | 追加プリセット = **初期4種実証後に検討**（残課題3）方針確定 | PO | 🔵 | 〃 |
 
 ---
 

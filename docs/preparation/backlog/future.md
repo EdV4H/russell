@@ -38,7 +38,7 @@
 
 ディスカプションは新レジストリを増やさず、既存の `surfaces`（Slack スレッド）+ `events`（`surface:message`）+ 複数個体の `createAgent` インスタンス間の調停として実装できる想定。調停ロジック（ラリー上限・収束強制）をどこに置くか（コア or `habit-*`/専用プラグイン）は設計時に決める。
 
-> [!TODO] ディスカッション機能に着手する条件（何個体が live で安定したら）とラリー上限の初期値の決定 — 承認者: プロダクトオーナー。まず2体・6往復・Slack スレッドで最小実装し、3体拡張は別途判断。
+> [!IMPORTANT] **方針（2026-07-23）: 2体が live で安定してから着手。** 初期はラリー上限 6往復・Slack スレッド上で最小実装（§8.4）。3体以上への拡張は別途判断。着手可否の最終判断は PO。
 
 ## 2. 管理画面（Web UI 拡張）
 
@@ -51,7 +51,7 @@
 - 使用量台帳の個体別コスト＝人件費ダッシュボード（§11・[`../operations/cost-budget.md`](../operations/cost-budget.md)）
 - dryrun 出力のレビュー UI（`#russell-管理` の Slack 手作業を置き換え, §6.5・[`../dogfooding/plan.md`](../dogfooding/plan.md)）
 
-> [!TODO] 管理画面の要否と範囲の決定 — 承認者: プロダクトオーナー。当面は Slack（`/russell config` + `#russell-管理`）+ 読み取り専用 Web UI で回し、運用負荷が上がってから投資する。
+> [!IMPORTANT] **方針（2026-07-23）: 専用管理画面は当面作らない。** Slack（`/russell config` + `#russell-管理`）+ 読み取り専用 Web UI（`/shelf`）で運用し、運用負荷が上がってから投資判断。
 
 ## 3. 設計書の英訳/図解（C-3・外注先が海外の場合）
 
@@ -59,7 +59,7 @@
 - 図解版（アーキテクチャ図 §2・記憶フロー §3・気づきパイプライン §6）は言語を問わず理解を助ける
 - 用語集（[`../../getting-started/02-glossary.md`](../../getting-started/02-glossary.md)）を英対訳で持つと、装備/Finding/temperament 等の訳ブレを防げる
 
-> [!TODO] 外注先の言語と、英訳/図解の要否の決定 — 承認者: プロダクトオーナー（A-3 の発注スコープと同時に）。国内発注なら不要。
+> [!IMPORTANT] **方針（2026-07-23）: 国内発注を前提とし、英訳/図解は当面不要。** 海外・多国籍チームへ発注する場合のみ設計書の英訳＋図解版を用意する（A-3 の発注スコープ確定と同時に再判断）。
 
 ## 4. プリセット追加軸（残課題3）
 
@@ -75,7 +75,7 @@
 - [ ] 成功指標をどう測るか（[`../dogfooding/plan.md`](../dogfooding/plan.md)。間接価値は「同僚感」スコア寄りになる）
 - [ ] 装備の支給範囲（[`../initial-data/equipment-ledger.md`](../initial-data/equipment-ledger.md)）
 
-> [!TODO] ムードメーカー等の間接価値タイプを入れるかの決定 — 承認者: プロダクトオーナー。初期4種の価値が実証できてから。plugin-first なので追加は「プラグイン配列 + config レシピ」を1つ足すだけで、コア変更は不要な想定（[`../initial-data/presets.md`](../initial-data/presets.md)）。
+> [!IMPORTANT] **方針（2026-07-23）: 初期4プリセット（スポンジ/編集者/番頭/石橋）の価値を実証してから追加を検討。** ムードメーカー等の間接価値タイプは残課題3として保留。plugin-first なので追加は「プラグイン配列 + config レシピ」を1つ足すだけ（[`../initial-data/presets.md`](../initial-data/presets.md)）。
 
 ## 対応しない/後回しにするものの明示
 
