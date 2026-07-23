@@ -65,10 +65,10 @@
 | # | 項目 | 状態 | 担当 | ドキュメント |
 |---|---|---|---|---|
 | C-1 | ドッグフーディング設計 | 🟡 | `[!TODO]` チャンネル選定 | [dogfooding/plan](docs/preparation/dogfooding/plan.md) |
-| C-2 | 承認者・権限の決定 | 🟡 | `[!TODO]` | [ownership-and-approval](docs/preparation/operations/ownership-and-approval.md) |
-| C-2 | キルスイッチ（権限者・発動基準） | 🟡 | `[!TODO]` | [kill-switch](docs/preparation/operations/kill-switch.md) |
-| C-2 | インシデント対応手順 | 🟡 | — | [incident-response](docs/preparation/operations/incident-response.md) |
-| C-2 | コスト試算・月額上限 | 🟡 | `[!TODO]` 上限 | [cost-budget](docs/preparation/operations/cost-budget.md) |
+| C-2 | 承認 RACI＋ロスター（**氏名の集約先**） | 🔵 | 氏名記入待ち | [ownership-and-approval](docs/preparation/operations/ownership-and-approval.md) |
+| C-2 | キルスイッチ **手順・粒度・envフラグ確定** | 🔵 | 権限者氏名（ロスター） | [kill-switch](docs/preparation/operations/kill-switch.md) |
+| C-2 | インシデント対応手順 | 🔵 | 担当者はロスター | [incident-response](docs/preparation/operations/incident-response.md) |
+| C-2 | コスト **上限挙動確定**（80/100/150%） | 🔵 | 金額サインオフ（経理） | [cost-budget](docs/preparation/operations/cost-budget.md) |
 | C-3 | 将来バックログ（P4/管理画面/英訳） | 🟡 | — | [backlog/future](docs/preparation/backlog/future.md) |
 
 > 状態列は初期ドラフト投入時点の想定。各ドキュメント内の `> [!TODO]` を解消し、レビューを経て 🟢 に更新していく。

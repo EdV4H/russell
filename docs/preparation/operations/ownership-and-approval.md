@@ -41,13 +41,28 @@ R=実行 / A=最終承認 / C=相談 / I=通知。名前は TODO。
 3. 承認 → config_version を発行して該当機能を live に。承認記録をスコープ付き事前承認として保存。
 4. ロールバックは過去 config_version の再公開（§6.1）。
 
-> [!TODO] 各承認ロールの担当者名の確定 — 承認者: プロダクトオーナー。
-> - config 管理者: `<氏名>`
-> - 装備支給オーナー: `<氏名>`
-> - プロダクトオーナー: `<氏名>`
-> - プライバシーオーナー（人事/法務）: `<氏名>`
-> `/russell config` を叩ける Slack ユーザー ID の allowlist もここで確定する。
+## 担当者ロスター（氏名記入欄）— A-2/A-3 の指名待ちの集約先
 
-> [!TODO] 承認の記録先の決定 — 承認者: 実装担当。event_log（§3.1）に加えて、人間が追える形（`#russell-管理` のピン留め or Notion 台帳）を持つか。
+> [!IMPORTANT]
+> このロスターが、各所の「レビュアー/承認者の氏名」の**単一の正**。A2-3（dryrun レビュアー・live 承認者）・A2-4（eval 実施担当）・A3-1（各フェーズ Go/No-Go）・A3-2（承認要行の承認者）・A3-3（発注側レビュアー）は**すべてここを指す**。他ドキュメントに氏名を散らさない。
+
+| ロール | 氏名（記入） | 主な権限（上表より） |
+|---|---|---|
+| プロダクトオーナー（PO） | `<記入>` | live公開・チャンネル追加・各フェーズ Go/No-Go の最終判断 |
+| config 管理者 | `<記入>` | `/russell config`・config_version 発行。Slack ユーザーID allowlist も確定 |
+| 装備支給オーナー | `<記入>` | `issuances.granted_by` |
+| プライバシーオーナー（人事/法務） | `<記入>` | retention・公開・削除方針、A-1 全公開の是非 |
+| 発注側コードレビュアー | `<記入>`（重点パス用の専任可） | 全 PR 承認（A-3・全 PR 発注側レビュー） |
+| dryrun レビュアー / live 承認者 | `<記入>` | dryrun 妥当率レビュー→live 昇格（A-2/§6.5） |
+| eval 実施担当 | `<記入>` | 想起テスト・週次アンケート（A-2 humanness-eval） |
+| キルスイッチ権限者 / オンコール | `<記入>` | [`kill-switch.md`](./kill-switch.md) |
+
+> [!TODO] 上ロスターの氏名を確定 — 承認者: プロダクトオーナー。1人が複数ロールを兼ねてよい（小規模なら PO=config管理者=装備支給オーナー等）。`/russell config` を叩ける Slack ユーザーID allowlist もあわせて確定。
+
+### 承認の記録先（決定・2026-07-23）
+
+- **正: `event_log`**（§3.1 追記専用）にすべての承認・支給・変更を記録。
+- **人間可読: `#russell-管理` にボット投稿＋ピン留め**（重要承認・live 昇格・装備支給・キルスイッチ発動）。
+- Notion 台帳は任意（監査を外部に出したい場合のみ）。既定では上記2つで足りるとする。
 
 関連: [`kill-switch.md`](./kill-switch.md) / [`incident-response.md`](./incident-response.md) / [`../initial-data/equipment-ledger.md`](../initial-data/equipment-ledger.md)（granted_by）/ [`../dogfooding/plan.md`](../dogfooding/plan.md)
