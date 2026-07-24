@@ -1,0 +1,21 @@
+{
+  "name": "@edv4h/russell-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "組み立てホスト。プリセット→プラグイン配列→createAgent（usketch の apps/web 相当）",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "node --experimental-strip-types src/main.ts"
+  },
+  "dependencies": {
+    "@edv4h/russell-core": "workspace:*",
+    "@edv4h/russell-shared": "workspace:*",
+    "@edv4h/russell-plugin-acme-surface": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

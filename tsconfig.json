@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/shared" },
+    { "path": "packages/core" },
+    { "path": "examples/russell-plugin-acme-surface" },
+    { "path": "apps/agent" }
+  ]
+}

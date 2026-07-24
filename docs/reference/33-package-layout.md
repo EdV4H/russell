@@ -1,7 +1,7 @@
 # リファレンス: パッケージ構成（提案）
 
 > [!NOTE]
-> docs-only 段階の**提案**。実際のコードは未作成。実装時は usketch と同じ pnpm + Turborepo モノレポにする想定。
+> **スケルトン作成済み**（pnpm + Turborepo モノレポ）。`packages/core`・`packages/shared`・`examples/russell-plugin-acme-surface`・`apps/agent`・CI が存在し `tsc -b` / Biome を通る。認知ループ本体と各機能プラグイン（surface-slack/memory-pg/model-claude/…）は **P0 以降の実装対象**（枠だけ）。
 > npm 公開前提のためスコープは `@edv4h/russell-*`（usketch の `@edv4h/usketch-*` と同系）。
 
 ## モノレポ構成（将来像）
@@ -12,7 +12,7 @@ russell/                                   # このリポジトリ
 ├── pnpm-workspace.yaml                # packages/* plugins/* examples/* apps/*
 ├── turbo.json                         # dev/build/test/typecheck パイプライン
 ├── biome.json / tsconfig.base.json
-├── docs/                              # ← 現状はここだけ存在（準備リポ）
+├── docs/                              # 設計・準備物（既存）
 ├── packages/
 │   ├── core/                          # @edv4h/russell-core   … カーネル createAgent + レジストリ
 │   ├── shared/                        # @edv4h/russell-shared … RussellPlugin/AgentContext/ドメイン型
