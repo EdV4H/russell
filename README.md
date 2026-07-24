@@ -5,7 +5,19 @@
 
 > 旧称 **Ryo（僚）** から改称。中心メタファーを「同僚」から「世界5分前仮説」へ張り替えたもので、設計内容そのものは同じ。パッケージは `@edv4h/russell-*`。原本設計書（PDF復元）は忠実性のため Ryo 表記を残す（[用語対応](docs/getting-started/01-introduction.md)）。
 
-このリポジトリは実装着手前の **準備リポジトリ** で、コードはまだ含まない。設計書を外注に渡して実装を始める前に、発注側にしか用意できない準備物（社内合意・受け入れ基準・スコープ契約・初期データ・インフラ手配）を揃え、進捗を1画面で追う。
+このリポジトリは実装着手前の **準備リポジトリ**。発注側にしか用意できない準備物（社内合意・受け入れ基準・スコープ契約・初期データ・インフラ手配）を揃え、進捗を1画面で追う。加えて、外注へ渡す **monorepo スケルトン**（`@edv4h/russell-core`・`-shared` の枠、example プラグイン、`apps/agent`、CI）を用意済み。
+
+## 開発（スケルトン）
+
+```bash
+# Node.js 22+ / pnpm 10+
+pnpm install
+pnpm typecheck   # 全パッケージ型チェック（turbo）
+pnpm lint        # Biome
+pnpm --filter @edv4h/russell-agent dev   # Bob（スポンジ）を組み立てて起動確認
+```
+
+構成の仕様は [`docs/reference/33-package-layout.md`](docs/reference/33-package-layout.md)。P0 では外注が `surface-slack`・`memory-pg`・`model-claude` をこの契約に沿って実装する（[P0 発注書](docs/preparation/procurement/p0-order.md)）。認知ループ本体・各プラグインは未実装（骨格のみ）。
 
 ## アーキテクチャ方針：Plugin-First（極小コア + プラグイン）
 
