@@ -64,11 +64,11 @@
 
 | # | 決めること | 承認者 | 状態 | ドキュメント |
 |---|---|---|---|---|
-| B2-1 | Anthropic 契約主体（社内組織/新規）・支払い方法 | PO・経理 | ⬜ | [setup-checklist](infra/setup-checklist.md) |
-| B2-2 | デプロイ先（Cloud Run vs Fly.io）・Postgres プロバイダ | PO・インフラ | ⬜ | 〃 |
-| B2-3 | Slack ワークスペース管理者承認・個体=botの対応関係 | Slack管理者・PO | ⬜ | 〃 |
-| B2-4 | russell本体リポの置き場所（個人/会社org）・公開非公開・CIサービス | リポ管理者 | ⬜ | 〃 |
-| B2-5 | シークレット管理方式（env vs Secret Manager） | インフラ・セキュリティ | ⬜ | 〃 |
+| B2-1 | Anthropic 契約主体・支払い方法（推奨: 社内組織アカウント＋本番/開発キー分離） | PO・経理 | ⬜ | [setup-checklist](infra/setup-checklist.md) |
+| B2-2 | デプロイ = **プラットフォーム非依存コンテナ**（Cloud Run/Fly.io/任意で動く）確定。具体ホスト調達のみ残 | インフラ | 🔵 | 〃 |
+| B2-3 | Slack = **個体ごとに別アプリ/別bot** 確定（Bob専用）。残: 管理者承認取得 | Slack管理者・PO | 🔵 | 〃 |
+| B2-4 | リポ = **EdV4H/russell（作成済・private）**・起票先同一・CI=Actions 確定 | リポ管理者 | ✅ | 〃 |
+| B2-5 | secrets = **デプロイ先Secret Manager＋RUSSELL_KILLはenv** 確定 | インフラ・セキュリティ | ✅ | 〃 |
 
 ## C-1. ドッグフーディング
 

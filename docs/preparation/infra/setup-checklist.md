@@ -6,14 +6,14 @@
 
 ## 全体像
 
-| 項目 | 選定（設計書推奨） | 状態 |
+| 項目 | 選定 | 状態 |
 |---|---|---|
-| Claude API | 本番/開発でキー分離 | TODO 契約 |
-| デプロイ先 | Cloud Run（min-instances=1）or Fly.io | TODO 決定 |
-| DB | Postgres + pgvector | TODO 契約 |
-| Slack アプリ | Socket Mode・最小スコープ | TODO 作成 |
-| GitHub | russell 本体 + セルフイシュー起票先 | TODO 作成 |
-| シークレット管理 | env or Secret Manager | TODO 決定 |
+| Claude API | 本番/開発でキー分離 | 🟡 契約主体（経理） |
+| デプロイ先 | **プラットフォーム非依存コンテナ**（Cloud Run / Fly.io / 任意のコンテナ基盤で動く） | 🔵 方針確定 |
+| DB | Postgres + pgvector（マネージドなら何でも可） | 🔵 方針確定 |
+| Slack アプリ | **個体ごとに別アプリ/別 bot**・Socket Mode・最小スコープ | 🔵 方針確定（作成は調達時） |
+| GitHub | **EdV4H/russell（作成済・private）** + セルフイシュー起票先=同一 | ✅ |
+| シークレット管理 | **デプロイ先 Secret Manager ＋ RUSSELL_KILL は env** | 🔵 方針確定 |
 
 ---
 
@@ -31,16 +31,21 @@
 
 設計書 §11: Socket Mode は常駐1コンテナで足りる。
 
-- [ ] デプロイ先を Cloud Run（`min-instances=1`）か Fly.io から決定
-  - Cloud Run: min-instances=1 で常駐維持（Socket Mode の WebSocket を切らさない）。GCP 既存資産があるなら有利
-  - Fly.io: 常駐コンテナが素直。Postgres も同居させやすい
+> [!IMPORTANT] **決定（2026-07-24）: どこにでもデプロイできる「プラットフォーム非依存」設計にする。** 特定 PaaS にロックせず、次を前提にすれば Cloud Run / Fly.io / Render / 素の VM / k8s いずれでも動く:
+> - **単一の Docker コンテナ**（app）＋ worker（同一イメージ・別プロセス or 別コンテナ）。ホスト固有 API に依存しない（12-factor）。
+> - **設定はすべて env**（下の §5）。プラットフォーム固有の設定ファイルは薄い adapter に隔離。
+> - **状態は Postgres(pgvector) だけ**。マネージドなら Cloud SQL / Fly Postgres / Neon / Supabase いずれでも可（pgvector 対応が唯一の必須要件）。
+> - 常駐要件は「Socket Mode の WebSocket を切らさない1インスタンス」だけ（min-instances=1 相当）。
+> こうすることで、契約先クラウドが後から変わっても移設できる（plugin-first と同じく「差し替え可能」を設計原則にする）。
+
+- [x] デプロイ = プラットフォーム非依存コンテナ（上記）に確定。具体ホストは調達時に選ぶ（どれでも動く）
 - [ ] Postgres を用意し **pgvector 拡張を有効化**（`CREATE EXTENSION vector;`）。記憶（VECTOR(1024)）・キュー（pg-boss）・監査（event_log）を1インスタンスに同居（§11）
-- [ ] マネージド Postgres の選定（Cloud SQL / Fly Postgres / Neon / Supabase 等）。pgvector 対応と接続数、バックアップ機能を確認
 - [ ] **バックアップは別環境に不変保存**（§12-6）。PITR かスナップショットの保持方針を決める
 - [ ] マイグレーションは Alembic 等で expand→backfill→contract。**起動時 CREATE TABLE はしない**（§11）
 - [ ] app / worker の2プロセス構成（§2）。worker は pg-boss で Postgres に同居、対話とバッチの並列度上限を分離
+- [ ] 移設性の検証: ローカル（docker compose）で app+worker+Postgres が上がることを最初の CI ゲートにする
 
-> [!TODO] デプロイ先（Cloud Run vs Fly.io）と Postgres プロバイダの決定 — 承認者: プロダクトオーナー + インフラ担当。判断軸: 既存クラウド資産、pgvector 対応、月額、常駐コスト。
+> [!TODO] 残: 実際のホスト先とマネージド Postgres プロバイダの調達（どれでも動く前提なので、既存クラウド資産・月額で選ぶだけ）— 承認者: インフラ担当。
 
 ## 3. Slack アプリ作成
 
@@ -54,9 +59,12 @@
 - [ ] Interactivity 有効化（HITL 承認の Block Kit ボタン, §10・§12-2）
 - [ ] **ワークスペース管理者の承認**を取得（アプリのインストール・スコープ承認は管理者権限）
 - [ ] App-Level Token（Socket Mode 用, `connections:write`）と Bot Token を発行 → シークレット管理へ
-- [ ] 個体ごとに Bot ユーザーを分けるか（`@bob` と `@詩織` を別アプリ/別 bot にするか）を決める
+> [!IMPORTANT] **決定（2026-07-24）: 個体ごとに別 Slack アプリ/別 bot。** Bob は Bob 専用アプリ（表示名 `Bob`・`@bob`・`#bob-日報`）。将来の個体は各自の Slack アプリを持つ。個体の独立性・トークン分離を優先（管理コストは個体数に比例するが、当面 Bob のみ）。`surface-slack` プラグインは「1個体＝1アプリのトークン束」を config で受け取る。
 
-> [!TODO] Slack ワークスペース管理者の承認取得と、個体=bot の対応関係（1アプリ複数個体 or 個体ごとにアプリ）の決定 — 承認者: Slack ワークスペース管理者 + プロダクトオーナー。表示名・日報チャンネル名は [`../initial-data/temperament-unit-01.md`](../initial-data/temperament-unit-01.md) と揃える。
+- [x] 個体=アプリの対応を確定（個体ごとに別アプリ/別 bot）
+- [ ] Bob 用 Slack アプリを1つ作成（上記スコープ・Socket Mode）
+
+> [!TODO] 残: Slack ワークスペース管理者の承認取得（アプリインストール・スコープ承認）— 承認者: Slack ワークスペース管理者 + プロダクトオーナー。表示名・日報チャンネル名は [`../initial-data/temperament-unit-01.md`](../initial-data/temperament-unit-01.md)（Bob）と揃える。
 
 ## 4. GitHub リポジトリ + CI
 
@@ -67,7 +75,9 @@
 - [ ] 装備 conformance suite（A-2）を CI に組み込む枠を用意（全 MCP 装備共通テスト）
 - [ ] シークレットを CI に置く場合は最小権限のデプロイ用トークンに限定
 
-> [!TODO] russell 本体リポの置き場所（個人 org / 会社 org）とセルフイシュー起票先の確定、CI サービス（GitHub Actions 想定）の決定 — 承認者: リポジトリ管理者。公開/非公開の別も決める（セルフイシュー本文は公開リポでも安全な内容に限定, §6.4）。
+> [!IMPORTANT] **決定（2026-07-24）: リポ = `EdV4H/russell`（作成済・private・個人アカウント）。** セルフイシュー起票先も同一リポ。CI = GitHub Actions。現状は準備リポ（docs のみ）だが、実装フェーズで同一リポに monorepo（[`../../reference/33-package-layout.md`](../../reference/33-package-layout.md)）を足す。
+>
+> [!TODO] 残（実装フェーズ）: 会社 org へ移すか個人のままかは発注形態確定時に再判断（[`../governance/scope-and-contract.md`](../governance/scope-and-contract.md)）。private 前提だが、セルフイシュー本文は将来 public 化しても安全な内容に限定する（§6.4）。
 
 ## 5. シークレット管理
 
@@ -78,7 +88,7 @@
 - [ ] **キルスイッチの env 別経路を確保**（§12-4/§12-7）: DB 障害時にも効くよう、全体停止フラグは環境変数/プロセスシグナルで持つ（Secret Manager 依存にしない）→ [`../operations/kill-switch.md`](../operations/kill-switch.md)
 - [ ] DB ロールは**アプリ用ロールのみ**最小権限で発行（§12-6）
 
-> [!TODO] シークレット管理方式（env vs Secret Manager）の決定 — 承認者: インフラ担当 + セキュリティ。キルスイッチ env フラグだけは方式によらず必ず env/シグナル経路で持つ（fail-closed, §12-7）。
+> [!IMPORTANT] **決定（2026-07-24）: デプロイ先の Secret Manager で保管（GCP Secret Manager / Fly secrets 等・ローテーション可）、`RUSSELL_KILL` だけは方式によらず env/シグナル経路で別持ち（fail-closed, §12-7）。** リポに平文を置かない・開発/本番で別値。プラットフォーム非依存のため「Secret Manager から起動時に env へ注入」する薄い adapter にし、どのホストでも同じ読み出し口にする。DB ロールはアプリ用のみ最小権限（§12-6）。
 
 ## 発注時の引き渡し物
 

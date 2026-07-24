@@ -58,7 +58,7 @@
 | B-1 | 装備台帳＋**MCP推奨確定・terminal凍結・セルフイシューP3** | 🔵 | 実装時にMCP最終確認 | [equipment-ledger](docs/preparation/initial-data/equipment-ledger.md) |
 | B-1 | 習慣プロンプト＋**cron確定（9/18/金17 JST）** | 🔵 | — | [prompts/habits](docs/preparation/initial-data/prompts/habits.md) |
 | B-1 | 日記・日報プロンプト（ガードはA1-5パラメータ） | 🔵 | NG語彙サインオフ | [prompts/journal-and-report](docs/preparation/initial-data/prompts/journal-and-report.md) |
-| B-2 | インフラ・アカウント準備 | 🟡 | `[!TODO]` | [setup-checklist](docs/preparation/infra/setup-checklist.md) |
+| B-2 | インフラ **方針確定**（非依存コンテナ/個体別Slackアプリ/Secret Manager/リポ✅） | 🔵 | Anthropic契約主体・ホスト調達・Slack管理者承認 | [setup-checklist](docs/preparation/infra/setup-checklist.md) |
 
 ### C. 並行で進められるもの
 
