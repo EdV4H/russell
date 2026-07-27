@@ -1,0 +1,35 @@
+# ローカル開発用。`docker compose up` で Postgres(pgvector) + app が上がることを
+# 最初の CI/開発ゲートにする（docs/preparation/infra/setup-checklist.md）。
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: russell
+      POSTGRES_PASSWORD: russell
+      POSTGRES_DB: russell
+    ports:
+      - "5432:5432"
+    volumes:
+      - russell-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U russell"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://russell:russell@db:5432/russell
+      RUSSELL_MODE: dryrun
+      RUSSELL_KILL: "0"
+      # ANTHROPIC_API_KEY / SLACK_* は .env から渡す（本番は Secret Manager）
+    env_file:
+      - path: .env
+        required: false
+
+volumes:
+  russell-pgdata:
