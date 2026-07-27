@@ -1,0 +1,12 @@
+# 全 PR に発注側レビューを要求する（A-3: 全 PR 発注側レビュー）。
+# 当面はリポジトリオーナーが発注側レビュアー。実装フェーズで
+# docs/preparation/operations/ownership-and-approval.md の担当者ロスター確定後に置換する。
+* @EdV4H
+
+# --- セキュリティ/労務直結の重点パス（docs/preparation/governance/scope-and-contract.md §5） ---
+# ここに触れる PR は発注側レビューでも特に重点確認する。
+/packages/core/            @EdV4H
+/packages/shared/          @EdV4H
+/apps/agent/               @EdV4H
+/docs/preparation/governance/   @EdV4H
+/docs/preparation/acceptance/   @EdV4H
