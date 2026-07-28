@@ -9,6 +9,8 @@
   "references": [
     { "path": "../../packages/shared" },
     { "path": "../../packages/core" },
-    { "path": "../../examples/russell-plugin-acme-surface" }
+    { "path": "../../plugins/russell-plugin-surface-cli" },
+    { "path": "../../plugins/russell-plugin-model-echo" },
+    { "path": "../../plugins/russell-plugin-memory-inmem" }
   ]
 }

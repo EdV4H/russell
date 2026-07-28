@@ -18,6 +18,7 @@ import type {
   OutboundMessage,
   ScopedPreApproval,
 } from "./domain.js";
+import type { ModelRequest, ModelResponse } from "./runtime.js";
 
 export type RussellTeardown = () => void | Promise<void>;
 
@@ -129,8 +130,7 @@ export interface FindingRegistry {
 // --- models（LLM プロバイダ。Haiku/Sonnet/Opus 選択） ---
 export interface ModelProvider {
   id: string;
-  // biome-ignore lint/suspicious/noExplicitAny: 提案骨格。実装時にリクエスト/レスポンス型を確定する。
-  complete(req: any): Promise<any>;
+  complete(req: ModelRequest): Promise<ModelResponse>;
 }
 export interface ModelRegistry {
   register(m: ModelProvider): () => void;
