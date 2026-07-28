@@ -1,0 +1,26 @@
+{
+  "name": "@edv4h/russell-plugin-memory-inmem",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "記憶プラグイン（dev スタブ・インメモリ）。Postgres 不要で認知ループを回すための最小実装。本番は memory-pg に差し替える。",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@edv4h/russell-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

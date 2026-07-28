@@ -22,6 +22,8 @@ import type {
   EventBus,
   FindingKindDefinition,
   FindingRegistry,
+  InboundMessage,
+  MemoryCapability,
   Mode,
   ModelProvider,
   ModelRegistry,
@@ -38,12 +40,15 @@ import type {
   ToolRegistry,
   ToolSpec,
 } from "@edv4h/russell-shared";
+import { MEMORY_SERVICE } from "@edv4h/russell-shared";
 
 export interface AgentConfig {
   agentId: string;
   configVersion: string;
   temperament: Temperament;
   mode?: Mode;
+  /** 会話に使うモデルの id（models レジストリに登録された provider）。未指定なら最初に登録されたもの。 */
+  model?: string;
 }
 
 export interface AgentHandle {
@@ -203,9 +208,6 @@ export async function createAgent(
     services,
     runtime,
   };
-  // Policy 判定はコア内部で使う（プラグインには渡さない）
-  void policyGate.isAllowed;
-  void currentMode;
   // biome-ignore lint/suspicious/noExplicitAny: mode 変更口はコア内部用（/russell config 経由で差し替え）。
   (ctx as any).__setMode = (m: Mode) => {
     currentMode = m;
@@ -224,9 +226,91 @@ export async function createAgent(
     throw err;
   }
 
-  // TODO(P0): 認知ループ（mention→記憶読出し→モデル→Policy Gate 通過のツール実行→記憶書込み）を
-  //           ここで起動する。surfaces.getAll() の start(sink) を購読し、sink で受けた
-  //           InboundMessage をループへ。ツール実行前に policyGate.isAllowed() を必ず通す。
+  // --- 認知ループ（§3.2/§3.3/§10）。P0 の心臓部。 ---
+
+  /** temperament から人格プロンプトを生成する（§6.1）。 */
+  function personaPrompt(): string {
+    const t = config.temperament;
+    const back = t.backstory ? ` 背景: ${t.backstory}。` : "";
+    return `あなたは「${t.name}」という名前の同僚です。口調: ${t.tone}。${back}記憶を頼りに、簡潔に応答してください。`;
+  }
+
+  /** ツール実行は必ず Policy Gate を通す（未申告=deny / killswitch最優先 / external は要承認）。 */
+  async function invokeTool(name: string, input: unknown): Promise<unknown> {
+    if (!policyGate.isAllowed(name)) {
+      events.emit("policy:blocked", { tool: name });
+      throw new Error(`policy: tool "${name}" is not allowed`);
+    }
+    const tool = tools.get(name);
+    if (!tool) throw new Error(`tool "${name}" not registered`);
+    // biome-ignore lint/suspicious/noExplicitAny: ツール入力は各ツールのスキーマに委ねる（提案骨格）。
+    return tool.run(input as any);
+  }
+
+  /** 「覚えておいて」「メモして」を自然言語コマンドとして解釈する（§10）。 */
+  async function handleMemoryCommands(msg: InboundMessage): Promise<string | undefined> {
+    if (/覚え(て|ておいて)|おぼえて/.test(msg.text)) {
+      await invokeTool("shelf.add", { source: msg.contextId, card: msg.text });
+      events.emit("memory:shelved", { contextId: msg.contextId });
+      return "覚えておきますね。";
+    }
+    if (/メモ(して|しといて)?/.test(msg.text)) {
+      await invokeTool("note.write", { contextId: msg.contextId, content: msg.text });
+      return "ちょっとメモしますね。";
+    }
+    return undefined;
+  }
+
+  const modelId = config.model ?? [...modelsMap.keys()][0];
+
+  /** 1 ターン: 記憶読出し→文脈構築→モデル→応答→（記憶書込みはツール経由）。 */
+  async function handleInbound(msg: InboundMessage): Promise<void> {
+    if (runtime.killSwitch()) return; // fail-closed: 凍結中は何もしない
+    // P0 は mention のみ応答（自発性なし）
+    if (!msg.isMention) return;
+
+    // 自然言語の記憶コマンドを先に処理
+    const memAck = await handleMemoryCommands(msg);
+
+    // 記憶読出し（§3.2）
+    const mem = services.get<MemoryCapability>(MEMORY_SERVICE);
+    const recalled = mem ? await mem.recall(msg.contextId) : { notes: [], books: [] };
+
+    // 文脈構築
+    const memoryBlock = [
+      recalled.notes.length ? `メモ:\n- ${recalled.notes.join("\n- ")}` : "",
+      recalled.books.length
+        ? `本棚:\n- ${recalled.books.map((b) => `${b.title}: ${b.card}`).join("\n- ")}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const system = `${personaPrompt()}\n${memoryBlock}`;
+
+    // モデル呼び出し（provider はプラグイン）
+    const provider = modelId ? models.get(modelId) : undefined;
+    const replyText = provider
+      ? (await provider.complete({ system, user: msg.text })).text
+      : "（モデル未登録のため応答できません）";
+
+    // 応答（受信元 surface へ返す）
+    const surface = surfaces.get(msg.surfaceId);
+    const text = memAck ? `${memAck} ${replyText}` : replyText;
+    if (surface) await surface.send({ contextId: msg.contextId, text });
+  }
+
+  // surfaces を購読して認知ループを起動。
+  // 同一 context（スレッド）のターンは直列化する（記憶の読み書き順を保つ）。
+  const turnQueues = new Map<string, Promise<void>>();
+  for (const surface of surfaces.getAll()) {
+    await surface.start((msg) => {
+      const prev = turnQueues.get(msg.contextId) ?? Promise.resolve();
+      const next = prev
+        .then(() => handleInbound(msg))
+        .catch((err) => events.emit("turn:error", err));
+      turnQueues.set(msg.contextId, next);
+    });
+  }
 
   return {
     ctx,

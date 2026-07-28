@@ -1,14 +1,17 @@
 /**
  * 組み立てホスト（composition root）。
- * usketch の apps/web/app.tsx が createBasePlugins() でプラグイン配列を組むのと同じ役割を、
- * Russell では「プリセット」が担う（docs/guides/24-defining-a-preset.md）。
+ * usketch の apps/web/app.tsx がプラグイン配列を組むのと同じ役割を、Russell では「プリセット」が担う。
  *
- * ここでは個体1号 Bob（スポンジプリセット）の最小組み立てを示す。
- * P0 実装では acme の代わりに surface-slack / memory-pg / model-claude を並べる。
+ * ここでは個体1号 Bob（スポンジ）を **オフライン stack** で組み立てる:
+ *   memory-inmem（Postgres不要）＋ model-echo（APIキー不要）＋ surface-cli（Slack不要）
+ * env 無しで認知ループ（mention→記憶→モデル→Policy Gate通過のツール→応答）を検証できる。
+ * 本番では memory-pg / model-claude / surface-slack に差し替える（契約は同じ）。
  */
 
 import { createAgent } from "@edv4h/russell-core";
-import { createAcmeSurfacePlugin } from "@edv4h/russell-plugin-acme-surface";
+import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
+import { createEchoModelPlugin } from "@edv4h/russell-plugin-model-echo";
+import { createCliSurfacePlugin } from "@edv4h/russell-plugin-surface-cli";
 import type { RussellPlugin, Temperament } from "@edv4h/russell-shared";
 
 // 個体1号 Bob（docs/preparation/initial-data/temperament-unit-01.md の確定値）
@@ -25,13 +28,13 @@ const BOB: Temperament = {
 /**
  * スポンジプリセットが Bob 用に組むプラグイン配列。
  * 配列順は load-bearing（provider を consumer より前に）:
- *   services/memory → models → equipment → surfaces → routines → findings
- * P0 では surface だけを acme で代用（実装時に差し替え）。
+ *   services/memory → models → surfaces。
  */
 function assembleSpongePlugins(): RussellPlugin[] {
   return [
-    // TODO(P0): createPgMemoryPlugin(), createClaudeModelPlugin() をここに（surface より前）
-    createAcmeSurfacePlugin({ greeting: "はじめまして、Bob です。" }),
+    createInMemoryMemoryPlugin(),
+    createEchoModelPlugin(),
+    createCliSurfacePlugin({ displayName: BOB.name }),
   ];
 }
 
@@ -42,21 +45,16 @@ async function main(): Promise<void> {
       configVersion: "v0",
       temperament: BOB,
       mode: "dryrun", // §6.5: off → dryrun → live
+      model: "echo",
     },
     assembleSpongePlugins(),
   );
 
-  console.log(
-    `Russell agent up: ${agent.ctx.runtime.agentId} (mode=${agent.ctx.runtime.mode()}, kill=${agent.ctx.runtime.killSwitch()})`,
-  );
-  console.log(
-    `surfaces: ${agent.ctx.surfaces
-      .getAll()
-      .map((s) => s.id)
-      .join(", ")}`,
-  );
-
-  // TODO(P0): 認知ループ起動後は SIGINT/SIGTERM で agent.destroy() を呼ぶ
+  // CLI が閉じる（Ctrl-D / EOF）か SIGINT まで動かし、その後 LIFO で teardown。
+  await new Promise<void>((resolve) => {
+    agent.ctx.events.on("surface:cli:closed", () => resolve());
+    process.on("SIGINT", () => resolve());
+  });
   await agent.destroy();
 }
 

@@ -7,12 +7,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "dev": "node --experimental-strip-types src/main.ts"
+    "dev": "node dist/main.js"
   },
   "dependencies": {
     "@edv4h/russell-core": "workspace:*",
     "@edv4h/russell-shared": "workspace:*",
-    "@edv4h/russell-plugin-acme-surface": "workspace:*"
+    "@edv4h/russell-plugin-surface-cli": "workspace:*",
+    "@edv4h/russell-plugin-model-echo": "workspace:*",
+    "@edv4h/russell-plugin-memory-inmem": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

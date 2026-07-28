@@ -23,9 +23,15 @@ importers:
       '@edv4h/russell-core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@edv4h/russell-plugin-acme-surface':
+      '@edv4h/russell-plugin-memory-inmem':
         specifier: workspace:*
-        version: link:../../examples/russell-plugin-acme-surface
+        version: link:../../plugins/russell-plugin-memory-inmem
+      '@edv4h/russell-plugin-model-echo':
+        specifier: workspace:*
+        version: link:../../plugins/russell-plugin-model-echo
+      '@edv4h/russell-plugin-surface-cli':
+        specifier: workspace:*
+        version: link:../../plugins/russell-plugin-surface-cli
       '@edv4h/russell-shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -62,6 +68,39 @@ importers:
 
   packages/shared:
     devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  plugins/russell-plugin-memory-inmem:
+    dependencies:
+      '@edv4h/russell-shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  plugins/russell-plugin-model-echo:
+    dependencies:
+      '@edv4h/russell-shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  plugins/russell-plugin-surface-cli:
+    dependencies:
+      '@edv4h/russell-shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

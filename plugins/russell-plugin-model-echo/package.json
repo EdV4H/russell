@@ -1,0 +1,26 @@
+{
+  "name": "@edv4h/russell-plugin-model-echo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "モデルプラグイン（dev スタブ）。API キー不要の決定論的ダミー。オフラインで認知ループを回すため。本番は model-claude に差し替える。",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@edv4h/russell-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
