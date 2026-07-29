@@ -15,7 +15,8 @@
     "@edv4h/russell-plugin-surface-cli": "workspace:*",
     "@edv4h/russell-plugin-model-echo": "workspace:*",
     "@edv4h/russell-plugin-model-claude": "workspace:*",
-    "@edv4h/russell-plugin-memory-inmem": "workspace:*"
+    "@edv4h/russell-plugin-memory-inmem": "workspace:*",
+    "@edv4h/russell-plugin-memory-pg": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
