@@ -12,6 +12,7 @@
     { "path": "../../plugins/russell-plugin-surface-cli" },
     { "path": "../../plugins/russell-plugin-model-echo" },
     { "path": "../../plugins/russell-plugin-model-claude" },
-    { "path": "../../plugins/russell-plugin-memory-inmem" }
+    { "path": "../../plugins/russell-plugin-memory-inmem" },
+    { "path": "../../plugins/russell-plugin-memory-pg" }
   ]
 }

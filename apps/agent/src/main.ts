@@ -10,13 +10,15 @@
 
 import { createAgent } from "@edv4h/russell-core";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
+import { createPgMemoryPlugin } from "@edv4h/russell-plugin-memory-pg";
 import { createClaudeModelPlugin } from "@edv4h/russell-plugin-model-claude";
 import { createEchoModelPlugin } from "@edv4h/russell-plugin-model-echo";
 import { createCliSurfacePlugin } from "@edv4h/russell-plugin-surface-cli";
 import type { RussellPlugin, Temperament } from "@edv4h/russell-shared";
 
-// ANTHROPIC_API_KEY があれば実 Claude、無ければオフラインの echo を使う。
-const useClaude = Boolean(process.env.ANTHROPIC_API_KEY);
+// env に応じて本番プラグイン/オフライン stub を選ぶ。
+const useClaude = Boolean(process.env.ANTHROPIC_API_KEY); // ANTHROPIC_API_KEY → 実 Claude、無ければ echo
+const usePg = Boolean(process.env.DATABASE_URL); // DATABASE_URL → Postgres、無ければインメモリ
 
 // 個体1号 Bob（docs/preparation/initial-data/temperament-unit-01.md の確定値）
 const BOB: Temperament = {
@@ -36,7 +38,7 @@ const BOB: Temperament = {
  */
 function assembleSpongePlugins(): RussellPlugin[] {
   return [
-    createInMemoryMemoryPlugin(),
+    usePg ? createPgMemoryPlugin({ autoMigrate: true }) : createInMemoryMemoryPlugin(),
     useClaude ? createClaudeModelPlugin() : createEchoModelPlugin(),
     createCliSurfacePlugin({ displayName: BOB.name }),
   ];
