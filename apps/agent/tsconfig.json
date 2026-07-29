@@ -10,6 +10,7 @@
     { "path": "../../packages/shared" },
     { "path": "../../packages/core" },
     { "path": "../../plugins/russell-plugin-surface-cli" },
+    { "path": "../../plugins/russell-plugin-surface-slack" },
     { "path": "../../plugins/russell-plugin-model-echo" },
     { "path": "../../plugins/russell-plugin-model-claude" },
     { "path": "../../plugins/russell-plugin-memory-inmem" },
