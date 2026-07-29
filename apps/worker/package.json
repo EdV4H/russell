@@ -1,0 +1,19 @@
+{
+  "name": "@edv4h/russell-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "worker プロセス（§2）。夜間コンソリデーション（§4）を実行する。本番は pg-boss cron で 03:00 JST に起動。",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "consolidate": "node dist/main.js"
+  },
+  "dependencies": {
+    "@edv4h/russell-plugin-memory-pg": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
