@@ -1,0 +1,27 @@
+{
+  "name": "@edv4h/russell-plugin-model-claude",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "モデルプラグイン: Claude API（本番）。ANTHROPIC_API_KEY が要る。オフライン検証は model-echo を使う。",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "@edv4h/russell-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
