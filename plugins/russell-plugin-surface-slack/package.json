@@ -1,0 +1,28 @@
+{
+  "name": "@edv4h/russell-plugin-surface-slack",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "通信面プラグイン: Slack（Bolt / Socket Mode）。個体ごとに別アプリ。SLACK_BOT_TOKEN / SLACK_APP_TOKEN が要る。",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@edv4h/russell-shared": "workspace:*",
+    "@slack/bolt": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -13,6 +13,7 @@
     "@edv4h/russell-core": "workspace:*",
     "@edv4h/russell-shared": "workspace:*",
     "@edv4h/russell-plugin-surface-cli": "workspace:*",
+    "@edv4h/russell-plugin-surface-slack": "workspace:*",
     "@edv4h/russell-plugin-model-echo": "workspace:*",
     "@edv4h/russell-plugin-model-claude": "workspace:*",
     "@edv4h/russell-plugin-memory-inmem": "workspace:*",
