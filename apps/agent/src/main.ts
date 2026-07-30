@@ -9,6 +9,7 @@
  */
 
 import { createAgent } from "@edv4h/russell-core";
+import { createPgAuditPlugin } from "@edv4h/russell-plugin-audit-pg";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import { createPgMemoryPlugin } from "@edv4h/russell-plugin-memory-pg";
 import { createClaudeModelPlugin } from "@edv4h/russell-plugin-model-claude";
@@ -36,10 +37,15 @@ const BOB: Temperament = {
 /**
  * スポンジプリセットが Bob 用に組むプラグイン配列。
  * 配列順は load-bearing（provider を consumer より前に）:
- *   services/memory → models → surfaces。
+ *   audit → services/memory → models → surfaces。
+ *
+ * audit が先頭なのは、以降のプラグインの setup 中に起きる記録も残すため。
+ * DATABASE_URL が無い（オフライン stack）ときは sink 無し = コアのインメモリ監査のみになる。
+ * 本番構成（Postgres あり）では必ず event_log へ落ちる。
  */
 function assembleSpongePlugins(): RussellPlugin[] {
   return [
+    ...(usePg ? [createPgAuditPlugin({ autoMigrate: true })] : []),
     usePg ? createPgMemoryPlugin({ autoMigrate: true }) : createInMemoryMemoryPlugin(),
     useClaude ? createClaudeModelPlugin() : createEchoModelPlugin(),
     useSlack ? createSlackSurfacePlugin() : createCliSurfacePlugin({ displayName: BOB.name }),
