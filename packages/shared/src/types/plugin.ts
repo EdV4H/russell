@@ -8,6 +8,7 @@
  * - teardown は setup の戻り値（プロパティに置かない）。
  */
 
+import type { AuditRegistry } from "./audit.js";
 import type {
   ApprovalOutcome,
   ApprovalRequest,
@@ -40,6 +41,8 @@ export interface AgentContext {
   findings: FindingRegistry;
   models: ModelRegistry;
   policy: PolicyRegistry;
+  /** 監査ログ（§3.1）。全アクションの追記先。sink はプラグインが登録する。 */
+  audit: AuditRegistry;
   events: EventBus;
   services: ServiceRegistry;
   /** コアが保持しプラグインは読み取り主体。 */
