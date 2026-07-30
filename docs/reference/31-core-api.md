@@ -67,6 +67,7 @@ export interface AgentHandle {
 | `turn.received` | 発言者 | 受信メッセージのラベル | mention 受信時 |
 | `tool.invoked` / `tool.failed` | agentId | 起因した入力のラベル | Policy Gate 通過後・実行の**前** |
 | `policy.denied` | agentId | 起因した入力のラベル | Gate が拒否（`reason` に理由コード） |
+| `model.requested` | agentId | 起因した入力のラベル | モデル呼び出しの**前**（外部 I/O・課金対象のため） |
 | `model.completed` | agentId | 起因した入力のラベル | モデル応答生成後 |
 | `surface.send` | agentId | trusted | 送信の**前** |
 | `surface.send.result` | agentId | trusted | 送信結果が `succeeded` 以外（`rejected` / `unknown`）だったとき |
@@ -78,6 +79,8 @@ export interface AgentHandle {
 - **記録は行為の前**。監査が残らないまま副作用だけ起きる窓を作らない。
   `record()` は**記録が残ったか**を返す。false（sink 全滅）なら対応する行為を中止する。
   事前の `healthy()` だけでは、その記録自体が最初の失敗だったケースを取りこぼす。
+  対象は**外部 I/O 全部**: ツール実行・モデル呼び出し・応答送信。`turn.received` が残せなければ
+  ターンごと中止する（以降にモデル呼び出しがあるため）。
 - **payload に本文を入れない**（機微情報を監査へ流さない, A1-5）。識別子・件数・長さのみ。
 - **来歴を保存**（§12-3）。untrusted 起因のアクションは untrusted のまま残す。
 - **fail-closed**（§12-7）。sink が全滅したら `audit.healthy()` が false になり、

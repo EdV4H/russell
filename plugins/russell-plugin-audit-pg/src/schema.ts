@@ -1,8 +1,9 @@
 /**
  * event_log のスキーマ（設計書 §3.1 / 19-data-model.md）。
  *
- * 追記専用を **DB 側で強制**する: UPDATE/DELETE はトリガで拒否する。
+ * 追記専用を **DB 側で強制**する: UPDATE / DELETE / **TRUNCATE** をトリガで拒否する。
  * privacy-and-memory-policy の `"event_log": "append_only"` は運用規約ではなく制約として実装する。
+ * TRUNCATE は行トリガを迂回するので、文トリガで明示的に塞ぐ（これが無いと全行消せてしまう）。
  * （retention は将来パーティション DROP で行う。行単位の削除は許さない。）
  *
  * ※ 本番は「起動時 CREATE TABLE をしない」（§11）。この SQL は dev/test の autoMigrate 用。
@@ -31,6 +32,6 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS event_log_no_mutate ON event_log;
 CREATE TRIGGER event_log_no_mutate
-  BEFORE UPDATE OR DELETE ON event_log
+  BEFORE UPDATE OR DELETE OR TRUNCATE ON event_log
   FOR EACH STATEMENT EXECUTE FUNCTION event_log_append_only();
 `;

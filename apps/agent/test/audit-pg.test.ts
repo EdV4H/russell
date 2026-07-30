@@ -99,7 +99,7 @@ describe.skipIf(!DB)("audit-pg（DATABASE_URL 必須）", () => {
     }
   });
 
-  test("event_log は追記専用（UPDATE/DELETE が DB 側で拒否される）", async () => {
+  test("event_log は追記専用（UPDATE/DELETE/TRUNCATE が DB 側で拒否される）", async () => {
     const pool = new pg.Pool({ connectionString: DB });
     try {
       const { AUDIT_SCHEMA_SQL } = await import("@edv4h/russell-plugin-audit-pg");
@@ -115,6 +115,8 @@ describe.skipIf(!DB)("audit-pg（DATABASE_URL 必須）", () => {
       await expect(
         pool.query("DELETE FROM event_log WHERE agent_id = 'append-only-test'"),
       ).rejects.toThrow(/append-only/);
+      // TRUNCATE は行トリガを迂回するので、文トリガで塞げているかを別途確かめる
+      await expect(pool.query("TRUNCATE event_log")).rejects.toThrow(/append-only/);
 
       const res = await pool.query(
         "SELECT action FROM event_log WHERE agent_id = 'append-only-test'",

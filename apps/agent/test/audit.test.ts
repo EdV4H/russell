@@ -86,6 +86,25 @@ function captureAuditSink(opts: { failing?: boolean; failFromAction?: string } =
   return { plugin, written, setFailing };
 }
 
+/** 呼び出し回数を数えるモデル provider。モデル呼び出しは課金される外部 I/O。 */
+function countingModelPlugin() {
+  const calls: unknown[] = [];
+  const plugin: RussellPlugin = {
+    id: "counting-model",
+    name: "counting model",
+    setup(ctx) {
+      return ctx.models.register({
+        id: "echo",
+        async complete(req) {
+          calls.push(req);
+          return { text: "はい" };
+        },
+      });
+    },
+  };
+  return { plugin, calls };
+}
+
 /** 実行回数を数える shelf.add。効果分類は申告する（= Policy Gate は本来通る）。 */
 function countingShelfPlugin() {
   const runs: unknown[] = [];
@@ -289,6 +308,45 @@ test("surface.send の記録が最初の失敗になっても送信しない（f
   expect(a.written.map((e) => e.action)).toContain("model.completed");
   expect(s.sent.length).toBe(0); // 監査が残らなかったので送らない
   expect(agent.ctx.audit.healthy()).toBe(false);
+
+  await agent.destroy();
+});
+
+test("turn.received の記録が失敗したらモデルを呼ばずにターンごと中止する", async () => {
+  const s = captureSurface();
+  const a = captureAuditSink({ failFromAction: "turn.received" });
+  const model = countingModelPlugin();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    [a.plugin, createInMemoryMemoryPlugin(), model.plugin, s.plugin],
+  );
+
+  // 記憶コマンドを含まない普通の発話。ツールを踏まないので、
+  // Policy Gate 経由では止まらず外部 I/O（モデル呼び出し）に達しうる経路。
+  s.push("こんにちは");
+  await drain();
+
+  expect(model.calls.length).toBe(0); // 課金される外部呼び出しをしない
+  expect(s.sent.length).toBe(0);
+
+  await agent.destroy();
+});
+
+test("model.requested の記録が最初の失敗になってもモデルを呼ばない（外部 I/O の fail-closed）", async () => {
+  const s = captureSurface();
+  const a = captureAuditSink({ failFromAction: "model.requested" });
+  const model = countingModelPlugin();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    [a.plugin, createInMemoryMemoryPlugin(), model.plugin, s.plugin],
+  );
+
+  s.push("こんにちは");
+  await drain();
+
+  expect(a.written.map((e) => e.action)).toContain("turn.received"); // 受信までは残る
+  expect(model.calls.length).toBe(0); // 呼ぶ前に止まる
+  expect(s.sent.length).toBe(0);
 
   await agent.destroy();
 });

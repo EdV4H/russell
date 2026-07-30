@@ -338,7 +338,9 @@ export async function createAgent(
     if (!msg.isMention) return;
 
     // 受信を監査に残す。本文は入れない（機微情報を監査へ流さない, A1-5）。
-    await auditLog.registry.record({
+    // ここが残せないならターンごと中止する。以降には記憶読出しもモデル呼び出しもあり、
+    // 「監査が残らないまま外部 I/O だけ起きる」状態にしない（§12-7）。
+    const auditedTurn = await auditLog.registry.record({
       actor: msg.author,
       action: "turn.received",
       payload: {
@@ -348,6 +350,10 @@ export async function createAgent(
       },
       trustLabel: msg.trustLabel,
     });
+    if (!auditedTurn) {
+      events.emit("turn:error", new Error("audit degraded: ターンを中止しました"));
+      return;
+    }
 
     // 自然言語の記憶コマンドを先に処理
     const memAck = await handleMemoryCommands(msg);
@@ -367,20 +373,34 @@ export async function createAgent(
       .join("\n");
     const system = `${personaPrompt()}\n${memoryBlock}`;
 
-    // モデル呼び出し（provider はプラグイン）
+    // モデル呼び出し（provider はプラグイン）。
+    // これは外部 I/O（会話がプロセス外へ出て課金される）なので、他の副作用と同じく
+    // **呼ぶ前**に監査へ残し、残せなければ呼ばない。
     const provider = modelId ? models.get(modelId) : undefined;
+    if (provider) {
+      const auditedCall = await auditLog.registry.record({
+        actor: runtime.agentId,
+        action: "model.requested",
+        payload: {
+          model: modelId ?? null,
+          contextId: msg.contextId,
+          recalledNotes: recalled.notes.length,
+          recalledBooks: recalled.books.length,
+        },
+        trustLabel: msg.trustLabel,
+      });
+      if (!auditedCall) {
+        events.emit("turn:error", new Error("audit degraded: モデル呼び出しを抑止しました"));
+        return;
+      }
+    }
     const replyText = provider
       ? (await provider.complete({ system, user: msg.text })).text
       : "（モデル未登録のため応答できません）";
     await auditLog.registry.record({
       actor: runtime.agentId,
       action: "model.completed",
-      payload: {
-        model: modelId ?? null,
-        contextId: msg.contextId,
-        recalledNotes: recalled.notes.length,
-        recalledBooks: recalled.books.length,
-      },
+      payload: { model: modelId ?? null, contextId: msg.contextId, replyLength: replyText.length },
       trustLabel: msg.trustLabel, // untrusted 入力を食わせた生成物は untrusted のまま
     });
 
