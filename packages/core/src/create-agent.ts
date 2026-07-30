@@ -224,18 +224,26 @@ export async function createAgent(
     runtime,
   };
   // biome-ignore lint/suspicious/noExplicitAny: mode 変更口はコア内部用（/russell config 経由で差し替え）。
-  (ctx as any).__setMode = async (m: Mode) => {
-    const from = currentMode;
-    currentMode = m;
+  (ctx as any).__setMode = async (m: Mode): Promise<boolean> => {
     // 設定変更は監査対象（§6.1「変更履歴は event_log へ」）。actor は運用者だが
     // P0 では変更口がコア内部のみなので agentId で記録する。
-    await auditLog.registry.record({
+    // 他の副作用と同じく**記録が残ってから**切り替える。dryrun→live のような昇格が
+    // 監査に残らないまま起きると、誰がいつ上げたか追えなくなる（dryrun-to-live-promotion）。
+    const from = currentMode;
+    if (from === m) return true;
+    const audited = await auditLog.registry.record({
       actor: runtime.agentId,
       action: "mode.changed",
       payload: { from, to: m },
       trustLabel: "trusted",
     });
+    if (!audited) {
+      events.emit("mode:change-blocked", { from, to: m, reason: "audit_degraded" });
+      return false;
+    }
+    currentMode = m;
     events.emit("mode:changed", m);
+    return true;
   };
 
   // 3-4. プラグインを順に setup、teardown 収集、失敗時ロールバック

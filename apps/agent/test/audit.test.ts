@@ -351,6 +351,29 @@ test("model.requested の記録が最初の失敗になってもモデルを呼�
   await agent.destroy();
 });
 
+test("mode 変更は監査が残ってから反映する（残せなければ切り替えない）", async () => {
+  const s = captureSurface();
+  const a = captureAuditSink();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    [a.plugin, createInMemoryMemoryPlugin(), createEchoModelPlugin(), s.plugin],
+  );
+  // biome-ignore lint/suspicious/noExplicitAny: __setMode はコア内部用の変更口（/russell config 相当）。
+  const setMode = (agent.ctx as any).__setMode as (m: string) => Promise<boolean>;
+
+  expect(await setMode("live")).toBe(true);
+  expect(agent.ctx.runtime.mode()).toBe("live");
+  const changed = a.written.find((e) => e.action === "mode.changed");
+  expect(changed?.payload).toMatchObject({ from: "dryrun", to: "live" });
+
+  // 監査が残せない状態では昇格させない（誰がいつ上げたか追えなくなるため）
+  a.setFailing(true);
+  expect(await setMode("dryrun")).toBe(false);
+  expect(agent.ctx.runtime.mode()).toBe("live"); // 変わらない
+
+  await agent.destroy();
+});
+
 test("sink 未登録でも記録は失われない（インメモリのリングバッファ）", async () => {
   const s = captureSurface();
   const agent = await createAgent(

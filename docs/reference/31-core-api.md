@@ -72,7 +72,7 @@ export interface AgentHandle {
 | `surface.send` | agentId | trusted | 送信の**前** |
 | `surface.send.result` | agentId | trusted | 送信結果が `succeeded` 以外（`rejected` / `unknown`）だったとき |
 | `turn.failed` | agentId | 起因した入力のラベル | ターンが例外で落ちた |
-| `mode.changed` | agentId | trusted | off/dryrun/live の変更（§6.1） |
+| `mode.changed` | agentId | trusted | off/dryrun/live の変更の**前**（記録できなければ切り替えない, §6.1） |
 
 原則:
 
