@@ -57,8 +57,13 @@ function captureSurface() {
   return { plugin, sent, push };
 }
 
-/** 監査 sink のテストダブル。failing=true で全 write を失敗させる（DB 障害の模擬）。 */
-function captureAuditSink(opts: { failing?: boolean } = {}) {
+/**
+ * 監査 sink のテストダブル。
+ * - `failing=true` で全 write を失敗させる（DB 障害の模擬）
+ * - `failFromAction` を指定すると、その action の記録から失敗し始める
+ *   （「記録が失敗したその瞬間」に副作用が漏れないかを見るため）
+ */
+function captureAuditSink(opts: { failing?: boolean; failFromAction?: string } = {}) {
   const written: AuditEvent[] = [];
   let failing = opts.failing ?? false;
   const plugin: RussellPlugin = {
@@ -68,6 +73,7 @@ function captureAuditSink(opts: { failing?: boolean } = {}) {
       return ctx.audit.registerSink({
         id: "fake-audit",
         async write(event) {
+          if (opts.failFromAction && event.action === opts.failFromAction) failing = true;
           if (failing) throw new Error("sink down");
           written.push(event);
         },
@@ -78,6 +84,27 @@ function captureAuditSink(opts: { failing?: boolean } = {}) {
     failing = v;
   }
   return { plugin, written, setFailing };
+}
+
+/** 実行回数を数える shelf.add。効果分類は申告する（= Policy Gate は本来通る）。 */
+function countingShelfPlugin() {
+  const runs: unknown[] = [];
+  const plugin: RussellPlugin = {
+    id: "counting-shelf",
+    name: "counting shelf.add",
+    setup(ctx) {
+      ctx.policy.declareEffect("shelf.add", "internal_write");
+      return ctx.tools.register("shelf.add", {
+        name: "shelf.add",
+        effect: "internal_write",
+        async run(input: unknown) {
+          runs.push(input);
+          return { status: "succeeded" as const };
+        },
+      });
+    },
+  };
+  return { plugin, runs };
 }
 
 const drain = async () => {
@@ -222,6 +249,46 @@ test("fail-closed: 監査 sink が全滅したら書き込みも送信も止ま�
   await drain();
   expect(agent.ctx.audit.healthy()).toBe(true);
   expect(s.sent.length).toBe(2);
+
+  await agent.destroy();
+});
+
+test("tool.invoked の記録が最初の失敗になってもツールは実行されない（fail-closed の窓）", async () => {
+  const s = captureSurface();
+  const a = captureAuditSink({ failFromAction: "tool.invoked" });
+  const shelf = countingShelfPlugin();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    [a.plugin, shelf.plugin, createEchoModelPlugin(), s.plugin],
+  );
+
+  // Policy Gate の事前判定は通る（効果分類は申告済み・その時点では healthy）。
+  // 落ちるのは tool.invoked の記録そのもの。
+  s.push("これ覚えておいて");
+  await drain();
+
+  expect(shelf.runs.length).toBe(0); // 監査が残らなかったので実行しない
+  expect(s.sent.length).toBe(0); // 応答も返さない
+  expect(agent.ctx.audit.healthy()).toBe(false);
+
+  await agent.destroy();
+});
+
+test("surface.send の記録が最初の失敗になっても送信しない（fail-closed の窓）", async () => {
+  const s = captureSurface();
+  const a = captureAuditSink({ failFromAction: "surface.send" });
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    [a.plugin, createInMemoryMemoryPlugin(), createEchoModelPlugin(), s.plugin],
+  );
+
+  // 受信・モデル呼び出しまでは監査が残る。落ちるのは送信直前の記録。
+  s.push("こんにちは");
+  await drain();
+
+  expect(a.written.map((e) => e.action)).toContain("model.completed");
+  expect(s.sent.length).toBe(0); // 監査が残らなかったので送らない
+  expect(agent.ctx.audit.healthy()).toBe(false);
 
   await agent.destroy();
 });

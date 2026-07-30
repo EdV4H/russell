@@ -7,7 +7,9 @@
  * - sink 登録済みで write が失敗: **degraded**。以降 Policy Gate が副作用を止める（fail-closed）。
  *   復旧は次の成功した write で自動（監査が再び残せるようになったら再開してよい）。
  *
- * 記録は「行為の前」に行う。監査が残らないまま副作用だけ起きる窓を作らないため。
+ * 記録は「行為の前」に行い、`record()` が false を返したら行為を中止する。
+ * 事前の `healthy()` チェックだけでは、**その記録自体が最初の失敗**だったケースを取りこぼす
+ * （記録は失敗したのに副作用は起きる、という窓が残る）。
  */
 
 import type {
@@ -47,7 +49,7 @@ export function createAuditLog(runtime: AgentRuntime, events: EventBus): AuditLo
       };
     },
 
-    async record(input: AuditRecordInput) {
+    async record(input: AuditRecordInput): Promise<boolean> {
       const event: AuditEvent = {
         ts: new Date().toISOString(),
         actor: input.actor,
@@ -59,7 +61,7 @@ export function createAuditLog(runtime: AgentRuntime, events: EventBus): AuditLo
       };
       remember(event);
 
-      if (sinks.length === 0) return; // 永続化先が無い構成（オフライン/テスト）
+      if (sinks.length === 0) return true; // 永続化先が無い構成（オフライン/テスト）
 
       const results = await Promise.allSettled(sinks.map((s) => s.write(event)));
       const failed = results.filter((r) => r.status === "rejected");
@@ -71,7 +73,7 @@ export function createAuditLog(runtime: AgentRuntime, events: EventBus): AuditLo
         }
         // 最後の砦として stderr に出す（プロセスログは残る）
         console.error("[audit] 全 sink への追記に失敗。fail-closed。", JSON.stringify(event));
-        return;
+        return false; // 呼び出し側はこの記録に対応する行為を中止する
       }
       if (failed.length > 0) {
         // 一部だけ失敗: 監査は残っているので degraded にはしないが、可視化する。
@@ -81,6 +83,7 @@ export function createAuditLog(runtime: AgentRuntime, events: EventBus): AuditLo
         degraded = false;
         events.emit("audit:recovered", { action: event.action });
       }
+      return true;
     },
 
     recent(limit = RING_SIZE) {

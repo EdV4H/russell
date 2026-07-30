@@ -285,12 +285,17 @@ export async function createAgent(
     const tool = tools.get(name);
     if (!tool) throw new Error(`tool "${name}" not registered`);
     // 監査は「行為の前」に残す。落ちても副作用だけが残る窓を作らないため。
-    await auditLog.registry.record({
+    // この記録自体が sink 全滅の初回になることがあるので、decide() の事前判定だけでは足りない。
+    const audited = await auditLog.registry.record({
       actor: runtime.agentId,
       action: "tool.invoked",
       payload: { tool: name, effect: tool.effect },
       trustLabel,
     });
+    if (!audited) {
+      events.emit("policy:blocked", { tool: name, reason: "audit_degraded" });
+      throw new Error(`policy: tool "${name}" is not allowed (audit_degraded)`);
+    }
     try {
       // biome-ignore lint/suspicious/noExplicitAny: ツール入力は各ツールのスキーマに委ねる（提案骨格）。
       const result = await tool.run(input as any);
@@ -388,12 +393,17 @@ export async function createAgent(
       events.emit("turn:error", new Error("audit degraded: 応答送信を抑止しました"));
       return;
     }
-    await auditLog.registry.record({
+    // この記録自体が sink 全滅の初回になることがあるので、戻り値でもう一度確かめてから送る。
+    const audited = await auditLog.registry.record({
       actor: runtime.agentId,
       action: "surface.send",
       payload: { surfaceId: msg.surfaceId, contextId: msg.contextId, textLength: text.length },
       trustLabel: "trusted", // 送信は個体自身の行為
     });
+    if (!audited) {
+      events.emit("turn:error", new Error("audit degraded: 応答送信を抑止しました"));
+      return;
+    }
     const delivery = await surface.send({ contextId: msg.contextId, text });
     if (delivery.status !== "succeeded") {
       await auditLog.registry.record({

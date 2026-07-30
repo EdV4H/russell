@@ -120,7 +120,7 @@ export interface PolicyRegistry {
 ```ts
 export interface AuditRegistry {
   registerSink(sink: AuditSink): () => void;   // 永続化先を登録（audit-pg 等）
-  record(event: AuditRecordInput): Promise<void>;
+  record(event: AuditRecordInput): Promise<boolean>;  // false = 監査が残らなかった → 行為を中止
   recent(limit?: number): AuditEvent[];        // 直近のインメモリ分（調査用）
   healthy(): boolean;                          // false = 監査が残せない → fail-closed
 }
@@ -136,6 +136,8 @@ export interface AuditSink {
 - **来歴を失わせない**（§12-3）: untrusted な発言に起因するツール実行は `trustLabel: "untrusted"` のまま残る。
 - **payload に本文を入れない**（A1-5）。識別子・件数・長さだけを入れる。
 - sink が全滅すると `healthy()` が false になり、Policy Gate が `read` 以外を deny する（§12-7）。
+  さらに `record()` が false を返した時点でコアはその行為（ツール実行・送信）を中止する
+  ── 記録が失敗したその瞬間から止める必要があるため、事前判定だけでは足りない。
   sink 未登録（オフライン構成）は障害ではないので degraded にはしない。
 - 実装: `@edv4h/russell-plugin-audit-pg`（Postgres `event_log`・追記専用をトリガで強制）。
 

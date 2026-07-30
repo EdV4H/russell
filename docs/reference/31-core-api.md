@@ -69,12 +69,15 @@ export interface AgentHandle {
 | `policy.denied` | agentId | 起因した入力のラベル | Gate が拒否（`reason` に理由コード） |
 | `model.completed` | agentId | 起因した入力のラベル | モデル応答生成後 |
 | `surface.send` | agentId | trusted | 送信の**前** |
+| `surface.send.result` | agentId | trusted | 送信結果が `succeeded` 以外（`rejected` / `unknown`）だったとき |
 | `turn.failed` | agentId | 起因した入力のラベル | ターンが例外で落ちた |
 | `mode.changed` | agentId | trusted | off/dryrun/live の変更（§6.1） |
 
 原則:
 
 - **記録は行為の前**。監査が残らないまま副作用だけ起きる窓を作らない。
+  `record()` は**記録が残ったか**を返す。false（sink 全滅）なら対応する行為を中止する。
+  事前の `healthy()` だけでは、その記録自体が最初の失敗だったケースを取りこぼす。
 - **payload に本文を入れない**（機微情報を監査へ流さない, A1-5）。識別子・件数・長さのみ。
 - **来歴を保存**（§12-3）。untrusted 起因のアクションは untrusted のまま残す。
 - **fail-closed**（§12-7）。sink が全滅したら `audit.healthy()` が false になり、

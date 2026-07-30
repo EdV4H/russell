@@ -41,9 +41,13 @@ export interface AuditRegistry {
   registerSink(sink: AuditSink): () => void;
   /**
    * 1件記録する。ts / agentId / configVersion はコアが補う。
-   * sink が全滅した場合は degraded 状態になり、Policy Gate が副作用を止める（fail-closed, §12-7）。
+   *
+   * 戻り値は**この記録が残ったか**。false = sink が全滅していて監査が残っていない。
+   * 「行為の前に記録する」呼び出し側は、この戻り値を見て false なら行為を中止する
+   * （記録に失敗したその瞬間から fail-closed にする必要があるため、事前の healthy() だけでは足りない）。
+   * sink 未登録の構成（オフライン）は障害ではないので true を返す。
    */
-  record(event: AuditRecordInput): Promise<void>;
+  record(event: AuditRecordInput): Promise<boolean>;
   /** 直近のイベント（テスト・調査用のインメモリリングバッファ）。永続化の代替ではない。 */
   recent(limit?: number): AuditEvent[];
   /** sink への追記が健全か。false なら fail-closed 側に倒れている。 */
