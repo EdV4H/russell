@@ -22,6 +22,7 @@ russell/                                   # このリポジトリ
 │   ├── russell-plugin-surface-slack/      # @edv4h/russell-plugin-surface-slack
 │   ├── russell-plugin-surface-cli/
 │   ├── russell-plugin-memory-pg/
+│   ├── russell-plugin-audit-pg/           # event_log（監査・追記専用, §3.1）
 │   ├── russell-plugin-equipment-github/
 │   ├── russell-plugin-equipment-notion/
 │   ├── russell-plugin-equipment-terminal/
@@ -67,7 +68,7 @@ russell/                                   # このリポジトリ
 
 ## 命名規約
 
-`@edv4h/russell-plugin-{kind}-{name}`。kind は `surface` / `equipment` / `memory` / `finding` / `habit` / `model`。
+`@edv4h/russell-plugin-{kind}-{name}`。kind は `surface` / `equipment` / `memory` / `finding` / `habit` / `model` / `audit`。
 kind はコードで強制されない（契約に種別フィールドが無い）＝あくまで人間向けの整理。
 
 関連：[`../concepts/10-plugin-architecture.md`](../concepts/10-plugin-architecture.md), [`30-russell-plugin-contract.md`](./30-russell-plugin-contract.md)

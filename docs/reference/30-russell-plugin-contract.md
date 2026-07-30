@@ -34,6 +34,7 @@ export interface AgentContext {
   findings: FindingRegistry;
   models: ModelRegistry;
   policy: PolicyRegistry;
+  audit: AuditRegistry;        // 監査ログ（event_log, §3.1）。sink はプラグインが登録する
   events: EventBus;
   services: ServiceRegistry;
   // コアが保持し、プラグインは読み取り主体:
@@ -114,6 +115,30 @@ export interface PolicyRegistry {
 
 > コアの原値（未登録=deny / killswitch最優先 / fail-closed）はこのレジストリでは緩和できない。
 
+### AuditRegistry — 監査ログ（event_log）
+
+```ts
+export interface AuditRegistry {
+  registerSink(sink: AuditSink): () => void;   // 永続化先を登録（audit-pg 等）
+  record(event: AuditRecordInput): Promise<void>;
+  recent(limit?: number): AuditEvent[];        // 直近のインメモリ分（調査用）
+  healthy(): boolean;                          // false = 監査が残せない → fail-closed
+}
+
+export interface AuditSink {
+  id: string;
+  write(event: AuditEvent): Promise<void>;     // 失敗は throw する（握り潰さない）
+}
+```
+
+- **記録するのはコア**。プラグインは `record()` を呼ぶ必要はなく、永続化先（sink）を提供する側に回る。
+- `AuditEvent` は `ts / actor / action / payload / trustLabel / agentId / configVersion`。
+- **来歴を失わせない**（§12-3）: untrusted な発言に起因するツール実行は `trustLabel: "untrusted"` のまま残る。
+- **payload に本文を入れない**（A1-5）。識別子・件数・長さだけを入れる。
+- sink が全滅すると `healthy()` が false になり、Policy Gate が `read` 以外を deny する（§12-7）。
+  sink 未登録（オフライン構成）は障害ではないので degraded にはしない。
+- 実装: `@edv4h/russell-plugin-audit-pg`（Postgres `event_log`・追記専用をトリガで強制）。
+
 ### EventBus / ServiceRegistry
 
 ```ts
@@ -128,7 +153,7 @@ export interface ServiceRegistry {
 }
 ```
 
-既知イベント例（型付き）: `surface:message`, `finding:detected`, `equipment:result`, `routine:fired`, `mode:changed`, `killswitch:engaged`。
+既知イベント例（型付き）: `surface:message`, `finding:detected`, `equipment:result`, `routine:fired`, `mode:changed`, `killswitch:engaged`, `policy:blocked`, `audit:degraded` / `audit:recovered`。
 
 ## 関連
 

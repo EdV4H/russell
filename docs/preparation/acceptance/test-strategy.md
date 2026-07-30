@@ -120,8 +120,13 @@
 フェーズに関わらず、以下は納品の前提条件（合格しなければフェーズ検収に進めない）。
 
 - [ ] 全装備／プラグインが [`equipment-conformance-suite.md`](./equipment-conformance-suite.md) を通過
-- [ ] Policy Gate: 未許可・未分類・未知リソースが default-deny（§9.2・§12）
-- [ ] fail-closed: ポリシー／承認記録／キルスイッチが読めないとき外部送信・書き込みをしない（§12-7）
-- [ ] キルスイッチ: `/russell stop` + env フラグで全自発行動を即凍結、DB 障害時も別経路で効く（§12-4/-7）
-- [ ] 監査ログ: 全アクションが event_log に trust_label 付きで残る（§3.1・§12）
-- [ ] マイグレーション: 起動時 CREATE TABLE をせず expand→backfill→contract（§11）
+- [x] Policy Gate: 未許可・未分類・未知リソースが default-deny（§9.2・§12） — `apps/agent/test/audit.test.ts`（`policy.denied` / `effect_undeclared`）
+- [x] fail-closed: ポリシー／承認記録／キルスイッチが読めないとき外部送信・書き込みをしない（§12-7） — 監査 sink 全滅時に `read` 以外を deny し応答送信も止める（同テスト）
+- [ ] キルスイッチ: `/russell stop` + env フラグで全自発行動を即凍結、DB 障害時も別経路で効く（§12-4/-7） — env `RUSSELL_KILL` は実装済（`agent.test.ts`）。**`/russell stop` 経路が未実装**
+- [x] 監査ログ: 全アクションが event_log に trust_label 付きで残る（§3.1・§12） — コアが記録・`@edv4h/russell-plugin-audit-pg` が追記専用で永続化。`audit.test.ts` / `audit-pg.test.ts`
+- [ ] マイグレーション: 起動時 CREATE TABLE をせず expand→backfill→contract（§11） — **未対応**（現状 dev/test 用 `autoMigrate` で起動時作成）
+
+> [!NOTE]
+> 監査ログの検証内容: 受信→ツール→モデル→送信の全アクションが `trust_label` 付きで残る／untrusted 起因の
+> ツール実行は untrusted のまま残る（§12-3）／payload に本文を入れない（A1-5）／`event_log` の UPDATE・DELETE を
+> DB 側のトリガで拒否（追記専用）。装備プラグイン追加時は conformance suite 側で同じ観点を再確認する。
