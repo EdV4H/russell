@@ -124,9 +124,15 @@
 - [x] fail-closed: ポリシー／承認記録／キルスイッチが読めないとき外部送信・書き込みをしない（§12-7） — 監査 sink 全滅時に `read` 以外を deny し応答送信も止める（同テスト）
 - [ ] キルスイッチ: `/russell stop` + env フラグで全自発行動を即凍結、DB 障害時も別経路で効く（§12-4/-7） — env `RUSSELL_KILL` は実装済（`agent.test.ts`）。**`/russell stop` 経路が未実装**
 - [x] 監査ログ: 全アクションが event_log に trust_label 付きで残る（§3.1・§12） — コアが記録・`@edv4h/russell-plugin-audit-pg` が追記専用で永続化。`audit.test.ts` / `audit-pg.test.ts`
-- [ ] マイグレーション: 起動時 CREATE TABLE をせず expand→backfill→contract（§11） — **未対応**（現状 dev/test 用 `autoMigrate` で起動時作成）
+- [x] マイグレーション: 起動時 CREATE TABLE をせず expand→backfill→contract（§11） — `@edv4h/russell-migrate`（台帳 `schema_migrations`・`pnpm migrate`）。契約は [`../../reference/34-migrations.md`](../../reference/34-migrations.md)。`migrate.test.ts` / `migrate.offline.test.ts`
 
 > [!NOTE]
 > 監査ログの検証内容: 受信→ツール→モデル→送信の全アクションが `trust_label` 付きで残る／untrusted 起因の
 > ツール実行は untrusted のまま残る（§12-3）／payload に本文を入れない（A1-5）／`event_log` の UPDATE・DELETE を
 > DB 側のトリガで拒否（追記専用）。装備プラグイン追加時は conformance suite 側で同じ観点を再確認する。
+
+> [!NOTE]
+> マイグレーションの検証内容: 未適用の DB ではエージェントが**起動しない**（起動経路が DDL を流さない）／
+> 適用は冪等で、同時実行しても advisory lock で二重適用しない／適用済み SQL の改変を checksum で検出して止める／
+> expand→backfill→contract が3段で回り、**既定では contract を流さない**（旧列が残ったまま新列を読める）／
+> `autoMigrate` は `NODE_ENV=production` で拒否される。
