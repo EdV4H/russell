@@ -15,7 +15,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const agentId = process.env.RUSSELL_AGENT_ID ?? "bob";
-  const result = await runConsolidation({ agentId, autoMigrate: true });
+  // autoMigrate は渡さない＝起動時に DDL を流さない（§11）。未適用なら throw して止まる。
+  const result = await runConsolidation({ agentId });
 
   console.log(
     `[worker] consolidation ${result.entryDate}: notes=${result.notesConsolidated} decayed=${result.booksDecayed} archived=${result.booksArchived}`,

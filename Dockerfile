@@ -8,6 +8,7 @@ WORKDIR /app
 # 依存を先に入れてレイヤキャッシュを効かせる
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages ./packages
+COPY plugins ./plugins
 COPY examples ./examples
 COPY apps ./apps
 COPY tsconfig.base.json tsconfig.json turbo.json biome.json ./
