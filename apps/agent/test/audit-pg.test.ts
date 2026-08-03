@@ -66,7 +66,8 @@ describe.skipIf(!DB)("audit-pg（DATABASE_URL 必須）", () => {
     const agent = await createAgent(
       { agentId, configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
       [
-        createPgAuditPlugin({ autoMigrate: true }),
+        // autoMigrate は渡さない＝本番と同じ起動経路（スキーマは global-setup で適用済み, §11）
+        createPgAuditPlugin(),
         createInMemoryMemoryPlugin(),
         createEchoModelPlugin(),
         s.plugin,
@@ -102,8 +103,7 @@ describe.skipIf(!DB)("audit-pg（DATABASE_URL 必須）", () => {
   test("event_log は追記専用（UPDATE/DELETE/TRUNCATE が DB 側で拒否される）", async () => {
     const pool = new pg.Pool({ connectionString: DB });
     try {
-      const { AUDIT_SCHEMA_SQL } = await import("@edv4h/russell-plugin-audit-pg");
-      await pool.query(AUDIT_SCHEMA_SQL);
+      // スキーマは global-setup のマイグレーションで用意済み
       await pool.query(
         `INSERT INTO event_log (agent_id, config_version, actor, action, payload, trust_label)
          VALUES ('append-only-test', 'v0', 'tester', 'test.event', '{}'::jsonb, 'trusted')`,

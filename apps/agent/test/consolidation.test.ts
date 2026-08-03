@@ -13,9 +13,7 @@ describe.skipIf(!DB)("consolidation（DATABASE_URL 必須）", () => {
   test("日記生成・メモ処理済み化・忘却曲線・書庫スイープ", async () => {
     const agentId = `worker-test-${Date.now()}`;
     const pool = new pg.Pool({ connectionString: DB });
-    // スキーマ確保 + 種データ
-    const { SCHEMA_SQL } = await import("@edv4h/russell-plugin-memory-pg");
-    await pool.query(SCHEMA_SQL);
+    // スキーマは global-setup のマイグレーションで用意済み（テストは DDL を流さない, §11）
     await pool.query(
       "INSERT INTO notes (agent_id, context_id, content) VALUES ($1,'c1','出来事A'),($1,'c1','出来事B')",
       [agentId],
@@ -27,7 +25,7 @@ describe.skipIf(!DB)("consolidation（DATABASE_URL 必須）", () => {
     );
 
     const now = new Date("2026-07-29T18:00:00Z");
-    const r1 = await runConsolidation({ connectionString: DB, agentId, now, autoMigrate: false });
+    const r1 = await runConsolidation({ connectionString: DB, agentId, now });
     expect(r1.entryDate).toBe("2026-07-29");
     expect(r1.notesConsolidated).toBe(2);
     expect(r1.booksArchived).toBe(1); // 0.20 * e^-0.05 = 0.190… < 0.2 → 書庫へ
@@ -40,7 +38,7 @@ describe.skipIf(!DB)("consolidation（DATABASE_URL 必須）", () => {
     expect(journal.rows[0]?.narrative).toContain("2件");
 
     // メモは consolidated 化済み → 2回目は 0 件（冪等・同日 UPSERT）
-    const r2 = await runConsolidation({ connectionString: DB, agentId, now, autoMigrate: false });
+    const r2 = await runConsolidation({ connectionString: DB, agentId, now });
     expect(r2.notesConsolidated).toBe(0);
     const count = await pool.query(
       "SELECT count(*)::int AS n FROM journal_entries WHERE agent_id=$1",
