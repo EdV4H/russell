@@ -7,6 +7,7 @@
  * 夜間バッチ（P1）で足す。ここでは recall は recency、deep_recall は本文一致で足りる（発注書 §2）。
  */
 
+import { assertAutoMigrateAllowed, assertSchemaReady, runMigrations } from "@edv4h/russell-migrate";
 import {
   type AgentContext,
   MEMORY_SERVICE,
@@ -15,12 +16,15 @@ import {
   type RussellPlugin,
 } from "@edv4h/russell-shared";
 import pg from "pg";
-import { SCHEMA_SQL } from "./schema.js";
+import { MEMORY_MIGRATIONS } from "./migrations.js";
 
 export interface PgMemoryOptions {
   /** 接続文字列。未指定なら env DATABASE_URL。 */
   connectionString?: string;
-  /** dev/test 用にスキーマを起動時作成する（本番は false=マイグレーションツールに委ねる, §11）。 */
+  /**
+   * dev/test 用に起動時マイグレーションを走らせる。本番（NODE_ENV=production）では拒否される。
+   * 既定 false ＝ **DDL は流さず「適用済みか」を確認するだけ**（§11）。
+   */
   autoMigrate?: boolean;
   /** メモの既定 TTL（日）。§3.1 既定7日。 */
   noteTtlDays?: number;
@@ -37,8 +41,17 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
         connectionString: options.connectionString ?? process.env.DATABASE_URL,
       });
 
-      if (options.autoMigrate) {
-        await pool.query(SCHEMA_SQL);
+      // スキーマが未適用なら起動しない（fail-closed）。起動時に DDL は流さない（§11）。
+      try {
+        if (options.autoMigrate) {
+          assertAutoMigrateAllowed(MEMORY_MIGRATIONS.namespace);
+          await runMigrations(pool, [MEMORY_MIGRATIONS]);
+        } else {
+          await assertSchemaReady(pool, [MEMORY_MIGRATIONS]);
+        }
+      } catch (err) {
+        await pool.end();
+        throw err;
       }
 
       const capability: MemoryCapability = {

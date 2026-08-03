@@ -6,8 +6,9 @@
  * 日記の物語は P1 フルではモデル（Haiku）で書くが、ここでは決定論的な要約で足場を作る。
  */
 
+import { assertAutoMigrateAllowed, assertSchemaReady, runMigrations } from "@edv4h/russell-migrate";
 import pg from "pg";
-import { SCHEMA_SQL } from "./schema.js";
+import { MEMORY_MIGRATIONS } from "./migrations.js";
 
 export interface ConsolidationOptions {
   connectionString?: string;
@@ -16,7 +17,7 @@ export interface ConsolidationOptions {
   now?: Date;
   /** 忘却率 λ（§3.4, 既定 0.05）。 */
   lambda?: number;
-  /** dev/test 用スキーマ自動作成。 */
+  /** dev/test 用に起動時マイグレーションを走らせる。本番（NODE_ENV=production）では拒否される（§11）。 */
   autoMigrate?: boolean;
 }
 
@@ -41,7 +42,12 @@ export async function runConsolidation(
     connectionString: options.connectionString ?? process.env.DATABASE_URL,
   });
   try {
-    if (options.autoMigrate) await pool.query(SCHEMA_SQL);
+    if (options.autoMigrate) {
+      assertAutoMigrateAllowed(MEMORY_MIGRATIONS.namespace);
+      await runMigrations(pool, [MEMORY_MIGRATIONS]);
+    } else {
+      await assertSchemaReady(pool, [MEMORY_MIGRATIONS]);
+    }
 
     // 1. 未処理メモを集める（§4-1）
     const notes = await pool.query<{ id: string; content: string }>(
