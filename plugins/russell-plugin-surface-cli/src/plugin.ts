@@ -25,12 +25,17 @@ export function createCliSurfacePlugin(options: CliSurfaceOptions = {}): Russell
     id: "russell-plugin-surface-cli",
     name: "CLI Surface",
     setup(ctx: AgentContext) {
-      const rl = createInterface({ input: process.stdin, terminal: false });
+      // readline を作るのは `start` の中。**`setup` で作ると入力を取りこぼす**——
+      // createInterface は即座に stdin を読み始めるので、他プラグインの setup（DB 接続で
+      // 数秒かかる）を待つ間に届いた行が、行ハンドラを付ける前に流れて消える。
+      // 対話では気づかないが、`echo "..." | pnpm dev` のようなパイプでは最初の行が落ちる。
+      let rl: ReturnType<typeof createInterface> | undefined;
 
       const unregister = ctx.surfaces.register({
         id: "cli",
         start(sink) {
           process.stdout.write(`${name} を起動しました。話しかけてください（Ctrl-D で終了）。\n> `);
+          rl = createInterface({ input: process.stdin, terminal: false });
           rl.on("line", (line) => {
             const text = line.trim();
             if (!text) {
@@ -59,7 +64,7 @@ export function createCliSurfacePlugin(options: CliSurfaceOptions = {}): Russell
 
       return () => {
         unregister();
-        rl.close();
+        rl?.close(); // start されないまま teardown される経路（他プラグインの setup 失敗）がある
       };
     },
   };

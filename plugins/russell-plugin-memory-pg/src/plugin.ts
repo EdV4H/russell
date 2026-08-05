@@ -40,6 +40,11 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
       const pool = new pg.Pool({
         connectionString: options.connectionString ?? process.env.DATABASE_URL,
       });
+      // idle 接続が切れただけでプロセスを落とさない（pg.Pool は listener が無いと
+      // unhandled 'error' event で死ぬ）。記憶が読めない状況は次のクエリの失敗で扱う。
+      pool.on("error", (err) => {
+        console.error("[memory-pg] Postgres 接続エラー（プールが再接続します）:", err.message);
+      });
 
       // スキーマが未適用なら起動しない（fail-closed）。起動時に DDL は流さない（§11）。
       try {

@@ -81,7 +81,13 @@ export function validateMigrationSet(set: MigrationSet): void {
 export function createMigrationPool(connectionString?: string): pg.Pool {
   const cs = connectionString ?? process.env.DATABASE_URL;
   if (!cs) throw new Error("migrate: DATABASE_URL が未設定です");
-  return new pg.Pool({ connectionString: cs });
+  const pool = new pg.Pool({ connectionString: cs });
+  // idle 接続のエラーでプロセスを落とさない（pg.Pool は listener が無いと
+  // unhandled 'error' event で死ぬ）。マイグレーション自体の失敗はクエリ側で扱う。
+  pool.on("error", (err) => {
+    console.error("[migrate] Postgres 接続エラー:", err.message);
+  });
+  return pool;
 }
 
 async function ledgerExists(db: pg.Pool | pg.PoolClient): Promise<boolean> {

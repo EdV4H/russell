@@ -33,6 +33,12 @@ export function createPgAuditPlugin(options: PgAuditOptions = {}): RussellPlugin
       const pool = new pg.Pool({
         connectionString: options.connectionString ?? process.env.DATABASE_URL,
       });
+      // idle 接続が切れただけでプロセスを落とさない（pg.Pool は listener が無いと
+      // unhandled 'error' event で死ぬ）。DB の再起動・フェイルオーバのたびに個体が
+      // 落ちるのは fail-closed ではなく可用性の欠陥。判定は次のクエリの失敗で行う。
+      pool.on("error", (err) => {
+        console.error("[audit-pg] Postgres 接続エラー（プールが再接続します）:", err.message);
+      });
 
       // スキーマが未適用なら起動しない（fail-closed）。監査が落ちる先を先に確かめる。
       try {

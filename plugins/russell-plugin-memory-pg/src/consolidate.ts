@@ -41,6 +41,10 @@ export async function runConsolidation(
   const pool = new pg.Pool({
     connectionString: options.connectionString ?? process.env.DATABASE_URL,
   });
+  // idle 接続のエラーでバッチごと落とさない。失敗するなら実行中のクエリで失敗させる。
+  pool.on("error", (err) => {
+    console.error("[memory-pg] Postgres 接続エラー（プールが再接続します）:", err.message);
+  });
   try {
     if (options.autoMigrate) {
       assertAutoMigrateAllowed(MEMORY_MIGRATIONS.namespace);

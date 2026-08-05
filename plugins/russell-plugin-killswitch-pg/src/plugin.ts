@@ -81,6 +81,12 @@ export function createPgKillSwitchPlugin(options: PgKillSwitchOptions = {}): Rus
       const pool = new pg.Pool({
         connectionString: options.connectionString ?? process.env.DATABASE_URL,
       });
+      // idle 接続が切れただけでプロセスを落とさない（pg.Pool は listener が無いと
+      // unhandled 'error' event で死ぬ）。凍結の判定は次のクエリの失敗で行い、
+      // 読めなければ silent に倒れる（§12-7）——落ちるべきは判定であってプロセスではない。
+      pool.on("error", (err) => {
+        console.error("[killswitch-pg] Postgres 接続エラー（プールが再接続します）:", err.message);
+      });
 
       try {
         if (options.autoMigrate) {
@@ -131,6 +137,7 @@ export async function readStopState(pool: pg.Pool, agentId: string): Promise<Sto
 export async function isFrozen(agentId: string, connectionString?: string): Promise<boolean> {
   if (process.env.RUSSELL_KILL === "1") return true;
   const pool = new pg.Pool({ connectionString: connectionString ?? process.env.DATABASE_URL });
+  pool.on("error", () => {}); // 判定は下の catch で行う。ここで落とさない
   try {
     return (await readStopState(pool, agentId)).stopped;
   } catch (err) {
