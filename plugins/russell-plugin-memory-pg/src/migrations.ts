@@ -1,11 +1,20 @@
 /**
- * P0 の最小スキーマ（notes / books）。設計書 §3.1 の部分集合。
+ * 記憶テーブルのマイグレーション（P0 の最小スキーマ。設計書 §3.1 の部分集合）。
  * ベクトル列は用意するが P0 では埋め込みを入れない（recall は recency ベース、deep_recall は本文一致）。
  *
- * ※ 本番は「起動時 CREATE TABLE をしない」（§11）。マイグレーションツールで
- *   expand→backfill→contract する。この SQL は dev/test の autoMigrate 用の叩き台。
+ * 起動時には流れない。適用するのは `pnpm migrate` だけ（§11）。
+ * ※ 適用済みの SQL は**書き換えない**（checksum で検出して止まる）。変更は新しい版を足す。
  */
-export const SCHEMA_SQL = `
+
+import type { MigrationSet } from "@edv4h/russell-migrate";
+
+export const MEMORY_MIGRATIONS: MigrationSet = {
+  namespace: "memory-pg",
+  migrations: [
+    {
+      id: "0001_notes_books_journal",
+      phase: "expand",
+      sql: `
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS notes (
@@ -43,4 +52,7 @@ CREATE TABLE IF NOT EXISTS books (
   embedding vector(1024)
 );
 CREATE INDEX IF NOT EXISTS books_agent_status_idx ON books (agent_id, status);
-`;
+`,
+    },
+  ],
+};

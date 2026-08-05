@@ -1,9 +1,9 @@
 {
-  "name": "@edv4h/russell-plugin-memory-pg",
+  "name": "@edv4h/russell-plugin-audit-pg",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "記憶プラグイン（本番）: Postgres + pgvector。DATABASE_URL で接続。P0 は notes/books の最小実装。",
+  "description": "監査ログプラグイン（本番）: Postgres の event_log へ追記専用で記録する（§3.1・§12）。",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

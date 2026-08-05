@@ -26,6 +26,12 @@ importers:
       '@edv4h/russell-core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@edv4h/russell-migrate':
+        specifier: workspace:*
+        version: link:../../packages/migrate
+      '@edv4h/russell-plugin-audit-pg':
+        specifier: workspace:*
+        version: link:../../plugins/russell-plugin-audit-pg
       '@edv4h/russell-plugin-memory-inmem':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-memory-inmem
@@ -97,8 +103,46 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/migrate:
+    dependencies:
+      pg:
+        specifier: ^8.13.0
+        version: 8.22.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      '@types/pg':
+        specifier: ^8.11.0
+        version: 8.20.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/shared:
     devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  plugins/russell-plugin-audit-pg:
+    dependencies:
+      '@edv4h/russell-migrate':
+        specifier: workspace:*
+        version: link:../../packages/migrate
+      '@edv4h/russell-shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      pg:
+        specifier: ^8.13.0
+        version: 8.22.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      '@types/pg':
+        specifier: ^8.11.0
+        version: 8.20.0
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
@@ -115,6 +159,9 @@ importers:
 
   plugins/russell-plugin-memory-pg:
     dependencies:
+      '@edv4h/russell-migrate':
+        specifier: workspace:*
+        version: link:../../packages/migrate
       '@edv4h/russell-shared':
         specifier: workspace:*
         version: link:../../packages/shared

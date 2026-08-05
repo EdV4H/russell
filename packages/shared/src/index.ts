@@ -1,3 +1,4 @@
+export type * from "./types/audit.js";
 export type * from "./types/domain.js";
 export type * from "./types/plugin.js";
 export type * from "./types/runtime.js";

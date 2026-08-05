@@ -31,7 +31,8 @@ describe.skipIf(!DB)("memory-pg（DATABASE_URL 必須）", () => {
       // biome-ignore lint/suspicious/noExplicitAny: memory-pg が触る部分だけのテスト用スタブ。
     } as any;
 
-    const teardown = await createPgMemoryPlugin({ autoMigrate: true }).setup(ctx);
+    // autoMigrate を渡さない＝本番と同じ起動経路（DDL を流さず、適用済みかを確認するだけ, §11）
+    const teardown = await createPgMemoryPlugin().setup(ctx);
     try {
       await tools.get("note.write")?.run({ contextId: "c1", content: "テストメモ1" });
       await tools.get("shelf.add")?.run({ source: "c1", card: "金曜の定例" });

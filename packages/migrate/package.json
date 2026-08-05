@@ -1,9 +1,9 @@
 {
-  "name": "@edv4h/russell-plugin-memory-pg",
+  "name": "@edv4h/russell-migrate",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "記憶プラグイン（本番）: Postgres + pgvector。DATABASE_URL で接続。P0 は notes/books の最小実装。",
+  "description": "マイグレーションランナー（§11: 起動時 CREATE TABLE をしない / expand→backfill→contract）",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -18,8 +18,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@edv4h/russell-migrate": "workspace:*",
-    "@edv4h/russell-shared": "workspace:*",
     "pg": "^8.13.0"
   },
   "devDependencies": {

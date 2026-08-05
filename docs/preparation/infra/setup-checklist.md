@@ -41,7 +41,8 @@
 - [x] デプロイ = プラットフォーム非依存コンテナ（上記）に確定。具体ホストは調達時に選ぶ（どれでも動く）
 - [ ] Postgres を用意し **pgvector 拡張を有効化**（`CREATE EXTENSION vector;`）。記憶（VECTOR(1024)）・キュー（pg-boss）・監査（event_log）を1インスタンスに同居（§11）
 - [ ] **バックアップは別環境に不変保存**（§12-6）。PITR かスナップショットの保持方針を決める
-- [ ] マイグレーションは Alembic 等で expand→backfill→contract。**起動時 CREATE TABLE はしない**（§11）
+- [x] マイグレーションは `pnpm migrate` で expand→backfill→contract。**起動時 CREATE TABLE はしない**（§11） — [`../../reference/34-migrations.md`](../../reference/34-migrations.md)
+- [ ] DB ロール分離: アプリ用ロールに DDL 権限を与えない（`DROP TABLE` はトリガで塞げない, §12-6）
 - [ ] app / worker の2プロセス構成（§2）。worker は pg-boss で Postgres に同居、対話とバッチの並列度上限を分離
 - [ ] 移設性の検証: ローカル（docker compose）で app+worker+Postgres が上がることを最初の CI ゲートにする
 
