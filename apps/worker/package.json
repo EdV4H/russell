@@ -10,6 +10,7 @@
     "consolidate": "node dist/main.js"
   },
   "dependencies": {
+    "@edv4h/russell-plugin-killswitch-pg": "workspace:*",
     "@edv4h/russell-plugin-memory-pg": "workspace:*"
   },
   "devDependencies": {

@@ -14,6 +14,7 @@
     "@edv4h/russell-core": "workspace:*",
     "@edv4h/russell-migrate": "workspace:*",
     "@edv4h/russell-plugin-audit-pg": "workspace:*",
+    "@edv4h/russell-plugin-killswitch-pg": "workspace:*",
     "@edv4h/russell-plugin-memory-inmem": "workspace:*",
     "@edv4h/russell-plugin-memory-pg": "workspace:*",
     "@edv4h/russell-plugin-model-claude": "workspace:*",

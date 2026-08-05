@@ -21,10 +21,11 @@ import {
   runMigrations,
 } from "@edv4h/russell-migrate";
 import { AUDIT_MIGRATIONS } from "@edv4h/russell-plugin-audit-pg";
+import { KILLSWITCH_MIGRATIONS } from "@edv4h/russell-plugin-killswitch-pg";
 import { MEMORY_MIGRATIONS } from "@edv4h/russell-plugin-memory-pg";
 
 /** スポンジプリセットが使うテーブル群。プラグインを増やしたらここに足す。 */
-const SETS: MigrationSet[] = [AUDIT_MIGRATIONS, MEMORY_MIGRATIONS];
+const SETS: MigrationSet[] = [AUDIT_MIGRATIONS, KILLSWITCH_MIGRATIONS, MEMORY_MIGRATIONS];
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);

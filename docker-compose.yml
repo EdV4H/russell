@@ -38,8 +38,11 @@ services:
     environment:
       DATABASE_URL: postgres://russell:russell@db:5432/russell
       RUSSELL_MODE: dryrun
+      # レベル3（別経路）。1 で完全沈黙。DB を読まないので DB 障害時にも効く（§12-7）
       RUSSELL_KILL: "0"
-      # ANTHROPIC_API_KEY / SLACK_* は .env から渡す（本番は Secret Manager）
+      # ANTHROPIC_API_KEY / SLACK_* / RUSSELL_KILL_OPERATORS / RUSSELL_ADMIN_CHANNEL は
+      # .env から渡す（本番は Secret Manager）。RUSSELL_KILL_OPERATORS が未設定だと
+      # `/russell start`（解除）は誰も実行できない（fail-closed）。
     env_file:
       - path: .env
         required: false
