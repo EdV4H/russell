@@ -45,6 +45,15 @@ import type {
 } from "@edv4h/russell-shared";
 import { MEMORY_SERVICE } from "@edv4h/russell-shared";
 import { createAuditLog } from "./audit.js";
+import { createFreezeGate } from "./freeze.js";
+
+/**
+ * 凍結中（レベル1/2）に mention へ返す唯一の文。
+ * 「今止まってます」を返せる方が親切・状況説明できる、という決定（kill-switch.md 2026-07-23）。
+ * モデルを通さない固定文にしているのは、凍結中に生成を走らせないため。
+ */
+export const FROZEN_NOTICE =
+  "いま止まっています（キルスイッチ発動中）。再開は運用担当者の解除を待ってください。";
 
 export interface AgentConfig {
   agentId: string;
@@ -107,7 +116,8 @@ type PolicyDecision = { allowed: true } | { allowed: false; reason: string };
 /**
  * Policy Gate の決定論的原値。
  * - 効果分類が未申告のツールは default deny。
- * - killswitch が最優先（true なら全 external を遮断）。
+ * - killswitch が最優先（完全沈黙なら read も含めて全遮断）。
+ * - 凍結中（`/russell stop`）は状態を変える行為を止める。read は状態を変えないので通す。
  * - fail-closed: 判定に必要な情報が無ければ deny 側へ倒す。
  *   監査ログが残せない（audit degraded）ときも、read 以外は deny する（§12-7
  *   「承認記録が読めないとき外部送信・書き込みをしない」の書き込み側）。
@@ -130,12 +140,19 @@ function createPolicyGate(runtime: AgentRuntime, audit: AuditRegistry) {
     },
   };
 
-  /** ツール実行前にコアが必ず通す判定。P0 では read/internal_write のみ自動許可。 */
-  function decide(toolName: string): PolicyDecision {
-    if (runtime.killSwitch()) return { allowed: false, reason: "killswitch" }; // 最優先
+  /**
+   * ツール実行前にコアが必ず通す判定。P0 では read/internal_write のみ自動許可。
+   * 凍結の再検査を含むので非同期（§5.1「副作用の直前に再検査」）。
+   */
+  async function decide(toolName: string): Promise<PolicyDecision> {
+    const freeze = await runtime.freezeLevel();
+    if (freeze === "silent") return { allowed: false, reason: "killswitch" }; // 最優先
     const effect = effects.get(toolName);
     if (!effect) return { allowed: false, reason: "effect_undeclared" }; // default deny
     if (effect === "read") return { allowed: true };
+    // 凍結中（レベル1/2）は状態を変える行為をしない。read だけ残すのは
+    // 「最低限の応答は残す」（kill-switch.md 決定 2026-07-23）を成り立たせるため。
+    if (freeze === "stopped") return { allowed: false, reason: "stopped" };
     // 監査が残せない状態で副作用を起こさない（fail-closed）。read は状態を変えないので許可。
     if (!audit.healthy()) return { allowed: false, reason: "audit_degraded" };
     if (effect === "internal_write") return { allowed: true };
@@ -196,12 +213,16 @@ export async function createAgent(
   const services = createServiceRegistry();
 
   let currentMode: Mode = config.mode ?? "dryrun";
+  // 凍結判定（§12-4）。通常経路（/russell stop）は services 越しの capability、
+  // 別経路（env）はここで直接見る。詳細は freeze.ts。
+  const freezeLevel = createFreezeGate(config.agentId, services, events);
   const runtime: AgentRuntime = {
     agentId: config.agentId,
     configVersion: config.configVersion,
     mode: () => currentMode,
     // fail-closed の別経路: DB を読めなくても効く env フラグ（docs: kill-switch.md）
     killSwitch: () => process.env.RUSSELL_KILL === "1",
+    freezeLevel,
   };
 
   // 2. 監査ログ（§3.1）→ Policy Gate 原値。順序は load-bearing:
@@ -279,7 +300,7 @@ export async function createAgent(
     input: unknown,
     trustLabel: TrustLabel,
   ): Promise<unknown> {
-    const decision = policyGate.decide(name);
+    const decision = await policyGate.decide(name);
     if (!decision.allowed) {
       await auditLog.registry.record({
         actor: runtime.agentId,
@@ -339,11 +360,30 @@ export async function createAgent(
 
   const modelId = config.model ?? [...modelsMap.keys()][0];
 
+  /** 凍結中（レベル1/2）の最低限の応答。記憶もモデルも触らず、状況だけ返す。 */
+  async function replyFrozen(msg: InboundMessage): Promise<void> {
+    const surface = surfaces.get(msg.surfaceId);
+    if (!surface) return;
+    // 送信は外部 I/O なので、他と同じく**残ってから**送る（fail-closed, §12-7）。
+    const audited = await auditLog.registry.record({
+      actor: msg.author,
+      action: "turn.frozen",
+      payload: { surfaceId: msg.surfaceId, contextId: msg.contextId },
+      trustLabel: msg.trustLabel,
+    });
+    if (!audited) return;
+    await surface.send({ contextId: msg.contextId, text: FROZEN_NOTICE });
+  }
+
   /** 1 ターン: 記憶読出し→文脈構築→モデル→応答→（記憶書込みはツール経由）。 */
   async function handleInbound(msg: InboundMessage): Promise<void> {
-    if (runtime.killSwitch()) return; // fail-closed: 凍結中は何もしない（監査も外部I/Oも走らせない）
+    // 凍結の再検査（§5.1）。silent = 完全沈黙で、監査も外部 I/O も走らせない。
+    const freeze = await runtime.freezeLevel();
+    if (freeze === "silent") return;
     // P0 は mention のみ応答（自発性なし）
     if (!msg.isMention) return;
+    // stopped = 自発行動は凍結、mention には「止まっている」ことだけ返す（§12-4 レベル1/2）。
+    if (freeze === "stopped") return await replyFrozen(msg);
 
     // 受信を監査に残す。本文は入れない（機微情報を監査へ流さない, A1-5）。
     // ここが残せないならターンごと中止する。以降には記憶読出しもモデル呼び出しもあり、
@@ -416,6 +456,18 @@ export async function createAgent(
     const surface = surfaces.get(msg.surfaceId);
     const text = memAck ? `${memAck} ${replyText}` : replyText;
     if (!surface) return;
+    // 副作用の直前にキルスイッチを再検査する（§5.1）。ターンの途中で `/russell stop` が
+    // 入ったらここで止まる——モデル呼び出しの間に発動されるのが実際に多いケース。
+    if ((await runtime.freezeLevel()) !== "none") {
+      await auditLog.registry.record({
+        actor: runtime.agentId,
+        action: "surface.send.suppressed",
+        payload: { surfaceId: msg.surfaceId, contextId: msg.contextId, reason: "killswitch" },
+        trustLabel: "trusted",
+      });
+      events.emit("turn:frozen", { contextId: msg.contextId });
+      return;
+    }
     // 送信は external_send 相当。監査が残せないなら送らない（fail-closed, §12-7）。
     if (!auditLog.registry.healthy()) {
       events.emit("turn:error", new Error("audit degraded: 応答送信を抑止しました"));

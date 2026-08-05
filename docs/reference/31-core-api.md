@@ -53,7 +53,10 @@ export interface AgentHandle {
 ## モードとキルスイッチ
 
 - `runtime.mode()` は `off / dryrun / live`。副作用（投稿・書込み）の**直前に再検査**する（設計書§5.1）。
-- `runtime.killSwitch()` は DB 障害時にも効く別経路（env フラグ / プロセスシグナル）を含む。engaged なら全自発行動を凍結。
+- `runtime.freezeLevel()` は `none / stopped / silent` を返す。通常経路（`/russell stop` → DB）と
+  別経路（env `RUSSELL_KILL`）の両方を畳んだ値で、**副作用の直前に毎回読む**（キャッシュしない）。
+  読めないときは `silent` に倒れる（fail-closed）。契約と段階の意味は [`35-killswitch.md`](./35-killswitch.md)。
+- `runtime.killSwitch()` は別経路（env フラグ）だけを見る同期判定。**DB を読まない**ので DB 障害時にも必ず効く。
 - `dryrun` では Finding 導出・文面生成まで行い、投稿はログ・管理チャンネルのみ（live の dedup 状態を汚さない）。
 
 ## 監査ログ（event_log, §3.1）
@@ -70,6 +73,8 @@ export interface AgentHandle {
 | `model.requested` | agentId | 起因した入力のラベル | モデル呼び出しの**前**（外部 I/O・課金対象のため） |
 | `model.completed` | agentId | 起因した入力のラベル | モデル応答生成後 |
 | `surface.send` | agentId | trusted | 送信の**前** |
+| `surface.send.suppressed` | agentId | trusted | 送信の直前の再検査で凍結が判明し、送らなかった（§12-4） |
+| `turn.frozen` | 発言者 | 受信メッセージのラベル | 凍結中の mention に固定文だけ返した |
 | `surface.send.result` | agentId | trusted | 送信結果が `succeeded` 以外（`rejected` / `unknown`）だったとき |
 | `turn.failed` | agentId | 起因した入力のラベル | ターンが例外で落ちた |
 | `mode.changed` | agentId | trusted | off/dryrun/live の変更の**前**（記録できなければ切り替えない, §6.1） |

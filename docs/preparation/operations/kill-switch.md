@@ -35,7 +35,7 @@
 
 | レベル | 方法 | 範囲 | 効き方 |
 |---|---|---|---|
-| 1. 個体単位・通常経路 | Slack で `/russell stop <個体名>` | その個体の全自発行動を凍結 | DB 経由。副作用の直前に再検査（§5.1） |
+| 1. 個体単位・通常経路 | Slack で `/russell stop`（別個体は `/russell stop --agent=<個体名>`） | その個体の全自発行動を凍結 | DB 経由。副作用の直前に再検査（§5.1） |
 | 2. 全体・通常経路 | `/russell stop --all` | 全個体を凍結 | DB 経由 |
 | 3. 全体・別経路（fail-closed） | **環境変数フラグ `RUSSELL_KILL=1`** を立ててデプロイ/再起動、またはプロセスシグナル | 全個体・DB 障害時にも効く | env/シグナル。DB を読めなくても発火（§12-7） |
 
@@ -59,6 +59,12 @@
 
 > [!IMPORTANT] **決定（2026-07-23）: 凍結粒度と env フラグを確定。** レベル1/2（`/russell stop`）は**自発行動のみ凍結し mention への最低限の応答は残す**（「今止まってます」を返せる方が親切・状況説明できる）。レベル3（`RUSSELL_KILL=1` / シグナル）は**完全沈黙**（fail-closed の最終手段）。env フラグ名 = `RUSSELL_KILL`。
 >
-> [!TODO] 残: DB 障害時の別経路（`RUSSELL_KILL` / シグナル）が確実に効くことの起動テスト（§12-7）を実装フェーズで実施。
+> [!NOTE] **実装済み（2026-08-05）。** 契約と挙動は [`../../reference/35-killswitch.md`](../../reference/35-killswitch.md)。運用に効く差分:
+>
+> - **解除できるのは env `RUSSELL_KILL_OPERATORS`（Slack user id のカンマ区切り）にいる人だけ。未設定なら誰も解除できない。** 発動は誰でもできる（この1枚の「発動に承認は要らない」をそのまま実装）
+> - `RUSSELL_ADMIN_CHANNEL` を設定すると発動・解除が自動でそのチャンネルに流れる（下の連絡フロー）
+> - `/russell stop <個体名>` は自分の個体名のときだけ通る。曖昧な語（`/russell stop spam` など）は**理由**として扱い、**自分を止める**側に倒れる。別個体を止めるときは `--agent=<個体名>`
+> - **凍結状態が読めないときは完全沈黙**（`/russell status` も含めて応答しない）。DB 障害では自動的に止まる側に倒れる
+> - `RUSSELL_KILL` の別経路が確実に効くことは起動テストで確認済み（`apps/agent/test/killswitch.test.ts`: DB を1度も読まずに沈黙する）。**プロセスシグナル経路は未実装**で、レベル3の発動には再起動が要る
 
 関連: [`incident-response.md`](./incident-response.md) / [`ownership-and-approval.md`](./ownership-and-approval.md) / [`../infra/setup-checklist.md`](../infra/setup-checklist.md) / [`../dogfooding/plan.md`](../dogfooding/plan.md)（切る基準）

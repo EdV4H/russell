@@ -7,6 +7,7 @@
  * 要 DATABASE_URL（app と同じ Postgres を参照）。
  */
 
+import { isFrozen } from "@edv4h/russell-plugin-killswitch-pg";
 import { runConsolidation } from "@edv4h/russell-plugin-memory-pg";
 
 async function main(): Promise<void> {
@@ -15,6 +16,13 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const agentId = process.env.RUSSELL_AGENT_ID ?? "bob";
+
+  // 夜間バッチは自発行動そのものなので、凍結中は走らせない（§12-4）。
+  // app とは別プロセス＝別経路なので、ここでも独立に確かめる必要がある。
+  if (await isFrozen(agentId)) {
+    console.log("[worker] キルスイッチ発動中のためコンソリデーションを実行しません。");
+    return;
+  }
   // autoMigrate は渡さない＝起動時に DDL を流さない（§11）。未適用なら throw して止まる。
   const result = await runConsolidation({ agentId });
 

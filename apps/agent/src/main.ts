@@ -10,6 +10,7 @@
 
 import { createAgent } from "@edv4h/russell-core";
 import { createPgAuditPlugin } from "@edv4h/russell-plugin-audit-pg";
+import { createPgKillSwitchPlugin } from "@edv4h/russell-plugin-killswitch-pg";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import { createPgMemoryPlugin } from "@edv4h/russell-plugin-memory-pg";
 import { createClaudeModelPlugin } from "@edv4h/russell-plugin-model-claude";
@@ -37,9 +38,12 @@ const BOB: Temperament = {
 /**
  * スポンジプリセットが Bob 用に組むプラグイン配列。
  * 配列順は load-bearing（provider を consumer より前に）:
- *   audit → services/memory → models → surfaces。
+ *   audit → killswitch → services/memory → models → surfaces。
  *
  * audit が先頭なのは、以降のプラグインの setup 中に起きる記録も残すため。
+ * killswitch がその次なのは、凍結状態が読めるようになってから他を立てるため
+ * （通信面が立った時点で `/russell stop` が効く状態になっている）。
+ * DATABASE_URL が無い（オフライン stack）ときは通常経路を持たない＝env（レベル3）だけが効く。
  * DATABASE_URL が無い（オフライン stack）ときは sink 無し = コアのインメモリ監査のみになる。
  * 本番構成（Postgres あり）では必ず event_log へ落ちる。
  *
@@ -48,7 +52,7 @@ const BOB: Temperament = {
  */
 function assembleSpongePlugins(): RussellPlugin[] {
   return [
-    ...(usePg ? [createPgAuditPlugin()] : []),
+    ...(usePg ? [createPgAuditPlugin(), createPgKillSwitchPlugin()] : []),
     usePg ? createPgMemoryPlugin() : createInMemoryMemoryPlugin(),
     useClaude ? createClaudeModelPlugin() : createEchoModelPlugin(),
     useSlack ? createSlackSurfacePlugin() : createCliSurfacePlugin({ displayName: BOB.name }),

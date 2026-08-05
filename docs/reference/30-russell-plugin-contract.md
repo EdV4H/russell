@@ -42,7 +42,8 @@ export interface AgentContext {
     agentId: string;
     configVersion: string;             // 実行開始時に pin
     mode: () => "off" | "dryrun" | "live";
-    killSwitch: () => boolean;         // env/シグナル別経路を含む
+    killSwitch: () => boolean;         // 別経路（env）だけを見る同期判定。DB を読まない
+    freezeLevel: () => Promise<"none" | "stopped" | "silent">;  // 通常経路（/russell stop）込み
   };
 }
 ```

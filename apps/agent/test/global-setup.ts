@@ -7,13 +7,16 @@
 
 import { createMigrationPool, runMigrations } from "@edv4h/russell-migrate";
 import { AUDIT_MIGRATIONS } from "@edv4h/russell-plugin-audit-pg";
+import { KILLSWITCH_MIGRATIONS } from "@edv4h/russell-plugin-killswitch-pg";
 import { MEMORY_MIGRATIONS } from "@edv4h/russell-plugin-memory-pg";
 
 export async function setup(): Promise<void> {
   if (!process.env.DATABASE_URL) return;
   const pool = createMigrationPool();
   try {
-    await runMigrations(pool, [AUDIT_MIGRATIONS, MEMORY_MIGRATIONS], { through: "contract" });
+    await runMigrations(pool, [AUDIT_MIGRATIONS, KILLSWITCH_MIGRATIONS, MEMORY_MIGRATIONS], {
+      through: "contract",
+    });
   } finally {
     await pool.end();
   }

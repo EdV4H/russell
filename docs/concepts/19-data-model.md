@@ -132,6 +132,22 @@ CREATE TABLE event_log (
 );
 ```
 
+## キルスイッチ（§12-4）
+
+```sql
+-- 凍結状態：/russell stop（レベル1/2）の通常経路。現在の状態だけを持ち、履歴は event_log にある
+CREATE TABLE agent_stops (
+  target TEXT PRIMARY KEY,          -- 個体 id、または '*'（全体停止）
+  stopped BOOLEAN NOT NULL,
+  by_actor TEXT NOT NULL,           -- 発動/解除した人（Slack user id 等）
+  reason TEXT,                      -- 運用記録。監査 payload には入れない（A1-5）
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+別経路（レベル3 `RUSSELL_KILL=1`）は**このテーブルを読まない**。実装は
+[`../reference/35-killswitch.md`](../reference/35-killswitch.md)。
+
 ## 気質・設定（§6.1）
 
 ```sql
@@ -228,6 +244,7 @@ allowlist との接続は [`15-policy-gate-and-security.md`](./15-policy-gate-an
 | `routines` | §3.1 | 習慣（dispatcher 登録簿） |
 | `interests` | §3.1 | 関心プロファイル |
 | `event_log` | §3.1 | 監査ログ（追記専用・trust_label） |
+| `agent_stops` | §12-4 | キルスイッチの凍結状態（`/russell stop`） |
 | `temperament` | §6.1 | 気質（グローバル設定） |
 | `channel_settings` | §6.1 | チャンネル別上書き |
 | `findings` | §6.2 | Finding（気づきの永続レコード） |
