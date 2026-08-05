@@ -21,6 +21,10 @@ export type RussellTeardown = () => void | Promise<void>;
 - 状態は `setup` 内のクロージャに持つ（プラグインオブジェクトのプロパティに置かない）。
 - クリーンアップは `setup` の戻り値で返す。
 - 公開は `createXxxPlugin(options?)` ファクトリ（新鮮なインスタンスを返す）。
+- **自分が持つ接続（DB プール・WebSocket 等）のエラーは自分で受ける。** `pg.Pool` は
+  `error` リスナが無いと idle 接続が切れただけで unhandled 'error' event になり、
+  **個体のプロセスごと落ちる**（DB の再起動・フェイルオーバのたびに死ぬ）。落とすのではなく
+  ログに出し、判定は次のクエリの失敗に委ねる（そこで fail-closed へ倒れる, §12-7）。
 
 ## AgentContext
 
