@@ -19,6 +19,7 @@ import type {
   OutboundMessage,
   ScopedPreApproval,
 } from "./domain.js";
+import type { FreezeLevel } from "./killswitch.js";
 import type { ModelRequest, ModelResponse } from "./runtime.js";
 
 export type RussellTeardown = () => void | Promise<void>;
@@ -53,8 +54,16 @@ export interface AgentRuntime {
   agentId: string;
   configVersion: string;
   mode(): Mode;
-  /** DB 障害時にも効く別経路（env/シグナル）を含む。 */
+  /**
+   * 別経路（レベル3, env `RUSSELL_KILL=1`）だけを見る同期判定。**DB を読まない**ので
+   * DB 障害時にも必ず効く（§12-7）。true なら完全沈黙。
+   */
   killSwitch(): boolean;
+  /**
+   * 通常経路（`/russell stop`）も含めた現在の凍結段階（§12-4）。
+   * 副作用の直前に毎回呼ぶ（§5.1）。読めないときは `silent` に倒れる（fail-closed）。
+   */
+  freezeLevel(): Promise<FreezeLevel>;
 }
 
 // --- surfaces（通信面。Slack/CLI/Web はここに register する一プラグイン） ---
