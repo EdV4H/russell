@@ -35,7 +35,8 @@ export interface AgentHandle {
 
 ## 破棄シーケンス
 
-`destroy()` は収集した teardown を **LIFO** で実行。surface の購読解除・MCP接続クローズ・イベント購読解除など各プラグインの後始末が呼ばれる。
+`destroy()` はまず**実行中のターンを待つ**（上限5秒）。待たずに片付けると surface も接続プールも
+先に閉じてしまい、終了直前のターンだけが黙って消える。その後、収集した teardown を **LIFO** で実行。surface の購読解除・MCP接続クローズ・イベント購読解除など各プラグインの後始末が呼ばれる。
 
 ## 配列順の規約（load-bearing）
 

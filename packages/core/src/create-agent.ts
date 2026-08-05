@@ -55,6 +55,9 @@ import { createFreezeGate } from "./freeze.js";
 export const FROZEN_NOTICE =
   "いま止まっています（キルスイッチ発動中）。再開は運用担当者の解除を待ってください。";
 
+/** `destroy()` が実行中のターンを待つ上限。これを超えたターンは諦めて片付けに進む。 */
+const DRAIN_TIMEOUT_MS = 5_000;
+
 export interface AgentConfig {
   agentId: string;
   configVersion: string;
@@ -531,6 +534,15 @@ export async function createAgent(
   return {
     ctx,
     async destroy() {
+      // 実行中のターンを待ってから片付ける。待たずに teardown するとプールも surface も
+      // 閉じてしまい、**終了直前のターンだけが黙って消える**（`echo ... | pnpm dev` のように
+      // 入力の直後に EOF が来る経路で顕著）。ハングしたターンで終われなくならないよう上限付き。
+      await Promise.race([
+        Promise.allSettled([...turnQueues.values()]),
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, DRAIN_TIMEOUT_MS).unref();
+        }),
+      ]);
       // 停止も監査に残す。sink（プラグイン）の teardown より前に記録する。
       await auditLog.registry.record({
         actor: runtime.agentId,

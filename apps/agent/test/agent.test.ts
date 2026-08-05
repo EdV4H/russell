@@ -113,6 +113,33 @@ test("キルスイッチ（RUSSELL_KILL=1）で自発/応答が凍結する（§
   }
 });
 
+test("destroy() は実行中のターンを待ってから片付ける", async () => {
+  const s = captureSurface();
+  // モデル応答に時間がかかる状況を作る（実際は DB 往復や API 呼び出しがここに入る）
+  const slowModel: RussellPlugin = {
+    id: "slow-model",
+    name: "slow model",
+    setup(ctx) {
+      return ctx.models.register({
+        id: "echo",
+        async complete() {
+          await new Promise((r) => setTimeout(r, 50));
+          return { text: "遅れて返事" };
+        },
+      });
+    },
+  };
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    [createInMemoryMemoryPlugin(), slowModel, s.plugin],
+  );
+
+  s.push("こんにちは");
+  await agent.destroy(); // drain しないと surface を先に外してしまい、応答が消える
+
+  expect(s.sent).toEqual(["遅れて返事"]);
+});
+
 test("echo モデルは決定論的（質問と平叙で応答が変わる）", async () => {
   let provider: ModelProvider | undefined;
   const fakeCtx = {
