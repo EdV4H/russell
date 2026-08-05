@@ -67,9 +67,19 @@ function captureSurface() {
   return { plugin, sent, push };
 }
 
-const drain = async () => {
-  for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
-};
+/**
+ * 送信が n 件に達するまで待つ。1ターンに DB 往復（凍結の再検査・監査の追記）が挟まるので、
+ * ティック数を固定して待つと遅い環境（CI）で取りこぼす。
+ */
+async function waitForSends(sent: string[], n: number, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (sent.length < n) {
+    if (Date.now() > deadline) {
+      throw new Error(`送信が ${n} 件に達しませんでした（${sent.length} 件）`);
+    }
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
 
 /** 追記が必ず失敗する sink。監査が壊れている状況を作る。 */
 const failingAuditPlugin: RussellPlugin = {
@@ -112,8 +122,7 @@ describe.skipIf(!DB)("killswitch-pg（DATABASE_URL 必須）", () => {
 
     // 稼働中は普通に応答する
     s.push("こんにちは");
-    await drain();
-    expect(s.sent.length).toBe(1);
+    await waitForSends(s.sent, 1);
     expect(s.sent[0]).not.toBe(FROZEN_NOTICE);
 
     // 別プロセス（= 別の接続）から発動しても効くことを、DB を直接触って確かめる
@@ -124,13 +133,13 @@ describe.skipIf(!DB)("killswitch-pg（DATABASE_URL 必須）", () => {
     );
 
     s.push("まだ動いてる？");
-    await drain();
+    await waitForSends(s.sent, 2);
     expect(s.sent.at(-1)).toBe(FROZEN_NOTICE);
 
     // 解除すれば戻る（同じ個体・同じプロセス）
     await cap.resume({ agentId, scope: "agent", by: "u-ops" });
     s.push("戻った？");
-    await drain();
+    await waitForSends(s.sent, 3);
     expect(s.sent.at(-1)).not.toBe(FROZEN_NOTICE);
 
     await agent.destroy();
