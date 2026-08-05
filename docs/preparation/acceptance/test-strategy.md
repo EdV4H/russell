@@ -122,7 +122,7 @@
 - [ ] 全装備／プラグインが [`equipment-conformance-suite.md`](./equipment-conformance-suite.md) を通過
 - [x] Policy Gate: 未許可・未分類・未知リソースが default-deny（§9.2・§12） — `apps/agent/test/audit.test.ts`（`policy.denied` / `effect_undeclared`）
 - [x] fail-closed: ポリシー／承認記録／キルスイッチが読めないとき外部送信・書き込みをしない（§12-7） — 監査 sink 全滅時に `read` 以外を deny し応答送信も止める（同テスト）
-- [ ] キルスイッチ: `/russell stop` + env フラグで全自発行動を即凍結、DB 障害時も別経路で効く（§12-4/-7） — env `RUSSELL_KILL` は実装済（`agent.test.ts`）。**`/russell stop` 経路が未実装**
+- [x] キルスイッチ: `/russell stop` + env フラグで全自発行動を即凍結、DB 障害時も別経路で効く（§12-4/-7） — 契約は [`../../reference/35-killswitch.md`](../../reference/35-killswitch.md)。`killswitch.test.ts` / `killswitch-command.test.ts` / `killswitch-pg.test.ts`
 - [x] 監査ログ: 全アクションが event_log に trust_label 付きで残る（§3.1・§12） — コアが記録・`@edv4h/russell-plugin-audit-pg` が追記専用で永続化。`audit.test.ts` / `audit-pg.test.ts`
 - [x] マイグレーション: 起動時 CREATE TABLE をせず expand→backfill→contract（§11） — `@edv4h/russell-migrate`（台帳 `schema_migrations`・`pnpm migrate`）。契約は [`../../reference/34-migrations.md`](../../reference/34-migrations.md)。`migrate.test.ts` / `migrate.offline.test.ts`
 
@@ -130,6 +130,13 @@
 > 監査ログの検証内容: 受信→ツール→モデル→送信の全アクションが `trust_label` 付きで残る／untrusted 起因の
 > ツール実行は untrusted のまま残る（§12-3）／payload に本文を入れない（A1-5）／`event_log` の UPDATE・DELETE を
 > DB 側のトリガで拒否（追記専用）。装備プラグイン追加時は conformance suite 側で同じ観点を再確認する。
+
+> [!NOTE]
+> キルスイッチの検証内容: 凍結中（レベル1/2）は mention に固定文だけ返し、モデルもツールも動かさない／
+> 凍結状態が**読めない**ときは完全沈黙（fail-closed）／ターンの途中で発動されたら送信の直前で止まる（§5.1）／
+> 凍結中の Policy Gate が `stopped` で拒否する／env（レベル3）が最優先で、**DB を1度も読まない**
+> （＝DB 障害時にも効く別経路, §12-7）／`/russell stop` が**プロセスを跨いで**効く／
+> 監査が壊れていても**止まれる**が**解除はできない**／曖昧な引数は「自分を止める」に倒れる。
 
 > [!NOTE]
 > マイグレーションの検証内容: 未適用の DB ではエージェントが**起動しない**（起動経路が DDL を流さない）／

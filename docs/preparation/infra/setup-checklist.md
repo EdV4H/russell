@@ -54,9 +54,10 @@
 
 - [ ] Slack アプリを作成し **Socket Mode を有効化**（サーバー inbound 開放不要, §10）
 - [ ] Bot Token Scopes を**最小権限**で申請（§10・§12-6）:
-  - `app_mentions:read` / `channels:history` / `im:history` / `chat:write` / `reactions:write`
+  - `app_mentions:read` / `channels:history` / `im:history` / `chat:write` / `reactions:write` / `commands`（`/russell` キルスイッチ用, §12-4）
   - それ以上は付けない。将来必要になったら都度追加申請
 - [ ] Event Subscriptions: `app_mention` / `message.im` / `message.channels`（参加チャンネル分, §10）
+- [ ] **Slash Command `/russell` を登録**（キルスイッチ, §12-4）。Socket Mode なので Request URL は不要。`commands` スコープが要る → [`../../reference/35-killswitch.md`](../../reference/35-killswitch.md)
 - [ ] Interactivity 有効化（HITL 承認の Block Kit ボタン, §10・§12-2）
 - [ ] **ワークスペース管理者の承認**を取得（アプリのインストール・スコープ承認は管理者権限）
 - [ ] App-Level Token（Socket Mode 用, `connections:write`）と Bot Token を発行 → シークレット管理へ
@@ -86,7 +87,9 @@
 - [ ] env（`.env` + デプロイ先の環境変数）か Secret Manager（GCP Secret Manager / Fly secrets 等）かを決める
   - 最低ライン: リポジトリに平文で置かない、開発/本番で別値
   - 推奨: Secret Manager でローテーション可能に
-- [ ] **キルスイッチの env 別経路を確保**（§12-4/§12-7）: DB 障害時にも効くよう、全体停止フラグは環境変数/プロセスシグナルで持つ（Secret Manager 依存にしない）→ [`../operations/kill-switch.md`](../operations/kill-switch.md)
+- [x] **キルスイッチの env 別経路を確保**（§12-4/§12-7）: DB 障害時にも効くよう、全体停止フラグは環境変数で持つ（Secret Manager 依存にしない）→ [`../operations/kill-switch.md`](../operations/kill-switch.md) / 実装は [`../../reference/35-killswitch.md`](../../reference/35-killswitch.md)。`RUSSELL_KILL=1` は DB を読まずに完全沈黙する（シグナル経路は未実装）
+- [ ] **`RUSSELL_KILL_OPERATORS` に解除権限者の Slack user id を設定**（§12-4）: 未設定だと `/russell start`（解除）が誰にも実行できない。権限者は [`../operations/ownership-and-approval.md`](../operations/ownership-and-approval.md) の担当者ロスターと一致させる
+- [ ] `RUSSELL_ADMIN_CHANNEL` に #russell-管理 のチャンネル ID を設定（キルスイッチ発動・解除の自動記録先）
 - [ ] DB ロールは**アプリ用ロールのみ**最小権限で発行（§12-6）
 
 > [!IMPORTANT] **決定（2026-07-24）: デプロイ先の Secret Manager で保管（GCP Secret Manager / Fly secrets 等・ローテーション可）、`RUSSELL_KILL` だけは方式によらず env/シグナル経路で別持ち（fail-closed, §12-7）。** リポに平文を置かない・開発/本番で別値。プラットフォーム非依存のため「Secret Manager から起動時に env へ注入」する薄い adapter にし、どのホストでも同じ読み出し口にする。DB ロールはアプリ用のみ最小権限（§12-6）。
