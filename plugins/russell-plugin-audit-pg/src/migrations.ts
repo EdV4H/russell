@@ -1,15 +1,26 @@
 /**
- * event_log のスキーマ（設計書 §3.1 / 19-data-model.md）。
+ * event_log のマイグレーション（設計書 §3.1 / 19-data-model.md）。
+ *
+ * 起動時には流れない。適用するのは `pnpm migrate`（＝ `@edv4h/russell-migrate` のランナー）だけで、
+ * プラグインの setup は「適用済みか」を確認するだけ（§11）。
  *
  * 追記専用を **DB 側で強制**する: UPDATE / DELETE / **TRUNCATE** をトリガで拒否する。
  * privacy-and-memory-policy の `"event_log": "append_only"` は運用規約ではなく制約として実装する。
  * TRUNCATE は行トリガを迂回するので、文トリガで明示的に塞ぐ（これが無いと全行消せてしまう）。
  * （retention は将来パーティション DROP で行う。行単位の削除は許さない。）
  *
- * ※ 本番は「起動時 CREATE TABLE をしない」（§11）。この SQL は dev/test の autoMigrate 用。
- *   expand→backfill→contract のマイグレーションツール導入は別 PR（横断ゲート2）。
+ * ※ 適用済みの SQL は**書き換えない**（checksum で検出して止まる）。変更は新しい版を足す。
  */
-export const AUDIT_SCHEMA_SQL = `
+
+import type { MigrationSet } from "@edv4h/russell-migrate";
+
+export const AUDIT_MIGRATIONS: MigrationSet = {
+  namespace: "audit-pg",
+  migrations: [
+    {
+      id: "0001_event_log",
+      phase: "expand",
+      sql: `
 CREATE TABLE IF NOT EXISTS event_log (
   id BIGSERIAL PRIMARY KEY,
   ts TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -34,4 +45,7 @@ DROP TRIGGER IF EXISTS event_log_no_mutate ON event_log;
 CREATE TRIGGER event_log_no_mutate
   BEFORE UPDATE OR DELETE OR TRUNCATE ON event_log
   FOR EACH STATEMENT EXECUTE FUNCTION event_log_append_only();
-`;
+`,
+    },
+  ],
+};

@@ -10,14 +10,18 @@
  * 失敗は握り潰さず throw する。コアはそれを検知して fail-closed へ倒す（§12-7）。
  */
 
+import { assertAutoMigrateAllowed, assertSchemaReady, runMigrations } from "@edv4h/russell-migrate";
 import type { AgentContext, AuditEvent, RussellPlugin } from "@edv4h/russell-shared";
 import pg from "pg";
-import { AUDIT_SCHEMA_SQL } from "./schema.js";
+import { AUDIT_MIGRATIONS } from "./migrations.js";
 
 export interface PgAuditOptions {
   /** 接続文字列。未指定なら env DATABASE_URL。 */
   connectionString?: string;
-  /** dev/test 用にスキーマを起動時作成する（本番は false=マイグレーションツールに委ねる, §11）。 */
+  /**
+   * dev/test 用に起動時マイグレーションを走らせる。本番（NODE_ENV=production）では拒否される。
+   * 既定 false ＝ **DDL は流さず「適用済みか」を確認するだけ**（§11）。
+   */
   autoMigrate?: boolean;
 }
 
@@ -30,8 +34,17 @@ export function createPgAuditPlugin(options: PgAuditOptions = {}): RussellPlugin
         connectionString: options.connectionString ?? process.env.DATABASE_URL,
       });
 
-      if (options.autoMigrate) {
-        await pool.query(AUDIT_SCHEMA_SQL);
+      // スキーマが未適用なら起動しない（fail-closed）。監査が落ちる先を先に確かめる。
+      try {
+        if (options.autoMigrate) {
+          assertAutoMigrateAllowed(AUDIT_MIGRATIONS.namespace);
+          await runMigrations(pool, [AUDIT_MIGRATIONS]);
+        } else {
+          await assertSchemaReady(pool, [AUDIT_MIGRATIONS]);
+        }
+      } catch (err) {
+        await pool.end();
+        throw err;
       }
 
       const unregister = ctx.audit.registerSink({

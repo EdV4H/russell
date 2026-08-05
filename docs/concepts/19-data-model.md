@@ -9,8 +9,10 @@ Russell の永続化は **Postgres + pgvector** に1本化する。記憶・キ�
 > コアや他プラグインは `ctx.services.get('memory')` 等の capability 経由で触れる。テーブルは実装詳細。
 
 > [!IMPORTANT]
-> **起動時 CREATE TABLE はしない**（§11）。スキーマ変更は Alembic 等の migration ツールで
+> **起動時 CREATE TABLE はしない**（§11）。スキーマ変更は `@edv4h/russell-migrate`（`pnpm migrate`）で
 > **expand → backfill → contract** の3段で行う（既存カラムを壊さず追加 → データ移行 → 旧構造撤去）。
+> 実装と手順は [`../reference/34-migrations.md`](../reference/34-migrations.md)。**本章の SQL は仕様の記述**であり、
+> 実際に流れるのは各プラグインの `migrations.ts` に置かれた版（適用済みは不変・checksum で改変を検出）。
 > 個体ごとの記憶分離のため、記憶テーブル群（notes/books/journal_entries/playbooks 等）には `agent_id` を付与する（§8.4）。
 
 ## 記憶（§3.1）

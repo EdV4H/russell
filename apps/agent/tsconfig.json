@@ -7,14 +7,35 @@
   },
   "include": ["src"],
   "references": [
-    { "path": "../../packages/shared" },
-    { "path": "../../packages/core" },
-    { "path": "../../plugins/russell-plugin-audit-pg" },
-    { "path": "../../plugins/russell-plugin-surface-cli" },
-    { "path": "../../plugins/russell-plugin-surface-slack" },
-    { "path": "../../plugins/russell-plugin-model-echo" },
-    { "path": "../../plugins/russell-plugin-model-claude" },
-    { "path": "../../plugins/russell-plugin-memory-inmem" },
-    { "path": "../../plugins/russell-plugin-memory-pg" }
+    {
+      "path": "../../packages/shared"
+    },
+    {
+      "path": "../../packages/migrate"
+    },
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../plugins/russell-plugin-audit-pg"
+    },
+    {
+      "path": "../../plugins/russell-plugin-surface-cli"
+    },
+    {
+      "path": "../../plugins/russell-plugin-surface-slack"
+    },
+    {
+      "path": "../../plugins/russell-plugin-model-echo"
+    },
+    {
+      "path": "../../plugins/russell-plugin-model-claude"
+    },
+    {
+      "path": "../../plugins/russell-plugin-memory-inmem"
+    },
+    {
+      "path": "../../plugins/russell-plugin-memory-pg"
+    }
   ]
 }

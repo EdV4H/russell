@@ -42,11 +42,14 @@ const BOB: Temperament = {
  * audit が先頭なのは、以降のプラグインの setup 中に起きる記録も残すため。
  * DATABASE_URL が無い（オフライン stack）ときは sink 無し = コアのインメモリ監査のみになる。
  * 本番構成（Postgres あり）では必ず event_log へ落ちる。
+ *
+ * pg プラグインは `autoMigrate` を渡さない＝**起動時に DDL を流さない**（§11）。
+ * スキーマが未適用なら setup が throw して起動しない（fail-closed）。先に `pnpm migrate` を実行する。
  */
 function assembleSpongePlugins(): RussellPlugin[] {
   return [
-    ...(usePg ? [createPgAuditPlugin({ autoMigrate: true })] : []),
-    usePg ? createPgMemoryPlugin({ autoMigrate: true }) : createInMemoryMemoryPlugin(),
+    ...(usePg ? [createPgAuditPlugin()] : []),
+    usePg ? createPgMemoryPlugin() : createInMemoryMemoryPlugin(),
     useClaude ? createClaudeModelPlugin() : createEchoModelPlugin(),
     useSlack ? createSlackSurfacePlugin() : createCliSurfacePlugin({ displayName: BOB.name }),
   ];

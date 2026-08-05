@@ -18,6 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@edv4h/russell-migrate": "workspace:*",
     "@edv4h/russell-shared": "workspace:*",
     "pg": "^8.13.0"
   },

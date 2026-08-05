@@ -16,6 +16,7 @@ russell/                                   # このリポジトリ
 ├── packages/
 │   ├── core/                          # @edv4h/russell-core   … カーネル createAgent + レジストリ
 │   ├── shared/                        # @edv4h/russell-shared … RussellPlugin/AgentContext/ドメイン型
+│   ├── migrate/                       # @edv4h/russell-migrate … マイグレーションランナー（§11）
 │   ├── store/                         # @edv4h/russell-store  … 個体実行状態・config_version（任意）
 │   └── mcp-helpers/                   # 装備プラグイン共通の MCP 接続ヘルパ（任意）
 ├── plugins/
@@ -43,8 +44,9 @@ russell/                                   # このリポジトリ
 |---|---|---|
 | `@edv4h/russell-core` | カーネル。`createAgent` + 全レジストリ実装 + 認知ループ + Policy Gate原値 | `russell-shared` のみ |
 | `@edv4h/russell-shared` | プラグイン契約・`AgentContext`・ドメイン型（Finding/Equipment/EffectClass/…）。全プラグインが import | ランタイム依存ほぼ無し |
+| `@edv4h/russell-migrate` | マイグレーションランナー（台帳 `schema_migrations`・expand→backfill→contract）。契約は [`34-migrations.md`](./34-migrations.md) | `pg` のみ（russell 依存なし） |
 | `@edv4h/russell-plugin-*` | 各機能。`createXxxPlugin()` を named export | `russell-shared`（+ 必要なら `russell-core`/helpers） |
-| `apps/agent` | プリセット→プラグイン配列→`createAgent` の組み立て（usketch の `apps/web/app.tsx` 相当） | 全プラグイン |
+| `apps/agent` | プリセット→プラグイン配列→`createAgent` の組み立て（usketch の `apps/web/app.tsx` 相当）。`src/migrate.ts` が `pnpm migrate` の入口 | 全プラグイン |
 
 ## プラグイン package.json の型（提案）
 
@@ -71,4 +73,4 @@ russell/                                   # このリポジトリ
 `@edv4h/russell-plugin-{kind}-{name}`。kind は `surface` / `equipment` / `memory` / `finding` / `habit` / `model` / `audit`。
 kind はコードで強制されない（契約に種別フィールドが無い）＝あくまで人間向けの整理。
 
-関連：[`../concepts/10-plugin-architecture.md`](../concepts/10-plugin-architecture.md), [`30-russell-plugin-contract.md`](./30-russell-plugin-contract.md)
+関連：[`../concepts/10-plugin-architecture.md`](../concepts/10-plugin-architecture.md), [`30-russell-plugin-contract.md`](./30-russell-plugin-contract.md), [`34-migrations.md`](./34-migrations.md)
