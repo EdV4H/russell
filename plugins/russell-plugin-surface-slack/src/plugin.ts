@@ -7,8 +7,10 @@
  *   （実結線時に厳密化する）。
  *
  * 責務:
- * - 受信: app_mention と DM(im) を InboundMessage(untrusted) に正規化して sink へ（§6.1/§12-3）
- * - 送信: contextId = "channel:thread_ts" をパースしてスレッドへ postMessage
+ * - 受信: app_mention と DM(im) を InboundMessage(untrusted) に正規化して sink へ（§6.1/§12-3）。
+ *   解釈は `inbound.ts`（Slack 接続なしにテストできる純関数）に置く
+ * - 送信: contextId = "channel:thread" をパースして返す（thread が空なら DM 直下）
+ * - リアクション: メモを取ったことを 📝 で可視化する（§10.1）
  * - キルスイッチ: スラッシュコマンド `/russell`（§12-4。docs/reference/35-killswitch.md）
  * - スコープは最小（app_mentions:read / channels:history / im:history / chat:write / reactions:write /
  *   commands, §10）
@@ -17,14 +19,20 @@
 import type {
   AgentContext,
   DeliveryResult,
-  InboundMessage,
   KillSwitchCapability,
   OutboundMessage,
+  ReactionRequest,
   RussellPlugin,
 } from "@edv4h/russell-shared";
 import { KILL_SWITCH_SERVICE } from "@edv4h/russell-shared";
 import bolt from "@slack/bolt";
+import { fromAppMention, fromDirectMessage, parseContextId } from "./inbound.js";
 import { operatorCheckFromEnv, runRussellCommand } from "./killswitch-command.js";
+
+/** リアクションの意味 → Slack の絵文字名。何で表すかは通信面の裁量（§10.1）。 */
+const REACTION_EMOJI: Record<ReactionRequest["kind"], string> = {
+  noted: "memo", // 📝「メモしました」
+};
 
 export interface SlackSurfaceOptions {
   botToken?: string;
@@ -34,10 +42,6 @@ export interface SlackSurfaceOptions {
    * 未設定なら流さない（kill-switch.md の「#russell-管理 に自動で記録」に対応）。
    */
   adminChannel?: string;
-}
-
-function stripMention(text: string): string {
-  return text.replace(/<@[^>]+>\s*/g, "").trim();
 }
 
 export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): RussellPlugin {
@@ -54,41 +58,13 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
       const adminChannel = options.adminChannel ?? process.env.RUSSELL_ADMIN_CHANNEL;
       const isOperator = operatorCheckFromEnv();
 
-      const emit = (
-        sink: (m: InboundMessage) => void,
-        channel: string,
-        thread: string,
-        author: string,
-        text: string,
-      ) =>
-        sink({
-          surfaceId: "slack",
-          contextId: `${channel}:${thread}`,
-          author,
-          text,
-          trustLabel: "untrusted", // 他者の Slack 発言は untrusted（§12-3）
-          isMention: true,
-        });
-
       const unregister = ctx.surfaces.register({
         id: "slack",
         async start(sink) {
           // @mention
           app.event("app_mention", async ({ event }) => {
-            const e = event as {
-              channel: string;
-              ts: string;
-              thread_ts?: string;
-              user?: string;
-              text?: string;
-            };
-            emit(
-              sink,
-              e.channel,
-              e.thread_ts ?? e.ts,
-              e.user ?? "unknown",
-              stripMention(e.text ?? ""),
-            );
+            // biome-ignore lint/suspicious/noExplicitAny: Bolt の event union は広い。解釈は inbound.ts に集約。
+            sink(fromAppMention(event as any));
           });
           // キルスイッチ（§12-4 レベル1/2）。認知ループを通さず、ここで直接処理する——
           // 「止めろ」がモデル呼び出しや Policy Gate に依存していては、暴走時に効かない。
@@ -112,26 +88,43 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
               });
             }
           });
-          // DM (message.im)
+          // DM (message.im)。bot 自身の発言をここで弾かないと、自分の返信に返事を続ける。
           app.message(async ({ message }) => {
-            // biome-ignore lint/suspicious/noExplicitAny: Bolt の message union を実結線時に厳密化する。
-            const m = message as any;
-            if (m.channel_type === "im" && typeof m.text === "string") {
-              emit(sink, m.channel, m.ts, m.user ?? "unknown", m.text);
-            }
+            // biome-ignore lint/suspicious/noExplicitAny: Bolt の message union は広い。解釈は inbound.ts に集約。
+            const msg = fromDirectMessage(message as any);
+            if (msg) sink(msg);
           });
           await app.start();
         },
         async send(out: OutboundMessage): Promise<DeliveryResult> {
-          const sep = out.contextId.indexOf(":");
-          const channel = sep >= 0 ? out.contextId.slice(0, sep) : out.contextId;
-          const thread = sep >= 0 ? out.contextId.slice(sep + 1) : undefined;
+          const { channel, thread } = parseContextId(out.contextId);
           try {
-            await app.client.chat.postMessage({ channel, thread_ts: thread, text: out.text });
+            // thread が空なら DM 直下。空文字を thread_ts に渡すと Slack が弾く。
+            await app.client.chat.postMessage({
+              channel,
+              thread_ts: thread || undefined,
+              text: out.text,
+            });
             return { status: "succeeded" };
           } catch {
             // タイムアウト等は unknown（blind retry しない, §9.2）
             return { status: "unknown" };
+          }
+        },
+        async react(req: ReactionRequest): Promise<DeliveryResult> {
+          const { channel } = parseContextId(req.contextId);
+          try {
+            await app.client.reactions.add({
+              channel,
+              timestamp: req.messageId,
+              name: REACTION_EMOJI[req.kind],
+            });
+            return { status: "succeeded" };
+          } catch (err) {
+            // 既に付いている（already_reacted）は成功と同じ。それ以外は結果を返して監査に残す。
+            const detail = err instanceof Error ? err.message : String(err);
+            if (detail.includes("already_reacted")) return { status: "succeeded" };
+            return { status: "unknown", detail };
           }
         },
       });
