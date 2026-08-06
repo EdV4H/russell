@@ -77,6 +77,8 @@ export interface AgentHandle {
 | `surface.send.suppressed` | agentId | trusted | 送信の直前の再検査で凍結が判明し、送らなかった（§12-4） |
 | `turn.frozen` | 発言者 | 受信メッセージのラベル | 凍結中の mention に固定文だけ返した |
 | `surface.send.result` | agentId | trusted | 送信結果が `succeeded` 以外（`rejected` / `unknown`）だったとき |
+| `surface.react` | agentId | trusted | メモを取ったことを発言に可視化する**前**（§10.1） |
+| `surface.react.result` | agentId | trusted | リアクションが失敗したとき（ターンは続ける） |
 | `turn.failed` | agentId | 起因した入力のラベル | ターンが例外で落ちた |
 | `mode.changed` | agentId | trusted | off/dryrun/live の変更の**前**（記録できなければ切り替えない, §6.1） |
 

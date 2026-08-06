@@ -63,6 +63,8 @@ export interface SurfaceDefinition {
   start(sink: (msg: InboundMessage) => void): Promise<void> | void;
   // 送信: スレッド/宛先へ発話。冪等キー対応
   send(out: OutboundMessage): Promise<DeliveryResult>;
+  // 意思表示: 「メモしました」等を発言に付ける（§10.1）。任意——対応しない通信面もある
+  react?(req: ReactionRequest): Promise<DeliveryResult>;
   // HITL: 承認要求を提示し結果を待つ（Slackなら Block Kit ボタン）
   requestApproval?(req: ApprovalRequest): Promise<ApprovalOutcome>;
   priority?: number;                   // 送信の競合時の勝者決定（既定 0）

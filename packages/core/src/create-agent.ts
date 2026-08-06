@@ -343,11 +343,54 @@ export async function createAgent(
     }
   }
 
+  /**
+   * 「メモしました」を発言そのものに可視化する（§10.1 の透明性）。
+   * 何で表すかは通信面が決める（Slack なら 📝）。対応しない通信面では何も起きない。
+   *
+   * 失敗してもターンは続ける。記憶はもう取れていて、これは見え方の問題だから——
+   * ただし黙って捨てはせず、結果を監査に残す。
+   */
+  async function reactNoted(msg: InboundMessage): Promise<void> {
+    const surface = surfaces.get(msg.surfaceId);
+    if (!surface?.react || !msg.messageId) return;
+    // ワークスペースから見える行為なので、他の送信と同じく**記録してから**行う。
+    const audited = await auditLog.registry.record({
+      actor: runtime.agentId,
+      action: "surface.react",
+      payload: { surfaceId: msg.surfaceId, contextId: msg.contextId, kind: "noted" },
+      trustLabel: "trusted",
+    });
+    if (!audited) return;
+    try {
+      const result = await surface.react({
+        contextId: msg.contextId,
+        messageId: msg.messageId,
+        kind: "noted",
+      });
+      if (result.status !== "succeeded") {
+        await auditLog.registry.record({
+          actor: runtime.agentId,
+          action: "surface.react.result",
+          payload: { surfaceId: msg.surfaceId, status: result.status, detail: result.detail },
+          trustLabel: "trusted",
+        });
+      }
+    } catch (err) {
+      await auditLog.registry.record({
+        actor: runtime.agentId,
+        action: "surface.react.result",
+        payload: { surfaceId: msg.surfaceId, status: "unknown", detail: String(err) },
+        trustLabel: "trusted",
+      });
+    }
+  }
+
   /** 「覚えておいて」「メモして」を自然言語コマンドとして解釈する（§10）。 */
   async function handleMemoryCommands(msg: InboundMessage): Promise<string | undefined> {
     if (/覚え(て|ておいて)|おぼえて/.test(msg.text)) {
       await invokeTool("shelf.add", { source: msg.contextId, card: msg.text }, msg.trustLabel);
       events.emit("memory:shelved", { contextId: msg.contextId });
+      await reactNoted(msg);
       return "覚えておきますね。";
     }
     if (/メモ(して|しといて)?/.test(msg.text)) {
@@ -356,6 +399,7 @@ export async function createAgent(
         { contextId: msg.contextId, content: msg.text },
         msg.trustLabel,
       );
+      await reactNoted(msg);
       return "ちょっとメモしますね。";
     }
     return undefined;

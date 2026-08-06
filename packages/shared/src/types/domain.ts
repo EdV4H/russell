@@ -65,7 +65,26 @@ export interface InboundMessage {
   text: string;
   trustLabel: TrustLabel;
   isMention: boolean;
+  /**
+   * その通信面での**この発言自身**の参照（Slack なら ts）。リアクションの付け先。
+   * contextId がスレッド単位なのに対し、これは1発言単位。任意（持てない通信面もある）。
+   */
+  messageId?: string;
   raw?: unknown;
+}
+
+/**
+ * リアクションの意味（§10.1 の透明性）。**絵文字ではなく意味を渡す**——
+ * 何で表すかは通信面の裁量（Slack なら 📝、CLI なら1行出す）。
+ */
+export type ReactionKind = "noted";
+
+/** リアクション要求（コア → surface）。 */
+export interface ReactionRequest {
+  contextId: string;
+  /** 対象の発言（`InboundMessage.messageId`）。 */
+  messageId: string;
+  kind: ReactionKind;
 }
 
 /** 送信メッセージ（コア → surface）。冪等キー対応。 */

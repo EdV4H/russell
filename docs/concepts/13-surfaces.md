@@ -35,6 +35,11 @@ surface プラグインは `ctx.surfaces.register(def)` で自己分類する。
 
 透明性のための出力先も Slack surface が担う: 日記の `#<個体名>-日報` 投稿、メモ取得時の「📝 メモしました」リアクション（§10.1）。
 
+> [!NOTE]
+> リアクションは契約上 `react?(req)` で、**コアは意味（`kind: "noted"`）だけを渡す**。何で表すかは通信面の裁量で、
+> Slack は 📝、CLI は1行の出力にしている。任意メソッドなので、対応しない通信面ではメモだけ成立して何も起きない。
+> 付け先は `contextId`（スレッド単位）ではなく `messageId`（発言単位）。
+
 ## 代替 surface（CLI / Web）
 
 同じ `SurfaceDefinition` 契約なので差し替え可能。
