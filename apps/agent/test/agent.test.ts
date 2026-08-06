@@ -10,6 +10,7 @@ import { createEchoModelPlugin } from "@edv4h/russell-plugin-model-echo";
 import type {
   InboundMessage,
   ModelProvider,
+  ReactionRequest,
   RussellPlugin,
   Temperament,
 } from "@edv4h/russell-shared";
@@ -24,9 +25,10 @@ const BOB: Temperament = {
   reaction_rate: 0.7,
 };
 
-/** テスト用の通信面。push で mention を注入し、send をキャプチャする。 */
-function captureSurface() {
+/** テスト用の通信面。push で mention を注入し、send / react をキャプチャする。 */
+function captureSurface(options: { react?: boolean } = {}) {
   const sent: string[] = [];
+  const reacted: ReactionRequest[] = [];
   let sink: ((m: InboundMessage) => void) | undefined;
   const plugin: RussellPlugin = {
     id: "fake",
@@ -41,10 +43,19 @@ function captureSurface() {
           sent.push(o.text);
           return { status: "succeeded" };
         },
+        // react は任意契約。false を渡すと「対応しない通信面」を再現する。
+        ...(options.react === false
+          ? {}
+          : {
+              async react(r: ReactionRequest) {
+                reacted.push(r);
+                return { status: "succeeded" as const };
+              },
+            }),
       });
     },
   };
-  const push = (text: string) =>
+  const push = (text: string, messageId?: string) =>
     sink?.({
       surfaceId: "fake",
       contextId: "t1",
@@ -52,8 +63,9 @@ function captureSurface() {
       text,
       trustLabel: "untrusted",
       isMention: true,
+      messageId,
     });
-  return { plugin, sent, push };
+  return { plugin, sent, reacted, push };
 }
 
 const drain = async () => {
@@ -111,6 +123,46 @@ test("キルスイッチ（RUSSELL_KILL=1）で自発/応答が凍結する（§
     // biome-ignore lint/performance/noDelete: env のクリーンアップは delete が正しい（= undefined は文字列 "undefined" になる）。
     delete process.env.RUSSELL_KILL;
   }
+});
+
+test("メモを取ったら、その発言に「メモしました」を可視化する（§10.1）", async () => {
+  const s = captureSurface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    offlinePlugins(s.plugin),
+  );
+
+  s.push("金曜の定例、覚えておいて", "m-1");
+  await drain();
+
+  // 発言単位（messageId）に付く。contextId はスレッド単位なので付け先にならない
+  expect(s.reacted).toEqual([{ contextId: "t1", messageId: "m-1", kind: "noted" }]);
+  // ワークスペースから見える行為なので監査にも残る
+  expect(agent.ctx.audit.recent().map((e) => e.action)).toContain("surface.react");
+
+  // メモを取らないターンでは増えない
+  s.push("こんにちは", "m-2");
+  await drain();
+  expect(s.reacted.length).toBe(1);
+
+  await agent.destroy();
+});
+
+test("react を実装しない通信面でも、メモ自体は成立する", async () => {
+  const s = captureSurface({ react: false });
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    offlinePlugins(s.plugin),
+  );
+
+  s.push("これ覚えておいて", "m-1");
+  await drain();
+
+  expect(s.sent.some((t) => t.includes("覚えておきます"))).toBe(true);
+  expect(agent.ctx.audit.recent().map((e) => e.action)).toContain("tool.invoked");
+  expect(agent.ctx.audit.recent().map((e) => e.action)).not.toContain("surface.react");
+
+  await agent.destroy();
 });
 
 test("destroy() は実行中のターンを待ってから片付ける", async () => {
