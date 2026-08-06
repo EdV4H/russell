@@ -1,0 +1,27 @@
+{
+  "name": "@edv4h/russell-plugin-model-claude-code",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "モデルプラグイン（開発用）。ローカルの Claude Code CLI を headless で呼ぶ。API キー不要・本番では拒否。ツールは全遮断（Policy Gate を迂回させない）。",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@edv4h/russell-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
