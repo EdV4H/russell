@@ -166,22 +166,35 @@ surface が正規化して扱うメッセージ。**受信は既定で `trust_la
 
 ```ts
 export interface InboundMessage {
-  surface: string;            // "slack" | "cli" | "web"
-  threadId: string;
+  surfaceId: string;          // "slack" | "cli" | "web"
+  contextId: string;          // 文脈の単位。Slack なら "channel:thread"（thread が空なら DM 直下）
+  author: string;
   text: string;
-  author: { id: string; isHuman: boolean };
-  trust_label: "untrusted" | "trusted";  // 外部由来は untrusted 固定
-  receivedAt: string;         // ISO8601
+  trustLabel: TrustLabel;     // 外部由来は untrusted 固定
+  isMention: boolean;
+  messageId?: string;         // この発言自身の参照。リアクションの付け先（Slack なら ts）
+  raw?: unknown;
 }
 
 export interface OutboundMessage {
-  surface: string;
-  threadId: string;
+  contextId: string;
   text: string;
-  idempotencyKey: string;     // 二重送信防止。blind retry しない
-  inReplyTo?: string;
+  idempotencyKey?: string;    // 二重送信防止。blind retry しない（未実装）
+}
+
+/** リアクションは**意味**を渡す。何で表すかは通信面の裁量（Slack なら 📝, §10.1）。 */
+export type ReactionKind = "noted";
+export interface ReactionRequest {
+  contextId: string;
+  messageId: string;
+  kind: ReactionKind;
 }
 ```
+
+> [!NOTE]
+> `contextId` は**文脈の単位**であって発言の単位ではない。Slack のスレッドや DM のチャンネルが1つの
+> `contextId` になり、記憶（notes）はここに紐づく。個々の発言を指したいとき（リアクション）は
+> `messageId` を使う。この2つを混ぜると DM で記憶が1発言ずつ孤立する（実際に起きた: #29）。
 
 ## 関連
 

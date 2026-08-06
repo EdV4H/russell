@@ -30,6 +30,7 @@ export function createCliSurfacePlugin(options: CliSurfaceOptions = {}): Russell
       // 数秒かかる）を待つ間に届いた行が、行ハンドラを付ける前に流れて消える。
       // 対話では気づかないが、`echo "..." | pnpm dev` のようなパイプでは最初の行が落ちる。
       let rl: ReturnType<typeof createInterface> | undefined;
+      let lineNo = 0;
 
       const unregister = ctx.surfaces.register({
         id: "cli",
@@ -43,6 +44,7 @@ export function createCliSurfacePlugin(options: CliSurfaceOptions = {}): Russell
               return;
             }
             // CLI 入力は操作者本人＝trusted。全行を mention として扱う。
+            lineNo += 1;
             sink({
               surfaceId: "cli",
               contextId: "cli",
@@ -50,6 +52,7 @@ export function createCliSurfacePlugin(options: CliSurfaceOptions = {}): Russell
               text,
               trustLabel: "trusted",
               isMention: true,
+              messageId: `line-${lineNo}`,
             });
           });
           rl.on("close", () => {
@@ -58,6 +61,11 @@ export function createCliSurfacePlugin(options: CliSurfaceOptions = {}): Russell
         },
         async send(out: OutboundMessage): Promise<DeliveryResult> {
           process.stdout.write(`\n${name}> ${out.text}\n> `);
+          return { status: "succeeded" };
+        },
+        // Slack の 📝 リアクションに相当する可視化（§10.1）。CLI では1行で出す。
+        async react(): Promise<DeliveryResult> {
+          process.stdout.write("\n📝 メモしました\n> ");
           return { status: "succeeded" };
         },
       });

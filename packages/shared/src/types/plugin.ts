@@ -17,6 +17,7 @@ import type {
   InboundMessage,
   Mode,
   OutboundMessage,
+  ReactionRequest,
   ScopedPreApproval,
 } from "./domain.js";
 import type { FreezeLevel } from "./killswitch.js";
@@ -71,6 +72,11 @@ export interface SurfaceDefinition {
   id: string;
   start(sink: (msg: InboundMessage) => void): Promise<void> | void;
   send(out: OutboundMessage): Promise<DeliveryResult>;
+  /**
+   * 発言に対する意思表示（§10.1「📝 メモしました」）。対応しない通信面は実装しなくてよい。
+   * 何で表すかは通信面が決める（コアは意味だけ渡す）。
+   */
+  react?(req: ReactionRequest): Promise<DeliveryResult>;
   requestApproval?(req: ApprovalRequest): Promise<ApprovalOutcome>;
   priority?: number;
 }
