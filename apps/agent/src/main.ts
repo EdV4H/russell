@@ -14,6 +14,7 @@ import { createPgKillSwitchPlugin } from "@edv4h/russell-plugin-killswitch-pg";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import { createPgMemoryPlugin } from "@edv4h/russell-plugin-memory-pg";
 import { createClaudeModelPlugin } from "@edv4h/russell-plugin-model-claude";
+import { createClaudeCodeModelPlugin } from "@edv4h/russell-plugin-model-claude-code";
 import { createEchoModelPlugin } from "@edv4h/russell-plugin-model-echo";
 import { createCliSurfacePlugin } from "@edv4h/russell-plugin-surface-cli";
 import { createSlackSurfacePlugin } from "@edv4h/russell-plugin-surface-slack";
@@ -21,8 +22,19 @@ import type { RussellPlugin, Temperament } from "@edv4h/russell-shared";
 
 // env に応じて本番プラグイン/オフライン stub を選ぶ。
 const useClaude = Boolean(process.env.ANTHROPIC_API_KEY); // ANTHROPIC_API_KEY → 実 Claude、無ければ echo
+// 手元の Claude Code CLI をモデルに使う開発用の経路。キーが無くても本物と会話できる。
+// **明示的な opt-in のみ**（勝手に CLI プロセスを起動しない）。本番では拒否される。
+const useClaudeCode = !useClaude && process.env.RUSSELL_MODEL === "claude-code";
 const usePg = Boolean(process.env.DATABASE_URL); // DATABASE_URL → Postgres、無ければインメモリ
 const useSlack = Boolean(process.env.SLACK_BOT_TOKEN && process.env.SLACK_APP_TOKEN); // → Slack、無ければ CLI
+
+/** 会話に使うモデル。上から順に「キーがある / 手元の CLI を使う / ダミー」。 */
+function modelPlugin(): RussellPlugin {
+  if (useClaude) return createClaudeModelPlugin();
+  if (useClaudeCode) return createClaudeCodeModelPlugin();
+  return createEchoModelPlugin();
+}
+const MODEL_ID = useClaude ? "claude" : useClaudeCode ? "claude-code" : "echo";
 
 // 個体1号 Bob（docs/preparation/initial-data/temperament-unit-01.md の確定値）
 const BOB: Temperament = {
@@ -54,7 +66,7 @@ function assembleSpongePlugins(): RussellPlugin[] {
   return [
     ...(usePg ? [createPgAuditPlugin(), createPgKillSwitchPlugin()] : []),
     usePg ? createPgMemoryPlugin() : createInMemoryMemoryPlugin(),
-    useClaude ? createClaudeModelPlugin() : createEchoModelPlugin(),
+    modelPlugin(),
     useSlack ? createSlackSurfacePlugin() : createCliSurfacePlugin({ displayName: BOB.name }),
   ];
 }
@@ -66,7 +78,7 @@ async function main(): Promise<void> {
       configVersion: "v0",
       temperament: BOB,
       mode: "dryrun", // §6.5: off → dryrun → live
-      model: useClaude ? "claude" : "echo",
+      model: MODEL_ID,
     },
     assembleSpongePlugins(),
   );

@@ -31,7 +31,8 @@ russell/                                   # このリポジトリ
 │   ├── russell-plugin-finding-deadline-risk/
 │   ├── russell-plugin-finding-platform-bug/   # セルフイシュー（§6.4）
 │   ├── russell-plugin-habit-morning/
-│   └── russell-plugin-model-claude/
+│   ├── russell-plugin-model-claude/
+│   └── russell-plugin-model-claude-code/    # 開発用。手元の Claude Code CLI（[36](./36-model-providers.md)）
 ├── examples/
 │   └── russell-plugin-acme-equipment/     # 外注/サードパーティ用テンプレート
 └── apps/
@@ -47,6 +48,7 @@ russell/                                   # このリポジトリ
 | `@edv4h/russell-shared` | プラグイン契約・`AgentContext`・ドメイン型（Finding/Equipment/EffectClass/…）。全プラグインが import | ランタイム依存ほぼ無し |
 | `@edv4h/russell-migrate` | マイグレーションランナー（台帳 `schema_migrations`・expand→backfill→contract）。契約は [`34-migrations.md`](./34-migrations.md) | `pg` のみ（russell 依存なし） |
 | `@edv4h/russell-plugin-killswitch-pg` | キルスイッチ通常経路（レベル1/2）。契約は [`35-killswitch.md`](./35-killswitch.md) | `russell-shared` / `russell-migrate` / `pg` |
+| `@edv4h/russell-plugin-model-*` | 会話に使うモデル。echo（ダミー）/ claude-code（開発用・手元の CLI）/ claude（本番）。選び方と隔離は [`36-model-providers.md`](./36-model-providers.md) | `russell-shared`（+ SDK） |
 | `@edv4h/russell-plugin-*` | 各機能。`createXxxPlugin()` を named export | `russell-shared`（+ 必要なら `russell-core`/helpers） |
 | `apps/agent` | プリセット→プラグイン配列→`createAgent` の組み立て（usketch の `apps/web/app.tsx` 相当）。`src/migrate.ts` が `pnpm migrate` の入口 | 全プラグイン |
 

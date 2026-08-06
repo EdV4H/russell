@@ -35,6 +35,9 @@
       "path": "../../plugins/russell-plugin-model-claude"
     },
     {
+      "path": "../../plugins/russell-plugin-model-claude-code"
+    },
+    {
       "path": "../../plugins/russell-plugin-memory-inmem"
     },
     {

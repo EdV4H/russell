@@ -18,6 +18,7 @@
     "@edv4h/russell-plugin-memory-inmem": "workspace:*",
     "@edv4h/russell-plugin-memory-pg": "workspace:*",
     "@edv4h/russell-plugin-model-claude": "workspace:*",
+    "@edv4h/russell-plugin-model-claude-code": "workspace:*",
     "@edv4h/russell-plugin-model-echo": "workspace:*",
     "@edv4h/russell-plugin-surface-cli": "workspace:*",
     "@edv4h/russell-plugin-surface-slack": "workspace:*",
