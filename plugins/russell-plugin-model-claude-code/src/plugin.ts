@@ -77,8 +77,7 @@ function runClaude(
       finish(() =>
         reject(
           new Error(
-            `model-claude-code: CLI を起動できません（${cliPath}）: ${err.message}。` +
-              "Claude Code がインストールされ、ログイン済みか確認してください。",
+            `model-claude-code: CLI を起動できません（${cliPath}）: ${err.message}。Claude Code がインストールされ、ログイン済みか確認してください。`,
           ),
         ),
       );
