@@ -34,9 +34,23 @@ const BOB: Temperament = {
 
 let dbSeq = 0;
 
+/**
+ * このテスト専用のプール。**接続断を無視するハンドラを必ず付ける。**
+ *
+ * 後片付けの `DROP DATABASE ... WITH (FORCE)` は接続を強制的に切るので、その瞬間に
+ * プールが 'error' を出す。リスナが無いと unhandled 'error' event になり、
+ * テスト自体は全部通っているのに vitest が異常終了する（タイミング次第で再現するので
+ * CI が時々落ちる形になる）。ここでの接続断は**意図した後片付け**なので握り潰してよい。
+ */
+function testPool(connectionString: string): pg.Pool {
+  const pool = new pg.Pool({ connectionString });
+  pool.on("error", () => {});
+  return pool;
+}
+
 /** 空の DB を作って渡し、終わったら落とす。 */
 async function withEmptyDatabase(fn: (url: string) => Promise<void>): Promise<void> {
-  const admin = new pg.Pool({ connectionString: DB });
+  const admin = testPool(DB as string);
   const name = `russell_mig_${process.pid}_${dbSeq++}`;
   await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
   await admin.query(`CREATE DATABASE ${name}`);
@@ -79,7 +93,7 @@ describe.skipIf(!DB)("マイグレーション（DATABASE_URL 必須）", () => 
       ).rejects.toThrow(/pnpm migrate/);
 
       // 起動に失敗した後もテーブルは作られていない
-      const pool = new pg.Pool({ connectionString: url });
+      const pool = testPool(url);
       try {
         const res = await pool.query<{ reg: string | null }>(
           "SELECT to_regclass('event_log') AS reg",
@@ -93,8 +107,8 @@ describe.skipIf(!DB)("マイグレーション（DATABASE_URL 必須）", () => 
 
   test("適用すると起動できる。適用は冪等で、同時実行でも二重適用しない", async () => {
     await withEmptyDatabase(async (url) => {
-      const poolA = new pg.Pool({ connectionString: url });
-      const poolB = new pg.Pool({ connectionString: url });
+      const poolA = testPool(url);
+      const poolB = testPool(url);
       try {
         // 同時に走らせても advisory lock で直列化され、合計で1回ずつしか適用されない
         const [a, b] = await Promise.all([
@@ -129,7 +143,7 @@ describe.skipIf(!DB)("マイグレーション（DATABASE_URL 必須）", () => 
 
   test("適用済みマイグレーションを書き換えたら止まる", async () => {
     await withEmptyDatabase(async (url) => {
-      const pool = new pg.Pool({ connectionString: url });
+      const pool = testPool(url);
       try {
         await runMigrations(pool, [AUDIT_MIGRATIONS]);
 
@@ -152,7 +166,7 @@ describe.skipIf(!DB)("マイグレーション（DATABASE_URL 必須）", () => 
 
   test("expand→backfill→contract が3段で回る（contract は明示指定が要る）", async () => {
     await withEmptyDatabase(async (url) => {
-      const pool = new pg.Pool({ connectionString: url });
+      const pool = testPool(url);
       try {
         // 1段目: 旧構造のまま新構造を足す
         const first = await runMigrations(pool, [RENAME_DEMO], { through: "expand" });
