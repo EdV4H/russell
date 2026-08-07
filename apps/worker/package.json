@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "consolidate": "node dist/main.js"
+    "consolidate": "node --env-file-if-exists=../../.env dist/main.js"
   },
   "dependencies": {
     "@edv4h/russell-plugin-killswitch-pg": "workspace:*",
