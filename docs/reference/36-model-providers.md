@@ -14,6 +14,9 @@
 
 ```bash
 RUSSELL_MODEL=claude-code pnpm --filter @edv4h/russell-agent dev
+
+# モデルは既定 opus。dev のループを速くしたいとき:
+RUSSELL_MODEL=claude-code RUSSELL_CLAUDE_CODE_MODEL=sonnet pnpm --filter @edv4h/russell-agent dev
 ```
 
 ## `claude-code` が開発用に限られる理由

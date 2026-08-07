@@ -31,7 +31,9 @@ const useSlack = Boolean(process.env.SLACK_BOT_TOKEN && process.env.SLACK_APP_TO
 /** 会話に使うモデル。上から順に「キーがある / 手元の CLI を使う / ダミー」。 */
 function modelPlugin(): RussellPlugin {
   if (useClaude) return createClaudeModelPlugin();
-  if (useClaudeCode) return createClaudeCodeModelPlugin();
+  // 既定は opus。dev のループを速くしたいときは RUSSELL_CLAUDE_CODE_MODEL=sonnet
+  if (useClaudeCode)
+    return createClaudeCodeModelPlugin({ model: process.env.RUSSELL_CLAUDE_CODE_MODEL });
   return createEchoModelPlugin();
 }
 const MODEL_ID = useClaude ? "claude" : useClaudeCode ? "claude-code" : "echo";
