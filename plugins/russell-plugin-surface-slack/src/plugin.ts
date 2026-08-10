@@ -30,8 +30,8 @@ import {
   allowedChannelsFromEnv,
   excludedChannelsFromEnv,
   fromAppMention,
-  fromChannelMessage,
   fromDirectMessage,
+  inspectChannelMessage,
   parseContextId,
 } from "./inbound.js";
 import { operatorCheckFromEnv, runRussellCommand } from "./killswitch-command.js";
@@ -76,6 +76,8 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
       const isOperator = operatorCheckFromEnv();
       const allowedChannels = options.allowedChannels ?? allowedChannelsFromEnv();
       const excludedChannels = options.excludedChannels ?? excludedChannelsFromEnv();
+      /** `RUSSELL_SLACK_DEBUG=1` で受信の採用/破棄を1行ずつ出す。既定は無効。 */
+      const debug = process.env.RUSSELL_SLACK_DEBUG === "1";
       /**
        * Bob が発言したスレッド。ここに載っているスレッドの続きだけを拾う（inbound.ts）。
        *
@@ -119,15 +121,28 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
           app.message(async ({ message, context }) => {
             // biome-ignore lint/suspicious/noExplicitAny: Bolt の message union は広い。解釈は inbound.ts に集約。
             const m = message as any;
-            const msg =
-              fromDirectMessage(m) ??
-              fromChannelMessage(m, {
-                allowedChannels,
-                excludedChannels,
-                activeThreads,
-                botUserId: context.botUserId,
-              });
-            if (msg) sink(msg);
+            const dm = fromDirectMessage(m);
+            if (dm) {
+              if (debug) console.log(`[slack] 採用 dm ${dm.contextId}`);
+              sink(dm);
+              return;
+            }
+            const seen = inspectChannelMessage(m, {
+              allowedChannels,
+              excludedChannels,
+              activeThreads,
+              botUserId: context.botUserId,
+            });
+            // **届いたのに捨てた**ことを見えるようにする。反応しないときに
+            // 「Slack が配っていない」のか「こちらが捨てた」のかを切り分けられないと詰む。
+            if (debug) {
+              console.log(
+                seen.accepted
+                  ? `[slack] 採用 thread ${seen.accepted.contextId}`
+                  : `[slack] 破棄 ${seen.dropped} ch=${m?.channel} thread=${m?.thread_ts ?? "-"}`,
+              );
+            }
+            if (seen.accepted) sink(seen.accepted);
           });
           await app.start();
         },

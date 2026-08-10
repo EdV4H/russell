@@ -11,6 +11,7 @@ import {
   fromAppMention,
   fromChannelMessage,
   fromDirectMessage,
+  inspectChannelMessage,
   parseContextId,
   toContextId,
 } from "@edv4h/russell-plugin-surface-slack";
@@ -199,4 +200,30 @@ test("スレッド追従: bot 自身の発言と編集は拾わない", () => {
   expect(fromChannelMessage({ ...base, channel_type: "group", text: "続き" }, ctx)?.contextId).toBe(
     "C1:100.1",
   );
+});
+
+test("捨てた理由を言える（無反応の切り分けのため）", () => {
+  const ctx = { activeThreads: new Set(["C1:100.1"]), botUserId: "UBOB" };
+  const base = { channel: "C1", channel_type: "channel", ts: "1.1", user: "U1" };
+
+  expect(inspectChannelMessage({ ...base, text: "雑談" }, ctx).dropped).toBe("not_in_thread");
+  expect(inspectChannelMessage({ ...base, thread_ts: "999.9", text: "内輪" }, ctx).dropped).toBe(
+    "thread_not_joined",
+  );
+  expect(
+    inspectChannelMessage({ ...base, thread_ts: "100.1", text: "<@UBOB> ねえ" }, ctx).dropped,
+  ).toBe("handled_by_app_mention");
+  expect(
+    inspectChannelMessage({ ...base, thread_ts: "100.1", text: "続き", bot_id: "B1" }, ctx).dropped,
+  ).toBe("bot_or_subtype");
+  expect(
+    inspectChannelMessage(
+      { ...base, thread_ts: "100.1", text: "続き" },
+      { ...ctx, excludedChannels: new Set(["C1"]) },
+    ).dropped,
+  ).toBe("excluded_channel");
+  // 採用されたときは理由が無い
+  const ok = inspectChannelMessage({ ...base, thread_ts: "100.1", text: "続き" }, ctx);
+  expect(ok.dropped).toBeUndefined();
+  expect(ok.accepted?.contextId).toBe("C1:100.1");
 });
