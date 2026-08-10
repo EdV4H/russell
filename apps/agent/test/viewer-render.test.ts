@@ -5,7 +5,14 @@
  * 本棚に `<script>` を仕込まれて、それを見に行った人の画面で動く、が最悪の筋。
  */
 
-import { escapeHtml, formatCell, renderPage, renderTable, truncate } from "@edv4h/russell-viewer";
+import {
+  escapeHtml,
+  formatCell,
+  renderAgentPicker,
+  renderPage,
+  renderTable,
+  truncate,
+} from "@edv4h/russell-viewer";
 import { expect, test } from "vitest";
 
 test("本文に仕込まれた HTML は実行されない", () => {
@@ -50,4 +57,44 @@ test("ページには全部の箱への導線があり、いまいる箱が分�
   }
   expect(page).toContain('<a href="/books" class=on>');
   expect(page).toContain("読み取り専用");
+});
+
+test("個体を選べる。選んだ個体は箱を移っても保たれる", () => {
+  const page = renderPage("/books", "本棚", "説明", "<p>中身</p>", {
+    agent: "bob",
+    agents: ["alice", "bob"],
+  });
+
+  // 個体の切り替え（全個体＋各個体）
+  expect(page).toContain('<a href="/books?agent=alice">alice</a>');
+  expect(page).toContain('<a href="/books?agent=bob" class=on>bob</a>');
+  expect(page).toContain('<a href="/books">全個体</a>');
+  // 箱を移っても bob のまま
+  expect(page).toContain('<a href="/notes?agent=bob"');
+  expect(page).toContain('<a href="/?agent=bob"');
+});
+
+test("個体が選ばれていなければ、箱のリンクに絞り込みは付かない", () => {
+  const page = renderPage("/books", "本棚", "説明", "", { agents: ["bob"] });
+
+  // 箱への導線は素の URL（全個体を見ている）
+  expect(page).toContain('<a href="/notes"');
+  expect(page).toContain('<a href="/"');
+  // 「全個体」が選択状態。切り替え先としての ?agent=bob は当然ある
+  expect(page).toContain('<a href="/books" class=on>全個体</a>');
+  expect(page).toContain('<a href="/books?agent=bob">bob</a>');
+});
+
+test("個体名は URL に載るのでエスケープする", () => {
+  // 個体 ID は本来 [a-z0-9_-] だが、表示側は入力を信じない
+  const page = renderPage("/books", "本棚", "", "", {
+    agent: '"><script>x</script>',
+    agents: ['"><script>x</script>'],
+  });
+  expect(page).not.toContain("<script>x</script>");
+  expect(page).toContain("%3E%3Cscript%3E"); // href は URL エンコード
+});
+
+test("個体がいなければ切り替えは出さない", () => {
+  expect(renderAgentPicker([], undefined, "/books")).toBe("");
 });

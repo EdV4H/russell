@@ -22,6 +22,10 @@ interface View {
   title: string;
   description: string;
   columns: string[];
+  /**
+   * 個体で絞る SQL。**個体 ID は URL から来る untrusted な値**なので、
+   * 文字列連結せずプレースホルダで渡す。`$1` が null なら全個体。
+   */
   sql: string;
 }
 
@@ -31,36 +35,39 @@ const VIEWS: Record<string, View> = {
     ...pick("/notes"),
     columns: ["created_at", "agent_id", "context_id", "content", "expires_at", "consolidated"],
     sql: `SELECT created_at, agent_id, context_id, content, expires_at, consolidated
-            FROM notes ORDER BY id DESC LIMIT ${LIMIT}`,
+            FROM notes WHERE ($1::text IS NULL OR agent_id = $1) ORDER BY id DESC LIMIT ${LIMIT}`,
   },
   "/books": {
     ...pick("/books"),
     columns: ["created_at", "agent_id", "title", "card", "shelf", "strength", "source"],
     sql: `SELECT created_at, agent_id, title, card, shelf, round(strength::numeric, 2) AS strength, source
-            FROM books WHERE status = 'active' ORDER BY id DESC LIMIT ${LIMIT}`,
+            FROM books WHERE status = 'active' AND ($1::text IS NULL OR agent_id = $1) ORDER BY id DESC LIMIT ${LIMIT}`,
   },
   "/archive": {
     ...pick("/archive"),
     columns: ["created_at", "agent_id", "title", "card", "strength"],
     sql: `SELECT created_at, agent_id, title, card, round(strength::numeric, 2) AS strength
-            FROM books WHERE status = 'archived' ORDER BY id DESC LIMIT ${LIMIT}`,
+            FROM books WHERE status = 'archived' AND ($1::text IS NULL OR agent_id = $1) ORDER BY id DESC LIMIT ${LIMIT}`,
   },
   "/journal": {
     ...pick("/journal"),
     columns: ["entry_date", "agent_id", "narrative", "events"],
     sql: `SELECT entry_date, agent_id, narrative, events
-            FROM journal_entries ORDER BY entry_date DESC LIMIT ${LIMIT}`,
+            FROM journal_entries WHERE ($1::text IS NULL OR agent_id = $1) ORDER BY entry_date DESC LIMIT ${LIMIT}`,
   },
   "/events": {
     ...pick("/events"),
     columns: ["ts", "agent_id", "actor", "action", "trust_label", "payload"],
     sql: `SELECT ts, agent_id, actor, action, trust_label, payload
-            FROM event_log ORDER BY id DESC LIMIT ${LIMIT}`,
+            FROM event_log WHERE ($1::text IS NULL OR agent_id = $1) ORDER BY id DESC LIMIT ${LIMIT}`,
   },
   "/stops": {
     ...pick("/stops"),
     columns: ["target", "stopped", "by_actor", "reason", "updated_at"],
-    sql: "SELECT target, stopped, by_actor, reason, updated_at FROM agent_stops ORDER BY updated_at DESC",
+    // 凍結だけは `target`。全体停止（`*`）はどの個体を見ているときも出す——
+    // 「この個体は止まっていない」と誤読させないため。
+    sql: `SELECT target, stopped, by_actor, reason, updated_at FROM agent_stops
+           WHERE ($1::text IS NULL OR target = $1 OR target = '*') ORDER BY updated_at DESC`,
   },
 };
 
@@ -69,15 +76,25 @@ function pick(path: string): { title: string; description: string } {
   return { title: box?.title ?? path, description: box?.description ?? "" };
 }
 
+/** 記憶を持っている個体の一覧。起動は必ず監査に残るので、そこから拾う。 */
+async function agentIds(pool: pg.Pool): Promise<string[]> {
+  const res = await pool.query<{ agent_id: string }>(
+    "SELECT DISTINCT agent_id FROM event_log ORDER BY agent_id",
+  );
+  return res.rows.map((r) => r.agent_id);
+}
+
 /** 概要。何がどれだけ入っているかを一目で。 */
-async function overview(pool: pg.Pool): Promise<string> {
-  const counts = await pool.query<{ box: string; n: string }>(`
-    SELECT 'メモ帳' AS box, count(*)::text AS n FROM notes
-    UNION ALL SELECT '本棚', count(*)::text FROM books WHERE status = 'active'
-    UNION ALL SELECT '書庫', count(*)::text FROM books WHERE status = 'archived'
-    UNION ALL SELECT '日記', count(*)::text FROM journal_entries
-    UNION ALL SELECT '監査ログ', count(*)::text FROM event_log
-    UNION ALL SELECT '凍結中', count(*)::text FROM agent_stops WHERE stopped`);
+async function overview(pool: pg.Pool, agent?: string): Promise<string> {
+  const counts = await pool.query<{ box: string; n: string }>(
+    `SELECT 'メモ帳' AS box, count(*)::text AS n FROM notes WHERE ($1::text IS NULL OR agent_id = $1)
+     UNION ALL SELECT '本棚', count(*)::text FROM books WHERE status = 'active' AND ($1::text IS NULL OR agent_id = $1)
+     UNION ALL SELECT '書庫', count(*)::text FROM books WHERE status = 'archived' AND ($1::text IS NULL OR agent_id = $1)
+     UNION ALL SELECT '日記', count(*)::text FROM journal_entries WHERE ($1::text IS NULL OR agent_id = $1)
+     UNION ALL SELECT '監査ログ', count(*)::text FROM event_log WHERE ($1::text IS NULL OR agent_id = $1)
+     UNION ALL SELECT '凍結中', count(*)::text FROM agent_stops WHERE stopped AND ($1::text IS NULL OR target = $1 OR target = '*')`,
+    [agent ?? null],
+  );
   const cards = counts.rows
     .map((r) => `<div><b>${escapeHtml(r.n)}</b>${escapeHtml(r.box)}</div>`)
     .join("");
@@ -94,26 +111,30 @@ async function main(): Promise<void> {
   pool.on("error", (err) => console.error("[viewer] Postgres 接続エラー:", err.message));
 
   const server = createServer(async (req, res) => {
-    const path = (req.url ?? "/").split("?")[0] ?? "/";
+    const url = new URL(req.url ?? "/", `http://${HOST}:${PORT}`);
+    const path = url.pathname;
+    const agent = url.searchParams.get("agent") || undefined;
     const send = (status: number, html: string) => {
       res.writeHead(status, { "content-type": "text/html; charset=utf-8" });
       res.end(html);
     };
     try {
+      const agents = await agentIds(pool);
+      const shell = { agent, agents };
       if (path === "/") {
-        send(200, renderPage("/", "Russell の記憶", "読み取り専用ビューア", await overview(pool)));
+        const body = await overview(pool, agent);
+        send(200, renderPage("/", "Russell の記憶", "読み取り専用ビューア", body, shell));
         return;
       }
       const view = VIEWS[path];
       if (!view) {
-        send(
-          404,
-          renderPage(path, "見つかりません", "", "<p class=empty>そのページはありません。</p>"),
-        );
+        const body = "<p class=empty>そのページはありません。</p>";
+        send(404, renderPage(path, "見つかりません", "", body, shell));
         return;
       }
-      const { rows } = await pool.query(view.sql);
-      send(200, renderPage(path, view.title, view.description, renderTable(view.columns, rows)));
+      const { rows } = await pool.query(view.sql, [agent ?? null]);
+      const body = renderTable(view.columns, rows);
+      send(200, renderPage(path, view.title, view.description, body, shell));
     } catch (err) {
       // 見えないより、見えない理由が見える方がよい。
       const detail = err instanceof Error ? err.message : String(err);

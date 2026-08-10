@@ -78,21 +78,55 @@ td { max-width: 60ch; overflow-wrap: anywhere; }
 footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12px; }
 .counts { display: flex; flex-wrap: wrap; gap: 12px 32px; margin-top: 16px; }
 .counts b { font-size: 22px; font-weight: 600; display: block; }
+nav.agents { margin-top: 8px; font-size: 13px; }
+nav.agents span { color: var(--muted); margin-right: 4px; }
 `;
+
+/**
+ * 個体の切り替え。記憶は個体間で共有しない（§8.4）ので、見る側も個体単位で見られる必要がある。
+ * `undefined` は「全個体」。
+ */
+export function renderAgentPicker(
+  agents: string[],
+  current: string | undefined,
+  path: string,
+): string {
+  if (agents.length === 0) return "";
+  const link = (label: string, agent?: string) => {
+    const href = agent ? `${path}?agent=${encodeURIComponent(agent)}` : path;
+    const on = agent === current ? " class=on" : "";
+    return `<a href="${escapeHtml(href)}"${on}>${escapeHtml(label)}</a>`;
+  };
+  return `<nav class=agents><span>個体:</span>${link("全個体")}${agents
+    .map((a) => link(a, a))
+    .join("")}</nav>`;
+}
+
+export interface PageOptions {
+  /** いま選ばれている個体。未指定なら全個体。 */
+  agent?: string;
+  /** 切り替え先の候補。 */
+  agents?: string[];
+}
 
 export function renderPage(
   current: string,
   title: string,
   description: string,
   body: string,
+  options: PageOptions = {},
 ): string {
+  // 箱を移っても個体の絞り込みは保つ。毎回選び直させない。
+  const suffix = options.agent ? `?agent=${encodeURIComponent(options.agent)}` : "";
   const nav = BOXES.map(
-    (b) => `<a href="${b.path}"${b.path === current ? " class=on" : ""}>${escapeHtml(b.title)}</a>`,
+    (b) =>
+      `<a href="${escapeHtml(`${b.path}${suffix}`)}"${b.path === current ? " class=on" : ""}>${escapeHtml(b.title)}</a>`,
   ).join("");
+  const picker = renderAgentPicker(options.agents ?? [], options.agent, current);
   return `<!doctype html><html lang=ja><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>${escapeHtml(title)} — Russell</title><style>${STYLE}</style></head><body>
-<header><h1>${escapeHtml(title)}</h1><nav><a href="/"${current === "/" ? " class=on" : ""}>概要</a>${nav}</nav></header>
+<header><h1>${escapeHtml(title)}</h1><nav><a href="${escapeHtml(`/${suffix}`)}"${current === "/" ? " class=on" : ""}>概要</a>${nav}</nav>${picker}</header>
 <p class=desc>${escapeHtml(description)}</p>
 ${body}
 <footer>読み取り専用。書き込みはしない。localhost にのみ待ち受ける（記憶の中身が出るため）。</footer>
