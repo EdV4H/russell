@@ -83,10 +83,17 @@ async function main(): Promise<void> {
     assembleSpongePlugins(),
   );
 
-  // CLI が閉じる（Ctrl-D / EOF）か SIGINT まで動かし、その後 LIFO で teardown。
+  // CLI が閉じる（Ctrl-D / EOF）か停止シグナルまで動かし、その後 LIFO で teardown。
+  //
+  // **SIGTERM も受ける。** プロセスマネージャ（docker stop / systemd / dev-down）が送るのは
+  // SIGINT ではなく SIGTERM で、受けていないと既定の即死になる。すると destroy() を通らず、
+  // `agent.stopped` が監査に残らないまま消える——記録上「起動したが停止していない個体」が
+  // 並び、どこまで動いていたのか後から言えなくなる。
   await new Promise<void>((resolve) => {
     agent.ctx.events.on("surface:cli:closed", () => resolve());
-    process.on("SIGINT", () => resolve());
+    for (const signal of ["SIGINT", "SIGTERM"] as const) {
+      process.once(signal, () => resolve());
+    }
   });
   await agent.destroy();
 }
