@@ -88,3 +88,94 @@ export function fromDirectMessage(m: SlackMessageEvent): InboundMessage | undefi
     messageId: m.ts,
   };
 }
+
+/**
+ * チャンネルのスレッド追従に必要な文脈。
+ *
+ * Slack のイベント購読は**種類単位でしか絞れない**ので、`message.channels` を購読すると
+ * 参加チャンネルの全発言が届く。届いたものをどこまで扱うかを決めるのがここ。
+ */
+export interface ChannelFollowContext {
+  /**
+   * 除外するチャンネル（ID）。ここに入れたチャンネルは、招待されていても追従しない。
+   * 機微なチャンネルに居させたいが会話には入ってほしくない、という場合の逃げ道。
+   */
+  excludedChannels?: ReadonlySet<string>;
+  /**
+   * 厳格モード。指定するとこのチャンネルだけに絞る（既定は指定なし＝招待されたチャンネル全部）。
+   *
+   * **opt-in の実体は Slack の招待。** privacy-and-memory-policy の「明示的に招待され」が
+   * それにあたり、Slack は参加していないチャンネルのイベントをそもそも配らない。
+   * 一方この allowlist は**データの到着を止めていない**（購読は種類単位でしか絞れないため、
+   * 参加チャンネルの発言は指定の有無に関わらず届く）ので、招待以上の安全は買えない。
+   * 招待のたびに設定と再起動を強いる割に得るものが無いので、既定にはしない。
+   */
+  allowedChannels?: ReadonlySet<string>;
+  /** Bob が既に発言したスレッド（contextId）。会話の続きだけを拾うための目印。 */
+  activeThreads: ReadonlySet<string>;
+  /** 自分の bot user id。mention は app_mention 側が拾うので、ここでは二重に処理しない。 */
+  botUserId?: string;
+}
+
+/**
+ * チャンネルの発言（`message.channels` / `message.groups`）。
+ * **拾うのは「Bob が参加しているスレッドの続き」だけ**で、それ以外は捨てる。
+ *
+ * 捨てる理由が3種類あるので順に:
+ * - 除外指定のチャンネル（または厳格モードの allowlist 外） … 入ってほしくない場所には入らない
+ * - スレッド外の発言 … チャンネルの雑談を拾い始めると「全部読んでいる」になる
+ * - Bob がまだ発言していないスレッド … 呼ばれてもいない会話に入っていかない
+ *
+ * mention を含む発言は `app_mention` でも届くので、ここでは捨てる（両方処理すると2回返信する）。
+ */
+export function fromChannelMessage(
+  m: SlackMessageEvent,
+  ctx: ChannelFollowContext,
+): InboundMessage | undefined {
+  if (m.channel_type !== "channel" && m.channel_type !== "group") return undefined;
+  if (m.bot_id || m.subtype) return undefined;
+  if (typeof m.text !== "string" || m.text.trim() === "") return undefined;
+  if (!m.channel || !m.ts) return undefined;
+  if (ctx.excludedChannels?.has(m.channel)) return undefined;
+  if (ctx.allowedChannels && !ctx.allowedChannels.has(m.channel)) return undefined;
+  if (!m.thread_ts) return undefined; // スレッド外は拾わない
+  if (ctx.botUserId && m.text.includes(`<@${ctx.botUserId}>`)) return undefined; // app_mention が拾う
+
+  const contextId = toContextId(m.channel, m.thread_ts);
+  if (!ctx.activeThreads.has(contextId)) return undefined;
+
+  return {
+    surfaceId: "slack",
+    contextId,
+    author: m.user ?? "unknown",
+    text: m.text,
+    trustLabel: "untrusted",
+    isMention: true, // 自分が参加しているスレッドの続き＝自分への発話として扱う
+    messageId: m.ts,
+  };
+}
+
+function idsFromEnv(raw: string | undefined): Set<string> | undefined {
+  const ids = (raw ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return ids.length > 0 ? new Set(ids) : undefined;
+}
+
+/** 除外チャンネル（env `RUSSELL_SLACK_EXCLUDE_CHANNELS`、カンマ区切り）。未設定なら除外なし。 */
+export function excludedChannelsFromEnv(
+  raw = process.env.RUSSELL_SLACK_EXCLUDE_CHANNELS,
+): Set<string> | undefined {
+  return idsFromEnv(raw);
+}
+
+/**
+ * 厳格モードの allowlist（env `RUSSELL_SLACK_CHANNELS`、カンマ区切り）。
+ * **未設定が既定** ＝ 招待されたチャンネルすべてで追従する。
+ */
+export function allowedChannelsFromEnv(
+  raw = process.env.RUSSELL_SLACK_CHANNELS,
+): Set<string> | undefined {
+  return idsFromEnv(raw);
+}
