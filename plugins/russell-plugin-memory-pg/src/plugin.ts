@@ -84,6 +84,7 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
 
       ctx.policy.declareEffect("note.write", "internal_write");
       ctx.policy.declareEffect("shelf.add", "internal_write");
+      ctx.policy.declareEffect("shelf.forget", "internal_write");
       ctx.policy.declareEffect("deep_recall", "read");
 
       const offNote = ctx.tools.register("note.write", {
@@ -112,6 +113,29 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
         },
       });
 
+      // 「忘れて」= L1（弱める）。strength を下限まで下げて書庫へ落とす。
+      // 物理削除（L2）は HITL 承認が前提（privacy-and-memory-policy §3）なので、
+      // それが入るまでは可逆なこの段階だけを提供する。**消したと言わない**ことが重要。
+      const offForget = ctx.tools.register("shelf.forget", {
+        name: "shelf.forget",
+        effect: "internal_write",
+        async run(input: { query: string }) {
+          const q = input.query ?? "";
+          if (q.trim() === "") return { status: "succeeded" as const, archived: 0, titles: [] };
+          const res = await pool.query<{ title: string }>(
+            `UPDATE books SET strength = 0, status = 'archived'
+              WHERE agent_id = $1 AND status = 'active' AND card ILIKE '%' || $2 || '%'
+              RETURNING title`,
+            [agentId, q],
+          );
+          return {
+            status: "succeeded" as const,
+            archived: res.rowCount ?? 0,
+            titles: res.rows.map((r) => r.title),
+          };
+        },
+      });
+
       const offRecall = ctx.tools.register("deep_recall", {
         name: "deep_recall",
         effect: "read",
@@ -129,6 +153,7 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
       return async () => {
         offNote();
         offShelf();
+        offForget();
         offRecall();
         await pool.end();
       };

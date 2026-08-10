@@ -452,8 +452,48 @@ export async function createAgent(
     }
   }
 
-  /** 「覚えておいて」「メモして」を自然言語コマンドとして解釈する（§10）。 */
+  /**
+   * 「忘れて」の判定。**否定形を巻き込まない**のが肝。
+   * 「絶対に忘れてはいけない」で記憶を捨て始めたら、道具として信用できない。
+   */
+  function asksToForget(text: string): boolean {
+    if (/忘れては|忘れないで|忘れずに|忘れないよう/.test(text)) return false;
+    return /忘れて|わすれて|忘れといて/.test(text);
+  }
+
+  /**
+   * 「◯◯のことは忘れて」から検索語（◯◯）を取り出す。
+   *
+   * 発言全文で本棚を引くと、当然どの本にも一致しない（本の中身は過去の発言で、
+   * 「忘れて」という依頼文とは別物だから）。依頼の言い回しを落として話題だけ残す。
+   *
+   * **これは当座の割り切り。** どの記憶を指しているかの判断は本来モデルの仕事で、
+   * メモを取るかどうかの判定（P0-3/P0-4）と同じ性質の課題。取り出せなければ
+   * 「見つからなかった」と言う——曖昧なまま広く消す方が害が大きい。
+   */
+  function forgetQuery(text: string): string {
+    const head = text.split(/忘れて|わすれて|忘れといて/)[0] ?? "";
+    return head
+      .replace(/[のっ]?(こと|件)?(に?つい)?て?[はをも]\s*$/u, "")
+      .replace(/[、。\s]+$/u, "")
+      .trim();
+  }
+
+  /** 「覚えておいて」「メモして」「忘れて」を自然言語コマンドとして解釈する（§10）。 */
   async function handleMemoryCommands(msg: InboundMessage): Promise<string | undefined> {
+    if (asksToForget(msg.text)) {
+      const query = forgetQuery(msg.text);
+      const result = (await invokeTool("shelf.forget", { query }, msg.trustLabel)) as {
+        archived?: number;
+      };
+      const archived = result?.archived ?? 0;
+      events.emit("memory:forgotten", { contextId: msg.contextId, archived });
+      // **消したとは言わない。** 実際にやったのは書庫落ち（L1）で、データは残っている
+      // （privacy-and-memory-policy §3）。できていないことをできたと言う方が害が大きい。
+      return archived > 0
+        ? `${archived}件を書庫に下げました。会話には出てきません（完全に消す場合は運用担当者へ）。`
+        : "それらしい記憶が本棚に見つかりませんでした。";
+    }
     if (/覚え(て|ておいて)|おぼえて/.test(msg.text)) {
       await invokeTool("shelf.add", { source: msg.contextId, card: msg.text }, msg.trustLabel);
       events.emit("memory:shelved", { contextId: msg.contextId });

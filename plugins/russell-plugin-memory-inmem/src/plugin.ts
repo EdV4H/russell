@@ -22,13 +22,14 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
     setup(ctx: AgentContext) {
       // スレッド単位のメモ帳と、個体全体の本棚（インメモリ）
       const notesByContext = new Map<string, string[]>();
-      const books: RecalledBook[] = [];
+      const books: (RecalledBook & { archived?: boolean })[] = [];
 
       const capability: MemoryCapability = {
         recall(contextId: string): RecalledContext {
           return {
             notes: notesByContext.get(contextId) ?? [],
-            books: books.slice(-5), // 直近の本を少しだけ注入（§3.2 の簡易版）
+            // 書庫に落ちた本は想起に出さない（L1 の効果）
+            books: books.filter((b) => !b.archived).slice(-5),
           };
         },
       };
@@ -37,6 +38,7 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       // 効果分類を Policy Gate へ申告（§9.2）。記憶書き込みは internal_write。
       ctx.policy.declareEffect("note.write", "internal_write");
       ctx.policy.declareEffect("shelf.add", "internal_write");
+      ctx.policy.declareEffect("shelf.forget", "internal_write");
       ctx.policy.declareEffect("deep_recall", "read");
 
       const offNote = ctx.tools.register("note.write", {
@@ -60,6 +62,22 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
         },
       });
 
+      // 「忘れて」= L1（弱める）。書庫へ落とすだけで、データは残る（可逆）。
+      const offForget = ctx.tools.register("shelf.forget", {
+        name: "shelf.forget",
+        effect: "internal_write",
+        async run(input: { query: string }) {
+          const q = input.query ?? "";
+          const hit = q.trim() === "" ? [] : books.filter((b) => !b.archived && b.card.includes(q));
+          for (const b of hit) b.archived = true;
+          return {
+            status: "succeeded" as const,
+            archived: hit.length,
+            titles: hit.map((b) => b.title),
+          };
+        },
+      });
+
       const offRecall = ctx.tools.register("deep_recall", {
         name: "deep_recall",
         effect: "read",
@@ -72,6 +90,7 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       return () => {
         offNote();
         offShelf();
+        offForget();
         offRecall();
         notesByContext.clear();
         books.length = 0;
