@@ -18,6 +18,7 @@ import type {
   AgentContext,
   AgentRuntime,
   AuditRegistry,
+  ConversationCapability,
   EffectClass,
   EquipmentDefinition,
   EquipmentRegistry,
@@ -44,7 +45,7 @@ import type {
   ToolSpec,
   TrustLabel,
 } from "@edv4h/russell-shared";
-import { MEMORY_SERVICE } from "@edv4h/russell-shared";
+import { CONVERSATION_SERVICE, MEMORY_SERVICE } from "@edv4h/russell-shared";
 import { createAuditLog } from "./audit.js";
 import { createFreezeGate } from "./freeze.js";
 
@@ -306,6 +307,42 @@ export async function createAgent(
     return [...(workingMemory.get(contextId) ?? [])];
   }
 
+  /**
+   * モデルへ渡す会話履歴。**手元に無ければ通信面から取り直す**（ADR 0001）。
+   *
+   * 再起動で短期記憶は消えるが、会話は Slack 側に残っている。保存する代わりに
+   * 必要になった時点で構成し直す。取れたものは短期記憶に載せるので、2回目以降は叩かない。
+   */
+  async function conversationFor(msg: InboundMessage): Promise<ModelTurn[]> {
+    const buffered = recallTurns(msg.contextId);
+    if (buffered.length > 0) return buffered;
+
+    const conversation = services.get<ConversationCapability>(CONVERSATION_SERVICE);
+    if (!conversation) return [];
+    try {
+      const turns = await conversation.history(msg.contextId);
+      // 取得物の末尾に今回の発言が含まれることがある（通信面から見れば既に投稿済みなので）。
+      // コアは `user` として別に渡すため、そのままだと同じ発言が2回入る。
+      const trimmed =
+        turns.at(-1)?.role === "user" && turns.at(-1)?.text === msg.text
+          ? turns.slice(0, -1)
+          : turns;
+      if (trimmed.length === 0) return [];
+      for (const turn of trimmed) rememberTurn(msg.contextId, turn);
+      await auditLog.registry.record({
+        actor: runtime.agentId,
+        action: "conversation.recovered",
+        payload: { contextId: msg.contextId, turns: trimmed.length },
+        trustLabel: msg.trustLabel, // 復元した中身は他者の発言＝untrusted のまま
+      });
+      return recallTurns(msg.contextId);
+    } catch (err) {
+      // 取れなくても会話は続ける（流れを踏まえられないだけ）。黙って消さずに残す。
+      events.emit("conversation:recover-failed", { contextId: msg.contextId, error: String(err) });
+      return [];
+    }
+  }
+
   function rememberTurn(contextId: string, turn: ModelTurn): void {
     const turns = workingMemory.get(contextId) ?? [];
     turns.push(turn);
@@ -520,7 +557,7 @@ export async function createAgent(
       }
     }
     const replyText = provider
-      ? (await provider.complete({ system, user: msg.text, history: recallTurns(msg.contextId) }))
+      ? (await provider.complete({ system, user: msg.text, history: await conversationFor(msg) }))
           .text
       : "（モデル未登録のため応答できません）";
     // 今回の往復を覚える。次のターンで「さっきの話」が通じるようにする。

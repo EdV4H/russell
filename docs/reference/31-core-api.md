@@ -76,6 +76,10 @@ export interface AgentHandle {
 - プラグインへは**コピーを渡す**（内部配列を渡すと、後の追記でプロバイダ側の履歴が壊れる）
 - 対応は provider の任意。`model-claude` は Messages API の配列に、
   `model-claude-code`（1発の CLI）は書き起こしとして本文の前に置く
+- **手元に無ければ通信面から取り直す**（[ADR 0001](../adr/0001-conversation-context-from-slack.md)）。
+  `ConversationCapability`（services キー `conversation`）を実装した通信面があれば、
+  再起動後の1発目でそこから会話を復元する。復元は `conversation.recovered` として監査に残る
+  （本文は入れない）。実装しない通信面では従来どおり自前の短期記憶だけで動く
 
 ## 監査ログ（event_log, §3.1）
 
