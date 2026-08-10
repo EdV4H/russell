@@ -6,7 +6,9 @@
  */
 
 import {
+  allowedChannelsFromEnv,
   fromAppMention,
+  fromChannelMessage,
   fromDirectMessage,
   parseContextId,
   toContextId,
@@ -87,4 +89,94 @@ test("contextId は channel と thread に往復できる。DM は thread が空
   expect(parseContextId(toContextId("D1", undefined))).toEqual({ channel: "D1", thread: "" });
   // 区切りが無い古い形式でも channel として解釈する
   expect(parseContextId("C9")).toEqual({ channel: "C9", thread: "" });
+});
+
+test("スレッド追従: 参加しているスレッドの続きだけを拾う", () => {
+  const ctx = {
+    allowedChannels: new Set(["C1"]),
+    activeThreads: new Set(["C1:100.1"]), // Bob が発言済みのスレッド
+    botUserId: "UBOB",
+  };
+  const base = { channel: "C1", channel_type: "channel", ts: "100.5", user: "U1" };
+
+  // Bob が参加しているスレッドの続き → 拾う（mention 不要）
+  expect(fromChannelMessage({ ...base, thread_ts: "100.1", text: "で、どうする？" }, ctx)).toEqual({
+    surfaceId: "slack",
+    contextId: "C1:100.1",
+    author: "U1",
+    text: "で、どうする？",
+    trustLabel: "untrusted",
+    isMention: true,
+    messageId: "100.5",
+  });
+
+  // 参加していないスレッド → 呼ばれてもいない会話に入っていかない
+  expect(
+    fromChannelMessage({ ...base, thread_ts: "999.9", text: "内輪の話" }, ctx),
+  ).toBeUndefined();
+  // スレッド外の発言 → チャンネルの雑談は拾わない
+  expect(fromChannelMessage({ ...base, text: "雑談" }, ctx)).toBeUndefined();
+});
+
+test("スレッド追従: opt-in していないチャンネルは読まない", () => {
+  const msg = {
+    channel: "C-OTHER",
+    channel_type: "channel",
+    ts: "1.1",
+    thread_ts: "1.0",
+    text: "…",
+  };
+  // allowlist に無い
+  expect(
+    fromChannelMessage(msg, {
+      allowedChannels: new Set(["C1"]),
+      activeThreads: new Set(["C-OTHER:1.0"]),
+    }),
+  ).toBeUndefined();
+  // allowlist が空＝設定漏れ。「全部読む」に倒れない
+  expect(
+    fromChannelMessage(msg, {
+      allowedChannels: new Set(),
+      activeThreads: new Set(["C-OTHER:1.0"]),
+    }),
+  ).toBeUndefined();
+  expect(allowedChannelsFromEnv("")).toEqual(new Set());
+  expect(allowedChannelsFromEnv("C1, C2")).toEqual(new Set(["C1", "C2"]));
+});
+
+test("スレッド追従: mention 入りは app_mention に任せる（2回返信しない）", () => {
+  const ctx = {
+    allowedChannels: new Set(["C1"]),
+    activeThreads: new Set(["C1:100.1"]),
+    botUserId: "UBOB",
+  };
+  const base = {
+    channel: "C1",
+    channel_type: "channel",
+    ts: "100.6",
+    thread_ts: "100.1",
+    user: "U1",
+  };
+
+  // mention を含む発言は app_mention でも届くので、こちらでは捨てる
+  expect(fromChannelMessage({ ...base, text: "<@UBOB> これお願い" }, ctx)).toBeUndefined();
+  // 他人への mention は関係ないので拾う
+  expect(fromChannelMessage({ ...base, text: "<@UOTHER> どう思う？" }, ctx)?.text).toBe(
+    "<@UOTHER> どう思う？",
+  );
+});
+
+test("スレッド追従: bot 自身の発言と編集は拾わない", () => {
+  const ctx = { allowedChannels: new Set(["C1"]), activeThreads: new Set(["C1:100.1"]) };
+  const base = { channel: "C1", channel_type: "channel", ts: "100.7", thread_ts: "100.1" };
+  expect(
+    fromChannelMessage({ ...base, text: "覚えておきますね。", bot_id: "B1" }, ctx),
+  ).toBeUndefined();
+  expect(
+    fromChannelMessage({ ...base, text: "直した", subtype: "message_changed" }, ctx),
+  ).toBeUndefined();
+  // プライベートチャンネル（group）も同じ扱いで拾う
+  expect(fromChannelMessage({ ...base, channel_type: "group", text: "続き" }, ctx)?.contextId).toBe(
+    "C1:100.1",
+  );
 });

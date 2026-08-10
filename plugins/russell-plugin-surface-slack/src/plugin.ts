@@ -26,7 +26,13 @@ import type {
 } from "@edv4h/russell-shared";
 import { KILL_SWITCH_SERVICE } from "@edv4h/russell-shared";
 import bolt from "@slack/bolt";
-import { fromAppMention, fromDirectMessage, parseContextId } from "./inbound.js";
+import {
+  allowedChannelsFromEnv,
+  fromAppMention,
+  fromChannelMessage,
+  fromDirectMessage,
+  parseContextId,
+} from "./inbound.js";
 import { operatorCheckFromEnv, runRussellCommand } from "./killswitch-command.js";
 
 /** リアクションの意味 → Slack の絵文字名。何で表すかは通信面の裁量（§10.1）。 */
@@ -42,6 +48,11 @@ export interface SlackSurfaceOptions {
    * 未設定なら流さない（kill-switch.md の「#russell-管理 に自動で記録」に対応）。
    */
   adminChannel?: string;
+  /**
+   * スレッド追従を許すチャンネル（既定 env `RUSSELL_SLACK_CHANNELS`、カンマ区切り）。
+   * **空なら追従しない**（opt-in したチャンネルだけ、privacy-and-memory-policy）。
+   */
+  allowedChannels?: ReadonlySet<string>;
 }
 
 export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): RussellPlugin {
@@ -57,6 +68,14 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
 
       const adminChannel = options.adminChannel ?? process.env.RUSSELL_ADMIN_CHANNEL;
       const isOperator = operatorCheckFromEnv();
+      const allowedChannels = options.allowedChannels ?? allowedChannelsFromEnv();
+      /**
+       * Bob が発言したスレッド。ここに載っているスレッドの続きだけを拾う（inbound.ts）。
+       *
+       * プロセス内にしか持たないので**再起動すると忘れる**（そのスレッドで一度 mention
+       * すれば戻る）。DB に置けば残せるが、テーブルが1つ増える。P0 の範囲ではこれで足りる。
+       */
+      const activeThreads = new Set<string>();
 
       const unregister = ctx.surfaces.register({
         id: "slack",
@@ -88,10 +107,18 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
               });
             }
           });
-          // DM (message.im)。bot 自身の発言をここで弾かないと、自分の返信に返事を続ける。
-          app.message(async ({ message }) => {
+          // DM (message.im) と、参加しているスレッドの続き（message.channels / message.groups）。
+          // bot 自身の発言をここで弾かないと、自分の返信に返事を続ける。
+          app.message(async ({ message, context }) => {
             // biome-ignore lint/suspicious/noExplicitAny: Bolt の message union は広い。解釈は inbound.ts に集約。
-            const msg = fromDirectMessage(message as any);
+            const m = message as any;
+            const msg =
+              fromDirectMessage(m) ??
+              fromChannelMessage(m, {
+                allowedChannels,
+                activeThreads,
+                botUserId: context.botUserId,
+              });
             if (msg) sink(msg);
           });
           await app.start();
@@ -105,6 +132,8 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
               thread_ts: thread || undefined,
               text: out.text,
             });
+            // 発言したスレッドを覚えておく。以降このスレッドの続きは mention 無しで拾う。
+            if (thread) activeThreads.add(out.contextId);
             return { status: "succeeded" };
           } catch {
             // タイムアウト等は unknown（blind retry しない, §9.2）
