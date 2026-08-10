@@ -132,26 +132,62 @@ export function fromChannelMessage(
   m: SlackMessageEvent,
   ctx: ChannelFollowContext,
 ): InboundMessage | undefined {
-  if (m.channel_type !== "channel" && m.channel_type !== "group") return undefined;
-  if (m.bot_id || m.subtype) return undefined;
-  if (typeof m.text !== "string" || m.text.trim() === "") return undefined;
-  if (!m.channel || !m.ts) return undefined;
-  if (ctx.excludedChannels?.has(m.channel)) return undefined;
-  if (ctx.allowedChannels && !ctx.allowedChannels.has(m.channel)) return undefined;
-  if (!m.thread_ts) return undefined; // スレッド外は拾わない
-  if (ctx.botUserId && m.text.includes(`<@${ctx.botUserId}>`)) return undefined; // app_mention が拾う
+  const result = inspectChannelMessage(m, ctx);
+  return result.accepted;
+}
+
+/** 捨てた理由。**無反応の理由を後から言えるようにする**ためにコード化してある。 */
+export type ChannelDropReason =
+  | "not_a_channel_message"
+  | "bot_or_subtype"
+  | "empty_text"
+  | "missing_ids"
+  | "excluded_channel"
+  | "not_in_allowlist"
+  | "not_in_thread"
+  | "handled_by_app_mention"
+  | "thread_not_joined";
+
+export interface ChannelInspection {
+  accepted?: InboundMessage;
+  dropped?: ChannelDropReason;
+}
+
+/**
+ * `fromChannelMessage` の中身。採用/不採用と**その理由**を返す。
+ *
+ * 理由を返すのは、届いていないのか捨てたのかを外から言えるようにするため。
+ * 「反応しない」ときに切り分けられないのが一番つらい（実地で踏んだ）。
+ */
+export function inspectChannelMessage(
+  m: SlackMessageEvent,
+  ctx: ChannelFollowContext,
+): ChannelInspection {
+  if (m.channel_type !== "channel" && m.channel_type !== "group")
+    return { dropped: "not_a_channel_message" };
+  if (m.bot_id || m.subtype) return { dropped: "bot_or_subtype" };
+  if (typeof m.text !== "string" || m.text.trim() === "") return { dropped: "empty_text" };
+  if (!m.channel || !m.ts) return { dropped: "missing_ids" };
+  if (ctx.excludedChannels?.has(m.channel)) return { dropped: "excluded_channel" };
+  if (ctx.allowedChannels && !ctx.allowedChannels.has(m.channel))
+    return { dropped: "not_in_allowlist" };
+  if (!m.thread_ts) return { dropped: "not_in_thread" };
+  if (ctx.botUserId && m.text.includes(`<@${ctx.botUserId}>`))
+    return { dropped: "handled_by_app_mention" };
 
   const contextId = toContextId(m.channel, m.thread_ts);
-  if (!ctx.activeThreads.has(contextId)) return undefined;
+  if (!ctx.activeThreads.has(contextId)) return { dropped: "thread_not_joined" };
 
   return {
-    surfaceId: "slack",
-    contextId,
-    author: m.user ?? "unknown",
-    text: m.text,
-    trustLabel: "untrusted",
-    isMention: true, // 自分が参加しているスレッドの続き＝自分への発話として扱う
-    messageId: m.ts,
+    accepted: {
+      surfaceId: "slack",
+      contextId,
+      author: m.user ?? "unknown",
+      text: m.text,
+      trustLabel: "untrusted",
+      isMention: true, // 自分が参加しているスレッドの続き＝自分への発話として扱う
+      messageId: m.ts,
+    },
   };
 }
 

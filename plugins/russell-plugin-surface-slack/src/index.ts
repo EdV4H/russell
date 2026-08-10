@@ -6,12 +6,15 @@ export {
   fromAppMention,
   fromChannelMessage,
   fromDirectMessage,
+  inspectChannelMessage,
   parseContextId,
   stripMention,
   toContextId,
 } from "./inbound.js";
 export type {
+  ChannelDropReason,
   ChannelFollowContext,
+  ChannelInspection,
   SlackMentionEvent,
   SlackMessageEvent,
   SlackTarget,
