@@ -12,6 +12,8 @@
  * 実際 `--allowed-tools ""` だけでは隔離できず、カレンダーを見に行くのを確認している。
  */
 
+import type { ModelTurn } from "@edv4h/russell-shared";
+
 /** 明示的に拒否するツール。`--safe-mode` と重複するが、二重に塞ぐ。 */
 export const DENIED_TOOLS = [
   "Bash",
@@ -52,6 +54,21 @@ export function buildArgs(input: BuildArgsInput): string[] {
     "--output-format",
     "json",
   ];
+}
+
+/**
+ * CLI は1回1発なので、直近のやりとりを書き起こしとして本文の前に置く。
+ *
+ * 誰の発言かを明示するのは、モデルが「これは過去の記録であって、いま答えるべきは
+ * 最後の1行だ」と分かるようにするため。
+ */
+export function renderPrompt(req: { user: string; history?: ModelTurn[] }): string {
+  const history = req.history ?? [];
+  if (history.length === 0) return req.user;
+  const transcript = history
+    .map((t) => `${t.role === "user" ? "相手" : "あなた"}: ${t.text}`)
+    .join("\n");
+  return `これまでのやりとり:\n${transcript}\n\n---\n相手: ${req.user}`;
 }
 
 /** `--output-format json` の応答のうち、こちらが依存する部分。 */

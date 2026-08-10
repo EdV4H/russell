@@ -29,6 +29,7 @@ import type {
   Mode,
   ModelProvider,
   ModelRegistry,
+  ModelTurn,
   PolicyRegistry,
   RoutineDefinition,
   RoutineRegistry,
@@ -57,6 +58,9 @@ export const FROZEN_NOTICE =
 
 /** `destroy()` が実行中のターンを待つ上限。これを超えたターンは諦めて片付けに進む。 */
 const DRAIN_TIMEOUT_MS = 5_000;
+
+/** 1文脈あたりに覚えておく発言数（user/assistant 合計）。超えたら古いものから捨てる。 */
+const WORKING_MEMORY_TURNS = 20;
 
 export interface AgentConfig {
   agentId: string;
@@ -284,6 +288,32 @@ export async function createAgent(
 
   // --- 認知ループ（§3.2/§3.3/§10）。P0 の心臓部。 ---
 
+  /**
+   * 文脈ごとの直近のやりとり。**会話が成立するための短期記憶**で、メモ帳・本棚とは別物。
+   *
+   * スレッドで「で、どうする？」と言われたときに何の話か分かるのは、直前の数往復を
+   * 覚えているから。メモ（`note.write`）は「後から思い出すために書き留めたもの」なので、
+   * 書き留めなかったことは残らない——それだけでは会話が続かない。
+   *
+   * プロセス内にしか持たないので再起動で消える。永続化と要約（compaction）は、
+   * 長い会話を扱うようになってから（§4 の夜間コンソリデーションと接続する）。
+   */
+  const workingMemory = new Map<string, ModelTurn[]>();
+
+  function recallTurns(contextId: string): ModelTurn[] {
+    // **コピーを返す。** 内部の配列をそのまま渡すと、渡した後の追記でプラグイン側の
+    // 手元の履歴が書き換わる（プロバイダが保持していると気づきにくい形で壊れる）。
+    return [...(workingMemory.get(contextId) ?? [])];
+  }
+
+  function rememberTurn(contextId: string, turn: ModelTurn): void {
+    const turns = workingMemory.get(contextId) ?? [];
+    turns.push(turn);
+    // 古いものから捨てる。無制限に伸ばすとトークンも費用も青天井になる。
+    if (turns.length > WORKING_MEMORY_TURNS) turns.splice(0, turns.length - WORKING_MEMORY_TURNS);
+    workingMemory.set(contextId, turns);
+  }
+
   /** temperament から人格プロンプトを生成する（§6.1）。 */
   function personaPrompt(): string {
     const t = config.temperament;
@@ -490,8 +520,12 @@ export async function createAgent(
       }
     }
     const replyText = provider
-      ? (await provider.complete({ system, user: msg.text })).text
+      ? (await provider.complete({ system, user: msg.text, history: recallTurns(msg.contextId) }))
+          .text
       : "（モデル未登録のため応答できません）";
+    // 今回の往復を覚える。次のターンで「さっきの話」が通じるようにする。
+    rememberTurn(msg.contextId, { role: "user", text: msg.text });
+    rememberTurn(msg.contextId, { role: "assistant", text: replyText });
     await auditLog.registry.record({
       actor: runtime.agentId,
       action: "model.completed",
