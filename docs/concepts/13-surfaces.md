@@ -40,6 +40,28 @@ surface プラグインは `ctx.surfaces.register(def)` で自己分類する。
 > Slack は 📝、CLI は1行の出力にしている。任意メソッドなので、対応しない通信面ではメモだけ成立して何も起きない。
 > 付け先は `contextId`（スレッド単位）ではなく `messageId`（発言単位）。
 
+### Slack の「AI agent」面は採らない
+
+> [!IMPORTANT]
+> **決定（2026-08-10）: Slack の AI agent 機能（split view・suggested prompts）は使わない。**
+> チャンネルでの `app_mention` 応答を Bob の居場所とする。技術的な排他ではなく（両立できる）、
+> **どちらの姿を目指すかの選択**として決めた。
+>
+> AI agent 面は「サイドパネルで呼び出して使うアシスタント」の UX で、suggested prompts はその象徴——
+> 「何を聞けばいいか候補を出す」のは道具の振る舞いであって、同僚の振る舞いではない。Russell が置いているのは
+> 「**個体がワークスペースにいて、同僚のように働く**」（[`../getting-started/01-introduction.md`](../getting-started/01-introduction.md)）で、
+> ここは譲らない。
+>
+> 付随して踏まずに済む制約: 有料プラン必須 / ワークスペースゲストが使えない /
+> `agent_view` は `assistant_view` に戻せない（一方通行）。
+>
+> **再検討してよい条件**: 「Bob を上部ナビから呼べる存在にしたい」という product 側の意図が出たとき。
+> その場合も P1 以降の単位として、上の思想と突き合わせた上で決める。
+>
+> なお、この面が持つ**ストリーミング／thinking 状態の可視化**は思想と衝突しない（むしろ
+> 「失敗が無反応として現れる」問題に効く）。採るならこれだけ `react?()` と同じ形で足せばよく、
+> agent 面ごと採用する理由にはならない。
+
 ## 代替 surface（CLI / Web）
 
 同じ `SurfaceDefinition` 契約なので差し替え可能。
