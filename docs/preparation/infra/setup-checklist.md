@@ -52,7 +52,9 @@
 
 設計書 §10 / plugin-first では `surface-slack`（[`../initial-data/equipment-ledger.md`](../initial-data/equipment-ledger.md) の slack 装備）。
 
-- [ ] Slack アプリを作成し **Socket Mode を有効化**（サーバー inbound 開放不要, §10）
+- [ ] Slack アプリを作成する。**[`slack-app-manifest.yaml`](./slack-app-manifest.yaml) を "From a manifest" に貼る**のが確実
+      （スコープ・イベント・Messages Tab・スラッシュコマンドが揃った状態で作られる。手で足すと必ずどれか漏れる）
+- [ ] Socket Mode が有効になっていること（サーバー inbound 開放不要, §10）
 - [ ] Bot Token Scopes を**最小権限**で申請（§10・§12-6）:
   - `app_mentions:read` / `channels:history` / `im:history` / `chat:write` / `reactions:write` / `commands`（`/russell` キルスイッチ用, §12-4）
   - スレッド追従を使うなら `groups:history` も（プライベートチャンネル用）。スコープを足したら**再インストールが必要**
