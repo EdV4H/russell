@@ -1,3 +1,5 @@
+export { MAX_RECOVERED_TURNS, hasOwnMessage, toTurns } from "./conversation.js";
+export type { SlackHistoryMessage } from "./conversation.js";
 export { parseRussellCommand } from "./command.js";
 export type { RussellCommand } from "./command.js";
 export {

@@ -18,14 +18,16 @@
 
 import type {
   AgentContext,
+  ConversationCapability,
   DeliveryResult,
   KillSwitchCapability,
   OutboundMessage,
   ReactionRequest,
   RussellPlugin,
 } from "@edv4h/russell-shared";
-import { KILL_SWITCH_SERVICE } from "@edv4h/russell-shared";
+import { CONVERSATION_SERVICE, KILL_SWITCH_SERVICE } from "@edv4h/russell-shared";
 import bolt from "@slack/bolt";
+import { type SlackHistoryMessage, hasOwnMessage, toTurns } from "./conversation.js";
 import {
   allowedChannelsFromEnv,
   excludedChannelsFromEnv,
@@ -37,6 +39,9 @@ import {
 import { operatorCheckFromEnv, runRussellCommand } from "./killswitch-command.js";
 
 /** リアクションの意味 → Slack の絵文字名。何で表すかは通信面の裁量（§10.1）。 */
+/** DM など、スレッドではない文脈で遡る件数。 */
+const MAX_HISTORY = 20;
+
 const REACTION_EMOJI: Record<ReactionRequest["kind"], string> = {
   noted: "memo", // 📝「メモしました」
 };
@@ -85,12 +90,61 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
        * すれば戻る）。DB に置けば残せるが、テーブルが1つ増える。P0 の範囲ではこれで足りる。
        */
       const activeThreads = new Set<string>();
+      /** listener の context からしか取れないので、最初に見たものを控えて capability から使う。 */
+      const botUserIdRef: { value?: string } = {};
+
+      /** 参加していないと分かったスレッド。毎回 API を叩かないための否定キャッシュ。 */
+      const notMine = new Set<string>();
+
+      /** そのスレッド/DM の発言列を取る。取れなければ空。 */
+      async function fetchMessages(contextId: string): Promise<SlackHistoryMessage[]> {
+        const { channel, thread } = parseContextId(contextId);
+        if (!channel) return [];
+        const res = thread
+          ? await app.client.conversations.replies({ channel, ts: thread, limit: 200 })
+          : await app.client.conversations.history({ channel, limit: MAX_HISTORY });
+        const messages = (res.messages ?? []) as SlackHistoryMessage[];
+        // conversations.history は新しい順に返す。会話としては古い順に並べる。
+        return thread ? messages : [...messages].reverse();
+      }
+
+      /**
+       * 起動前からあるスレッドでも会話に戻れるようにする（ADR 0001）。
+       * **自分が発言しているスレッドだけ**参加とみなす——呼ばれてもいない会話には入らない。
+       */
+      async function recoverThread(contextId: string, botUserId?: string): Promise<boolean> {
+        if (activeThreads.has(contextId)) return true;
+        if (notMine.has(contextId)) return false;
+        try {
+          const messages = await fetchMessages(contextId);
+          if (!hasOwnMessage(messages, botUserId)) {
+            notMine.add(contextId);
+            return false;
+          }
+          activeThreads.add(contextId);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      // コアが「手元に会話が無い」ときに呼ぶ（再起動後など）。
+      ctx.services.provide<ConversationCapability>(CONVERSATION_SERVICE, {
+        async history(contextId: string) {
+          try {
+            return toTurns(await fetchMessages(contextId), botUserIdRef.value);
+          } catch {
+            return [];
+          }
+        },
+      });
 
       const unregister = ctx.surfaces.register({
         id: "slack",
         async start(sink) {
           // @mention
-          app.event("app_mention", async ({ event }) => {
+          app.event("app_mention", async ({ event, context }) => {
+            botUserIdRef.value ??= context.botUserId;
             // biome-ignore lint/suspicious/noExplicitAny: Bolt の event union は広い。解釈は inbound.ts に集約。
             sink(fromAppMention(event as any));
           });
@@ -127,12 +181,22 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
               sink(dm);
               return;
             }
-            const seen = inspectChannelMessage(m, {
+            botUserIdRef.value ??= context.botUserId;
+            const follow = {
               allowedChannels,
               excludedChannels,
               activeThreads,
               botUserId: context.botUserId,
-            });
+            };
+            let seen = inspectChannelMessage(m, follow);
+            // 知らないスレッドなら Slack に聞く。自分が発言していれば会話に戻る（ADR 0001）。
+            if (seen.dropped === "thread_not_joined" && m?.channel && m?.thread_ts) {
+              const contextId = `${m.channel}:${m.thread_ts}`;
+              if (await recoverThread(contextId, context.botUserId)) {
+                seen = inspectChannelMessage(m, follow);
+                if (debug) console.log(`[slack] 復元 ${contextId}`);
+              }
+            }
             // **届いたのに捨てた**ことを見えるようにする。反応しないときに
             // 「Slack が配っていない」のか「こちらが捨てた」のかを切り分けられないと詰む。
             if (debug) {
