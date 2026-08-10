@@ -7,6 +7,7 @@
 
 import {
   allowedChannelsFromEnv,
+  excludedChannelsFromEnv,
   fromAppMention,
   fromChannelMessage,
   fromDirectMessage,
@@ -93,7 +94,6 @@ test("contextId は channel と thread に往復できる。DM は thread が空
 
 test("スレッド追従: 参加しているスレッドの続きだけを拾う", () => {
   const ctx = {
-    allowedChannels: new Set(["C1"]),
     activeThreads: new Set(["C1:100.1"]), // Bob が発言済みのスレッド
     botUserId: "UBOB",
   };
@@ -118,38 +118,58 @@ test("スレッド追従: 参加しているスレッドの続きだけを拾う
   expect(fromChannelMessage({ ...base, text: "雑談" }, ctx)).toBeUndefined();
 });
 
-test("スレッド追従: opt-in していないチャンネルは読まない", () => {
+test("既定は招待されたチャンネルすべて（opt-in の実体は Slack の招待）", () => {
+  const msg = {
+    channel: "C-ANY",
+    channel_type: "channel",
+    ts: "1.1",
+    thread_ts: "1.0",
+    text: "続き",
+  };
+  // allowlist も除外も無ければ、参加スレッドの続きとして拾う（env への登録は要らない）
+  expect(fromChannelMessage(msg, { activeThreads: new Set(["C-ANY:1.0"]) })?.contextId).toBe(
+    "C-ANY:1.0",
+  );
+  expect(allowedChannelsFromEnv("")).toBeUndefined();
+  expect(excludedChannelsFromEnv("")).toBeUndefined();
+});
+
+test("除外指定したチャンネルには入っていかない", () => {
+  const msg = {
+    channel: "C-SECRET",
+    channel_type: "channel",
+    ts: "1.1",
+    thread_ts: "1.0",
+    text: "続き",
+  };
+  expect(
+    fromChannelMessage(msg, {
+      excludedChannels: new Set(["C-SECRET"]),
+      activeThreads: new Set(["C-SECRET:1.0"]),
+    }),
+  ).toBeUndefined();
+  expect(excludedChannelsFromEnv("C-SECRET, C-X")).toEqual(new Set(["C-SECRET", "C-X"]));
+});
+
+test("厳格モード（allowlist）を指定したときはそれだけに絞る", () => {
   const msg = {
     channel: "C-OTHER",
     channel_type: "channel",
     ts: "1.1",
     thread_ts: "1.0",
-    text: "…",
+    text: "続き",
   };
-  // allowlist に無い
   expect(
     fromChannelMessage(msg, {
       allowedChannels: new Set(["C1"]),
       activeThreads: new Set(["C-OTHER:1.0"]),
     }),
   ).toBeUndefined();
-  // allowlist が空＝設定漏れ。「全部読む」に倒れない
-  expect(
-    fromChannelMessage(msg, {
-      allowedChannels: new Set(),
-      activeThreads: new Set(["C-OTHER:1.0"]),
-    }),
-  ).toBeUndefined();
-  expect(allowedChannelsFromEnv("")).toEqual(new Set());
   expect(allowedChannelsFromEnv("C1, C2")).toEqual(new Set(["C1", "C2"]));
 });
 
 test("スレッド追従: mention 入りは app_mention に任せる（2回返信しない）", () => {
-  const ctx = {
-    allowedChannels: new Set(["C1"]),
-    activeThreads: new Set(["C1:100.1"]),
-    botUserId: "UBOB",
-  };
+  const ctx = { activeThreads: new Set(["C1:100.1"]), botUserId: "UBOB" };
   const base = {
     channel: "C1",
     channel_type: "channel",
@@ -167,7 +187,7 @@ test("スレッド追従: mention 入りは app_mention に任せる（2回返�
 });
 
 test("スレッド追従: bot 自身の発言と編集は拾わない", () => {
-  const ctx = { allowedChannels: new Set(["C1"]), activeThreads: new Set(["C1:100.1"]) };
+  const ctx = { activeThreads: new Set(["C1:100.1"]) };
   const base = { channel: "C1", channel_type: "channel", ts: "100.7", thread_ts: "100.1" };
   expect(
     fromChannelMessage({ ...base, text: "覚えておきますね。", bot_id: "B1" }, ctx),

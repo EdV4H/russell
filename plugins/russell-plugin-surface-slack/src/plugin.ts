@@ -28,6 +28,7 @@ import { KILL_SWITCH_SERVICE } from "@edv4h/russell-shared";
 import bolt from "@slack/bolt";
 import {
   allowedChannelsFromEnv,
+  excludedChannelsFromEnv,
   fromAppMention,
   fromChannelMessage,
   fromDirectMessage,
@@ -49,8 +50,13 @@ export interface SlackSurfaceOptions {
    */
   adminChannel?: string;
   /**
-   * スレッド追従を許すチャンネル（既定 env `RUSSELL_SLACK_CHANNELS`、カンマ区切り）。
-   * **空なら追従しない**（opt-in したチャンネルだけ、privacy-and-memory-policy）。
+   * 追従から除外するチャンネル（既定 env `RUSSELL_SLACK_EXCLUDE_CHANNELS`）。
+   * 招待されていても入っていかない。
+   */
+  excludedChannels?: ReadonlySet<string>;
+  /**
+   * 厳格モード（既定 env `RUSSELL_SLACK_CHANNELS`）。指定するとこのチャンネルだけに絞る。
+   * **未指定が既定** ＝ 招待されたチャンネルすべて（opt-in の実体は Slack の招待）。
    */
   allowedChannels?: ReadonlySet<string>;
 }
@@ -69,6 +75,7 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
       const adminChannel = options.adminChannel ?? process.env.RUSSELL_ADMIN_CHANNEL;
       const isOperator = operatorCheckFromEnv();
       const allowedChannels = options.allowedChannels ?? allowedChannelsFromEnv();
+      const excludedChannels = options.excludedChannels ?? excludedChannelsFromEnv();
       /**
        * Bob が発言したスレッド。ここに載っているスレッドの続きだけを拾う（inbound.ts）。
        *
@@ -116,6 +123,7 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
               fromDirectMessage(m) ??
               fromChannelMessage(m, {
                 allowedChannels,
+                excludedChannels,
                 activeThreads,
                 botUserId: context.botUserId,
               });

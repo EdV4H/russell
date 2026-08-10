@@ -2,6 +2,7 @@ export { parseRussellCommand } from "./command.js";
 export type { RussellCommand } from "./command.js";
 export {
   allowedChannelsFromEnv,
+  excludedChannelsFromEnv,
   fromAppMention,
   fromChannelMessage,
   fromDirectMessage,

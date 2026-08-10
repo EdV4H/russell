@@ -97,11 +97,20 @@ export function fromDirectMessage(m: SlackMessageEvent): InboundMessage | undefi
  */
 export interface ChannelFollowContext {
   /**
-   * 拾ってよいチャンネル（ID）。**空なら何も拾わない。**
-   * privacy-and-memory-policy の「明示的に招待され、かつ台帳登録されたチャンネルのみ。
-   * 勝手読みは既定禁止」を実装したもの。設定漏れが「全部読む」に倒れてはいけない。
+   * 除外するチャンネル（ID）。ここに入れたチャンネルは、招待されていても追従しない。
+   * 機微なチャンネルに居させたいが会話には入ってほしくない、という場合の逃げ道。
    */
-  allowedChannels: ReadonlySet<string>;
+  excludedChannels?: ReadonlySet<string>;
+  /**
+   * 厳格モード。指定するとこのチャンネルだけに絞る（既定は指定なし＝招待されたチャンネル全部）。
+   *
+   * **opt-in の実体は Slack の招待。** privacy-and-memory-policy の「明示的に招待され」が
+   * それにあたり、Slack は参加していないチャンネルのイベントをそもそも配らない。
+   * 一方この allowlist は**データの到着を止めていない**（購読は種類単位でしか絞れないため、
+   * 参加チャンネルの発言は指定の有無に関わらず届く）ので、招待以上の安全は買えない。
+   * 招待のたびに設定と再起動を強いる割に得るものが無いので、既定にはしない。
+   */
+  allowedChannels?: ReadonlySet<string>;
   /** Bob が既に発言したスレッド（contextId）。会話の続きだけを拾うための目印。 */
   activeThreads: ReadonlySet<string>;
   /** 自分の bot user id。mention は app_mention 側が拾うので、ここでは二重に処理しない。 */
@@ -113,7 +122,7 @@ export interface ChannelFollowContext {
  * **拾うのは「Bob が参加しているスレッドの続き」だけ**で、それ以外は捨てる。
  *
  * 捨てる理由が3種類あるので順に:
- * - allowlist に無いチャンネル … opt-in していない場所を読まない
+ * - 除外指定のチャンネル（または厳格モードの allowlist 外） … 入ってほしくない場所には入らない
  * - スレッド外の発言 … チャンネルの雑談を拾い始めると「全部読んでいる」になる
  * - Bob がまだ発言していないスレッド … 呼ばれてもいない会話に入っていかない
  *
@@ -127,7 +136,8 @@ export function fromChannelMessage(
   if (m.bot_id || m.subtype) return undefined;
   if (typeof m.text !== "string" || m.text.trim() === "") return undefined;
   if (!m.channel || !m.ts) return undefined;
-  if (!ctx.allowedChannels.has(m.channel)) return undefined;
+  if (ctx.excludedChannels?.has(m.channel)) return undefined;
+  if (ctx.allowedChannels && !ctx.allowedChannels.has(m.channel)) return undefined;
   if (!m.thread_ts) return undefined; // スレッド外は拾わない
   if (ctx.botUserId && m.text.includes(`<@${ctx.botUserId}>`)) return undefined; // app_mention が拾う
 
@@ -145,12 +155,27 @@ export function fromChannelMessage(
   };
 }
 
-/** env の `RUSSELL_SLACK_CHANNELS`（カンマ区切り）から allowlist を作る。未設定なら空＝追従しない。 */
-export function allowedChannelsFromEnv(raw = process.env.RUSSELL_SLACK_CHANNELS): Set<string> {
-  return new Set(
-    (raw ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-  );
+function idsFromEnv(raw: string | undefined): Set<string> | undefined {
+  const ids = (raw ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return ids.length > 0 ? new Set(ids) : undefined;
+}
+
+/** 除外チャンネル（env `RUSSELL_SLACK_EXCLUDE_CHANNELS`、カンマ区切り）。未設定なら除外なし。 */
+export function excludedChannelsFromEnv(
+  raw = process.env.RUSSELL_SLACK_EXCLUDE_CHANNELS,
+): Set<string> | undefined {
+  return idsFromEnv(raw);
+}
+
+/**
+ * 厳格モードの allowlist（env `RUSSELL_SLACK_CHANNELS`、カンマ区切り）。
+ * **未設定が既定** ＝ 招待されたチャンネルすべてで追従する。
+ */
+export function allowedChannelsFromEnv(
+  raw = process.env.RUSSELL_SLACK_CHANNELS,
+): Set<string> | undefined {
+  return idsFromEnv(raw);
 }
