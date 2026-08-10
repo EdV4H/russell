@@ -30,8 +30,8 @@ surface プラグインは `ctx.surfaces.register(def)` で自己分類する。
 - **購読** — `app_mention`, `message.im`, 参加チャンネルの `message.channels`
 - **応答は原則スレッド内**。HITL 承認は **Block Kit ボタン**（承認/却下 + 理由入力）
 - **最小スコープ** — `app_mentions:read`, `channels:history`, `im:history`, `chat:write`, `reactions:write`
-- **自然言語コマンド** — 「覚えておいて」「忘れて」を解釈して記憶操作へ（→ `shelf.add` / strength 操作。
-  [`12-memory-system.md`](./12-memory-system.md)）
+- **記憶操作は通信面の仕事ではない** — 「覚えておいて」「忘れて」の解釈はコア側でモデルが行う
+  （[ADR 0003](../adr/0003-model-decides-what-to-remember.md)）。通信面は本文を正規化して渡すだけ
 
 透明性のための出力先も Slack surface が担う: 日記の `#<個体名>-日報` 投稿、メモ取得時の「📝 メモしました」リアクション（§10.1）。
 

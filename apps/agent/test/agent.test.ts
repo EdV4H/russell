@@ -15,6 +15,7 @@ import type {
   Temperament,
 } from "@edv4h/russell-shared";
 import { expect, test } from "vitest";
+import { scriptedModel } from "./memory-model.js";
 
 const BOB: Temperament = {
   name: "Bob",
@@ -76,21 +77,21 @@ function offlinePlugins(surface: RussellPlugin): RussellPlugin[] {
   return [createInMemoryMemoryPlugin(), createEchoModelPlugin(), surface];
 }
 
-test("「覚えておいて」で shelf.add が発火し、次のターンの想起に反映される", async () => {
+test("モデルが本棚に入れると決めたら、次のターンの想起に反映される", async () => {
   const s = captureSurface();
+  const m = scriptedModel('{"note":null,"shelf":"金曜の定例は15時","forget":null}');
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
-    offlinePlugins(s.plugin),
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
 
-  s.push("金曜の定例、覚えておいて");
+  s.push("金曜の定例、15時からね");
   await drain();
-  expect(s.sent.some((t) => t.includes("覚えておきます"))).toBe(true);
 
+  // 次のターンでは、本棚の中身が人格プロンプトに載って渡る
   s.push("それ何だっけ？");
   await drain();
-  // 本棚に入った内容が recall され、モデルが記憶を踏まえた旨を返す
-  expect(s.sent.at(-1)).toContain("覚えている内容");
+  expect(m.conversations.at(-1)?.system).toContain("金曜の定例は15時");
 
   await agent.destroy();
 });
@@ -127,12 +128,13 @@ test("キルスイッチ（RUSSELL_KILL=1）で自発/応答が凍結する（§
 
 test("メモを取ったら、その発言に「メモしました」を可視化する（§10.1）", async () => {
   const s = captureSurface();
+  const m = scriptedModel('{"note":"金曜15時に定例","shelf":null,"forget":null}');
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
-    offlinePlugins(s.plugin),
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
 
-  s.push("金曜の定例、覚えておいて", "m-1");
+  s.push("金曜の定例、15時からね", "m-1");
   await drain();
 
   // 発言単位（messageId）に付く。contextId はスレッド単位なので付け先にならない
@@ -140,25 +142,35 @@ test("メモを取ったら、その発言に「メモしました」を可視�
   // ワークスペースから見える行為なので監査にも残る
   expect(agent.ctx.audit.recent().map((e) => e.action)).toContain("surface.react");
 
-  // メモを取らないターンでは増えない
-  s.push("こんにちは", "m-2");
+  await agent.destroy();
+});
+
+test("何も書き留めないターンにはリアクションを付けない", async () => {
+  const s = captureSurface();
+  const m = scriptedModel(); // 既定＝何も書かない
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+
+  s.push("ありがとう", "m-1");
   await drain();
-  expect(s.reacted.length).toBe(1);
+  expect(s.reacted).toEqual([]);
 
   await agent.destroy();
 });
 
 test("react を実装しない通信面でも、メモ自体は成立する", async () => {
   const s = captureSurface({ react: false });
+  const m = scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}');
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
-    offlinePlugins(s.plugin),
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
 
-  s.push("これ覚えておいて", "m-1");
+  s.push("これ大事なんだ", "m-1");
   await drain();
 
-  expect(s.sent.some((t) => t.includes("覚えておきます"))).toBe(true);
   expect(agent.ctx.audit.recent().map((e) => e.action)).toContain("tool.invoked");
   expect(agent.ctx.audit.recent().map((e) => e.action)).not.toContain("surface.react");
 

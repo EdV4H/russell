@@ -48,6 +48,12 @@ import type {
 import { CONVERSATION_SERVICE, MEMORY_SERVICE } from "@edv4h/russell-shared";
 import { createAuditLog } from "./audit.js";
 import { createFreezeGate } from "./freeze.js";
+import {
+  type MemoryDecision,
+  buildDecisionRequest,
+  isEmptyDecision,
+  parseDecision,
+} from "./memory-decision.js";
 
 /**
  * 凍結中（レベル1/2）に mention へ返す唯一の文。
@@ -70,6 +76,8 @@ export interface AgentConfig {
   mode?: Mode;
   /** 会話に使うモデルの id（models レジストリに登録された provider）。未指定なら最初に登録されたもの。 */
   model?: string;
+  /** 記憶の判定に使うモデルの id。未指定なら会話用と同じ。安いモデルに分けられる。 */
+  memoryModel?: string;
 }
 
 export interface AgentHandle {
@@ -359,7 +367,14 @@ export async function createAgent(
   function personaPrompt(): string {
     const t = config.temperament;
     const back = t.backstory ? ` 背景: ${t.backstory}。` : "";
-    return `あなたは「${t.name}」という名前の同僚です。口調: ${t.tone}。${back}記憶を頼りに、簡潔に応答してください。`;
+    // 記憶の扱いについて事実と違うことを言わせない。**これはコード側では保証できない**——
+    // 記憶を書くかどうかは会話の後に決まり、返答を書くのはモデルだから、
+    // 「できること／できないこと」は人格の一部として渡すしかない（privacy-and-memory-policy §3）。
+    const memoryHonesty =
+      "記憶について: 忘れるよう言われたとき、実際にできるのは本棚から書庫へ下げることだけで、データは残ります。" +
+      "「消しました」とは言わず、書庫に下げたことと、完全な削除は運用担当者を通す必要があることを伝えてください。" +
+      "覚えたかどうかを断言せず、できなかったことをできたと言わないでください。";
+    return `あなたは「${t.name}」という名前の同僚です。口調: ${t.tone}。${back}記憶を頼りに、簡潔に応答してください。\n${memoryHonesty}`;
   }
 
   /**
@@ -457,66 +472,68 @@ export async function createAgent(
   }
 
   /**
-   * 「忘れて」の判定。**否定形を巻き込まない**のが肝。
-   * 「絶対に忘れてはいけない」で記憶を捨て始めたら、道具として信用できない。
-   */
-  function asksToForget(text: string): boolean {
-    if (/忘れては|忘れないで|忘れずに|忘れないよう/.test(text)) return false;
-    return /忘れて|わすれて|忘れといて/.test(text);
-  }
-
-  /**
-   * 「◯◯のことは忘れて」から検索語（◯◯）を取り出す。
+   * 何を書き留めるかをモデルに決めさせ、実行する（P0-3/P0-4）。
    *
-   * 発言全文で本棚を引くと、当然どの本にも一致しない（本の中身は過去の発言で、
-   * 「忘れて」という依頼文とは別物だから）。依頼の言い回しを落として話題だけ残す。
+   * **返答を送った後に走らせる。** 判定を前に置くとモデル呼び出しが2回に増え、
+   * 応答レイテンシ（P0-1: p95 ≤ 8s）を返答前に使い切る。人間も、答えてから手帳に書く。
    *
-   * **これは当座の割り切り。** どの記憶を指しているかの判断は本来モデルの仕事で、
-   * メモを取るかどうかの判定（P0-3/P0-4）と同じ性質の課題。取り出せなければ
-   * 「見つからなかった」と言う——曖昧なまま広く消す方が害が大きい。
+   * 記憶係の不調で会話を壊さない。判定が読めなければ何も書き留めずに終わる。
    */
-  function forgetQuery(text: string): string {
-    const head = text.split(/忘れて|わすれて|忘れといて/)[0] ?? "";
-    return head
-      .replace(/[のっ]?(こと|件)?(に?つい)?て?[はをも]\s*$/u, "")
-      .replace(/[、。\s]+$/u, "")
-      .trim();
-  }
+  async function decideMemory(msg: InboundMessage, replyText: string): Promise<void> {
+    const decider = memoryModelId ? models.get(memoryModelId) : undefined;
+    if (!decider) return;
 
-  /** 「覚えておいて」「メモして」「忘れて」を自然言語コマンドとして解釈する（§10）。 */
-  async function handleMemoryCommands(msg: InboundMessage): Promise<string | undefined> {
-    if (asksToForget(msg.text)) {
-      const query = forgetQuery(msg.text);
-      const result = (await invokeTool("shelf.forget", { query }, msg.trustLabel)) as {
-        archived?: number;
-      };
-      const archived = result?.archived ?? 0;
-      events.emit("memory:forgotten", { contextId: msg.contextId, archived });
-      // **消したとは言わない。** 実際にやったのは書庫落ち（L1）で、データは残っている
-      // （privacy-and-memory-policy §3）。できていないことをできたと言う方が害が大きい。
-      return archived > 0
-        ? `${archived}件を書庫に下げました。会話には出てきません（完全に消す場合は運用担当者へ）。`
-        : "それらしい記憶が本棚に見つかりませんでした。";
+    let decision: MemoryDecision;
+    try {
+      const req = buildDecisionRequest(msg.text, replyText);
+      decision = parseDecision((await decider.complete(req)).text);
+    } catch (err) {
+      events.emit("memory:decision-failed", { contextId: msg.contextId, error: String(err) });
+      return;
     }
-    if (/覚え(て|ておいて)|おぼえて/.test(msg.text)) {
-      await invokeTool("shelf.add", { source: msg.contextId, card: msg.text }, msg.trustLabel);
-      events.emit("memory:shelved", { contextId: msg.contextId });
-      await reactNoted(msg);
-      return "覚えておきますね。";
+    if (isEmptyDecision(decision)) return;
+
+    // 書き込みは通常どおり Policy Gate と監査を通す。モデルが決めたからといって素通しにしない。
+    try {
+      if (decision.note) {
+        await invokeTool(
+          "note.write",
+          { contextId: msg.contextId, content: decision.note },
+          msg.trustLabel,
+        );
+      }
+      if (decision.shelf) {
+        await invokeTool(
+          "shelf.add",
+          { source: msg.contextId, card: decision.shelf },
+          msg.trustLabel,
+        );
+        events.emit("memory:shelved", { contextId: msg.contextId });
+      }
+      if (decision.forget) {
+        const result = (await invokeTool(
+          "shelf.forget",
+          { query: decision.forget },
+          msg.trustLabel,
+        )) as { archived?: number };
+        events.emit("memory:forgotten", {
+          contextId: msg.contextId,
+          archived: result?.archived ?? 0,
+        });
+      }
+      // 書き留めたことを発言に見せる（§10.1）。何も書かなければ付けない。
+      if (decision.note || decision.shelf) await reactNoted(msg);
+    } catch (err) {
+      // Policy Gate や監査で止まることがある（凍結中など）。それは正しい挙動なので、
+      // 会話は壊さずに記録だけ残す。
+      events.emit("memory:write-failed", { contextId: msg.contextId, error: String(err) });
     }
-    if (/メモ(して|しといて)?/.test(msg.text)) {
-      await invokeTool(
-        "note.write",
-        { contextId: msg.contextId, content: msg.text },
-        msg.trustLabel,
-      );
-      await reactNoted(msg);
-      return "ちょっとメモしますね。";
-    }
-    return undefined;
   }
 
   const modelId = config.model ?? [...modelsMap.keys()][0];
+  // 記憶の判定に使うモデル。既定は会話用と同じ。安いモデルに寄せたいときに分ける
+  // （設計は気づきのスコアラーに Haiku を想定している, §6）。
+  const memoryModelId = config.memoryModel ?? modelId;
 
   /** 凍結中（レベル1/2）の最低限の応答。記憶もモデルも触らず、状況だけ返す。 */
   async function replyFrozen(msg: InboundMessage): Promise<void> {
@@ -560,9 +577,6 @@ export async function createAgent(
       events.emit("turn:error", new Error("audit degraded: ターンを中止しました"));
       return;
     }
-
-    // 自然言語の記憶コマンドを先に処理
-    const memAck = await handleMemoryCommands(msg);
 
     // 記憶読出し（§3.2）
     const mem = services.get<MemoryCapability>(MEMORY_SERVICE);
@@ -616,7 +630,7 @@ export async function createAgent(
 
     // 応答（受信元 surface へ返す）
     const surface = surfaces.get(msg.surfaceId);
-    const text = memAck ? `${memAck} ${replyText}` : replyText;
+    const text = replyText;
     if (!surface) return;
     // 副作用の直前にキルスイッチを再検査する（§5.1）。ターンの途中で `/russell stop` が
     // 入ったらここで止まる——モデル呼び出しの間に発動されるのが実際に多いケース。
@@ -647,6 +661,8 @@ export async function createAgent(
       return;
     }
     const delivery = await surface.send({ contextId: msg.contextId, text });
+    // 返答を送ってから、何を書き留めるかを決める（レイテンシを返答の前に積まない）。
+    await decideMemory(msg, replyText);
     if (delivery.status !== "succeeded") {
       await auditLog.registry.record({
         actor: runtime.agentId,

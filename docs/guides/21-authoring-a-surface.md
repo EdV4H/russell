@@ -109,7 +109,6 @@ export function createCliSurfacePlugin(options?: CliSurfaceOptions): RussellPlug
 - 購読: `app_mention`, `message.im`, 参加チャンネルの `message.channels` → 正規化して `sink` へ。
 - スコープは最小権限: `app_mentions:read`, `channels:history`, `im:history`, `chat:write`, `reactions:write`。
 - 応答は原則スレッド内。`requestApproval` は Block Kit ボタン。
-- 「覚えておいて」「忘れて」を自然言語コマンドとして解釈し記憶ツールへ橋渡し（`shelf.add` / strength 操作）。
 - 受信はすべて `untrusted`。
 
 ### surface-cli
