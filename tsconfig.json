@@ -1,11 +1,26 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/shared" },
-    { "path": "packages/migrate" },
-    { "path": "packages/core" },
-    { "path": "examples/russell-plugin-acme-surface" },
-    { "path": "apps/agent" },
-    { "path": "apps/worker" }
+    {
+      "path": "packages/shared"
+    },
+    {
+      "path": "packages/migrate"
+    },
+    {
+      "path": "packages/core"
+    },
+    {
+      "path": "examples/russell-plugin-acme-surface"
+    },
+    {
+      "path": "apps/agent"
+    },
+    {
+      "path": "apps/worker"
+    },
+    {
+      "path": "apps/viewer"
+    }
   ]
 }

@@ -1,0 +1,29 @@
+{
+  "name": "@edv4h/russell-viewer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "記憶の中身を見る読み取り専用ビューア（§10.1）。エージェントとは別プロセスで、DB だけを見る。",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node --env-file-if-exists=../../.env dist/main.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.7.0"
+  },
+  "main": "./dist/render.js",
+  "types": "./dist/render.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/render.ts",
+      "types": "./dist/render.d.ts",
+      "import": "./dist/render.js"
+    }
+  }
+}

@@ -14,7 +14,8 @@
     "dev": "turbo run dev",
     "migrate": "pnpm --filter @edv4h/russell-agent... build && pnpm --filter @edv4h/russell-agent migrate",
     "lint": "biome check .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "viewer": "pnpm --filter @edv4h/russell-viewer... build && pnpm --filter @edv4h/russell-viewer start"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
