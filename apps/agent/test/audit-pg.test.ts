@@ -10,10 +10,10 @@
 import { createAgent } from "@edv4h/russell-core";
 import { createPgAuditPlugin } from "@edv4h/russell-plugin-audit-pg";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
-import { createEchoModelPlugin } from "@edv4h/russell-plugin-model-echo";
 import type { InboundMessage, RussellPlugin, Temperament } from "@edv4h/russell-shared";
 import pg from "pg";
 import { describe, expect, test } from "vitest";
+import { scriptedModel } from "./memory-model.js";
 
 const DB = process.env.DATABASE_URL;
 
@@ -69,7 +69,7 @@ describe.skipIf(!DB)("audit-pg（DATABASE_URL 必須）", () => {
         // autoMigrate は渡さない＝本番と同じ起動経路（スキーマは global-setup で適用済み, §11）
         createPgAuditPlugin(),
         createInMemoryMemoryPlugin(),
-        createEchoModelPlugin(),
+        scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}').plugin,
         s.plugin,
       ],
     );

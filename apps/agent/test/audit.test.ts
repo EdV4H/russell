@@ -12,9 +12,9 @@
 
 import { createAgent } from "@edv4h/russell-core";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
-import { createEchoModelPlugin } from "@edv4h/russell-plugin-model-echo";
 import type { AuditEvent, InboundMessage, RussellPlugin, Temperament } from "@edv4h/russell-shared";
 import { expect, test } from "vitest";
+import { scriptedModel } from "./memory-model.js";
 
 const BOB: Temperament = {
   name: "Bob",
@@ -135,7 +135,12 @@ test("全アクションが trust_label 付きで event_log に残る（横断�
   const a = captureAuditSink();
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
-    [a.plugin, createInMemoryMemoryPlugin(), createEchoModelPlugin(), s.plugin],
+    [
+      a.plugin,
+      createInMemoryMemoryPlugin(),
+      scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}').plugin,
+      s.plugin,
+    ],
   );
 
   s.push("金曜の定例、覚えておいて");
@@ -165,7 +170,12 @@ test("untrusted 発言に起因するツール実行は untrusted のまま残�
   const a = captureAuditSink();
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
-    [a.plugin, createInMemoryMemoryPlugin(), createEchoModelPlugin(), s.plugin],
+    [
+      a.plugin,
+      createInMemoryMemoryPlugin(),
+      scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}').plugin,
+      s.plugin,
+    ],
   );
 
   s.push("金曜の定例、覚えておいて");
@@ -190,7 +200,12 @@ test("監査に本文を入れない（機微情報を監査へ流さない, A1-
   const a = captureAuditSink();
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
-    [a.plugin, createInMemoryMemoryPlugin(), createEchoModelPlugin(), s.plugin],
+    [
+      a.plugin,
+      createInMemoryMemoryPlugin(),
+      scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}').plugin,
+      s.plugin,
+    ],
   );
 
   s.push("山田さんの給与は機密、覚えておいて");
@@ -224,7 +239,12 @@ test("Policy Gate の拒否も理由コード付きで残る（default-deny）",
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
     // memory プラグインを外す = declareEffect が走らないので shelf.add は未申告
-    [a.plugin, rogue, createEchoModelPlugin(), s.plugin],
+    [
+      a.plugin,
+      rogue,
+      scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}').plugin,
+      s.plugin,
+    ],
   );
 
   s.push("これ覚えておいて");
@@ -244,7 +264,12 @@ test("fail-closed: 監査 sink が全滅したら書き込みも送信も止ま�
   const degraded: string[] = [];
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
-    [a.plugin, createInMemoryMemoryPlugin(), createEchoModelPlugin(), s.plugin],
+    [
+      a.plugin,
+      createInMemoryMemoryPlugin(),
+      scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}').plugin,
+      s.plugin,
+    ],
   );
   agent.ctx.events.on("audit:degraded", () => degraded.push("degraded"));
 
@@ -278,17 +303,24 @@ test("tool.invoked の記録が最初の失敗になってもツールは実行�
   const shelf = countingShelfPlugin();
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
-    [a.plugin, shelf.plugin, createEchoModelPlugin(), s.plugin],
+    [
+      a.plugin,
+      shelf.plugin,
+      scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}').plugin,
+      s.plugin,
+    ],
   );
 
   // Policy Gate の事前判定は通る（効果分類は申告済み・その時点では healthy）。
   // 落ちるのは tool.invoked の記録そのもの。
-  s.push("これ覚えておいて");
+  s.push("金曜の定例は15時");
   await drain();
 
   expect(shelf.runs.length).toBe(0); // 監査が残らなかったので実行しない
-  expect(s.sent.length).toBe(0); // 応答も返さない
   expect(agent.ctx.audit.healthy()).toBe(false);
+  // 記憶の書き込みは返答の後に走るので、返答自体はすでに出ている（その記録は成功していた）。
+  // ここで守りたいのは「記録が残らなければ副作用を起こさない」であって、返答の抑止ではない。
+  expect(s.sent.length).toBe(1);
 
   await agent.destroy();
 });
@@ -298,7 +330,12 @@ test("surface.send の記録が最初の失敗になっても送信しない（f
   const a = captureAuditSink({ failFromAction: "surface.send" });
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
-    [a.plugin, createInMemoryMemoryPlugin(), createEchoModelPlugin(), s.plugin],
+    [
+      a.plugin,
+      createInMemoryMemoryPlugin(),
+      scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}').plugin,
+      s.plugin,
+    ],
   );
 
   // 受信・モデル呼び出しまでは監査が残る。落ちるのは送信直前の記録。
@@ -356,7 +393,12 @@ test("mode 変更は監査が残ってから反映する（残せなければ切
   const a = captureAuditSink();
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
-    [a.plugin, createInMemoryMemoryPlugin(), createEchoModelPlugin(), s.plugin],
+    [
+      a.plugin,
+      createInMemoryMemoryPlugin(),
+      scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}').plugin,
+      s.plugin,
+    ],
   );
   // biome-ignore lint/suspicious/noExplicitAny: __setMode はコア内部用の変更口（/russell config 相当）。
   const setMode = (agent.ctx as any).__setMode as (m: string) => Promise<boolean>;
@@ -378,7 +420,11 @@ test("sink 未登録でも記録は失われない（インメモリのリング
   const s = captureSurface();
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
-    [createInMemoryMemoryPlugin(), createEchoModelPlugin(), s.plugin],
+    [
+      createInMemoryMemoryPlugin(),
+      scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}').plugin,
+      s.plugin,
+    ],
   );
 
   s.push("こんにちは");

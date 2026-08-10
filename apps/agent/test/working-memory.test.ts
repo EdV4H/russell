@@ -36,6 +36,8 @@ function recordingModel() {
       return ctx.models.register({
         id: "echo",
         async complete(req) {
+          // 記憶の判定は別の呼び出し。会話の検証には混ぜない
+          if (req.system.includes("記憶係")) return { text: "{}" };
           requests.push(req);
           return { text: `返事${requests.length}` };
         },

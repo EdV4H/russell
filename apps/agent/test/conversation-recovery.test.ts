@@ -37,6 +37,7 @@ function recordingModel() {
       return ctx.models.register({
         id: "echo",
         async complete(req) {
+          if (req.system.includes("記憶係")) return { text: "{}" };
           requests.push(req);
           return { text: "はい" };
         },

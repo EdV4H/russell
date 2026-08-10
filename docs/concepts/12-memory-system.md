@@ -76,6 +76,12 @@ strength < 0.2 → status = 'archived'（書庫へ。削除はしない）
 `λ`（忘却率）はプリセットの「記憶力」軸のパラメータ（[`18-presets-and-temperament.md`](./18-presets-and-temperament.md)）。
 人間が Slack で「これは覚えておいて」とピン留めした重要フラグは strength 下限 0.8 を保証する。
 
+> [!IMPORTANT] **決定（2026-08-10）**
+> **何を記憶するかはモデルが決める。** 受信テキストを正規表現で判定するのをやめ、返答を送った後に
+> 判定用のモデル呼び出しを1回行う。明示的に言われなくても記憶が残り、否定形（「メモしなくていい」）を
+> 取り違えず、言語も問わない。書き込みは従来どおり Policy Gate と監査を通る。
+> → [ADR 0003](../adr/0003-model-decides-what-to-remember.md)
+
 ## 記憶汚染（Memory Poisoning）の構造的防止
 
 > [!IMPORTANT]

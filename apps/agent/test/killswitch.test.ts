@@ -11,7 +11,6 @@
 
 import { FROZEN_NOTICE, createAgent } from "@edv4h/russell-core";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
-import { createEchoModelPlugin } from "@edv4h/russell-plugin-model-echo";
 import type {
   InboundMessage,
   KillSwitchCapability,
@@ -21,6 +20,7 @@ import type {
 } from "@edv4h/russell-shared";
 import { KILL_SWITCH_SERVICE } from "@edv4h/russell-shared";
 import { expect, test } from "vitest";
+import { scriptedModel } from "./memory-model.js";
 
 const BOB: Temperament = {
   name: "Bob",
@@ -104,7 +104,11 @@ const drain = async () => {
 };
 
 function plugins(...extra: RussellPlugin[]): RussellPlugin[] {
-  return [createInMemoryMemoryPlugin(), createEchoModelPlugin(), ...extra];
+  return [
+    createInMemoryMemoryPlugin(),
+    scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}').plugin,
+    ...extra,
+  ];
 }
 
 const actionsOf = (agent: { ctx: { audit: { recent(): { action: string }[] } } }) =>
@@ -171,19 +175,21 @@ test("ターンの途中で発動されたら応答を送らない（副作用�
 
 test("凍結中の Policy Gate は状態を変える行為を stopped で止める", async () => {
   const s = captureSurface();
-  const ks = fakeKillSwitch((call) => (call === 1 ? RUNNING : STOPPED));
+  // 凍結の検査は1ターンに複数回走る（受信直後・送信直前・ツール実行時）。
+  // 返答は通し、**記憶を書く段になってから**発動された状況を作る。
+  const ks = fakeKillSwitch((call) => (call <= 2 ? RUNNING : STOPPED));
   const agent = await createAgent(
     { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
     plugins(ks.plugin, s.plugin),
   );
 
-  // ターン開始後に発動された状態で shelf.add（internal_write）へ入る
-  s.push("これ覚えておいて");
+  s.push("金曜の定例は15時");
   await drain();
 
+  // 返答は出たが、その後の記憶の書き込みは止まる
+  expect(s.sent).toHaveLength(1);
   const denied = agent.ctx.audit.recent().find((e) => e.action === "policy.denied");
   expect(denied?.payload).toMatchObject({ tool: "shelf.add", reason: "stopped" });
-  expect(s.sent).toEqual([]);
   await agent.destroy();
 });
 
