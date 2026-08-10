@@ -34,3 +34,4 @@ ADR より前に下した決定は各ドキュメント内の決定ブロック�
 | # | 題 | 状態 |
 |---|---|---|
 | [0001](./0001-conversation-context-from-slack.md) | 会話の文脈は Slack から取り直す（保存しない） | 採用 |
+| [0002](./0002-conversation-context-is-not-memory.md) | 会話の文脈は記憶ではない（通信面の関心事） | 採用 |

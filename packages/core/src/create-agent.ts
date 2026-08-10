@@ -60,8 +60,8 @@ export const FROZEN_NOTICE =
 /** `destroy()` が実行中のターンを待つ上限。これを超えたターンは諦めて片付けに進む。 */
 const DRAIN_TIMEOUT_MS = 5_000;
 
-/** 1文脈あたりに覚えておく発言数（user/assistant 合計）。超えたら古いものから捨てる。 */
-const WORKING_MEMORY_TURNS = 20;
+/** 1文脈あたりに保持する発言数（user/assistant 合計）。超えたら古いものから捨てる。 */
+const CONTEXT_TURNS = 20;
 
 export interface AgentConfig {
   agentId: string;
@@ -290,31 +290,35 @@ export async function createAgent(
   // --- 認知ループ（§3.2/§3.3/§10）。P0 の心臓部。 ---
 
   /**
-   * 文脈ごとの直近のやりとり。**会話が成立するための短期記憶**で、メモ帳・本棚とは別物。
+   * 進行中の会話。**記憶ではなく、通信面の文脈**（ADR 0002）。
    *
-   * スレッドで「で、どうする？」と言われたときに何の話か分かるのは、直前の数往復を
-   * 覚えているから。メモ（`note.write`）は「後から思い出すために書き留めたもの」なので、
-   * 書き留めなかったことは残らない——それだけでは会話が続かない。
+   * 単位は `contextId` で、それが何を指すかは通信面が決める（Slack はスレッド、
+   * DM はチャンネル、CLI はセッション）。**記憶システムの4つのメタファー
+   * （メモ帳・日記・本棚・書庫, `12-memory-system.md`）には含めない**——あれは
+   * Bob が「保つ」ものの体系で、こちらは「いま抱えている」もの。層が違う。
    *
-   * プロセス内にしか持たないので再起動で消える。永続化と要約（compaction）は、
-   * 長い会話を扱うようになってから（§4 の夜間コンソリデーションと接続する）。
+   * メモ帳（`note.write`）と混ぜないこと。あれは書き留めたものだけが残る記憶で、
+   * こちらは何もしなくても残り、何もしなくても消える。会話の全発言をメモ帳に流すと、
+   * 夜間バッチが畳む日記が「今日言われた全部」になって壊れる。
+   *
+   * プロセス内にしか持たない。再起動後は通信面から取り直す（ADR 0001）。
    */
-  const workingMemory = new Map<string, ModelTurn[]>();
+  const conversationContext = new Map<string, ModelTurn[]>();
 
-  function recallTurns(contextId: string): ModelTurn[] {
+  function contextTurns(contextId: string): ModelTurn[] {
     // **コピーを返す。** 内部の配列をそのまま渡すと、渡した後の追記でプラグイン側の
     // 手元の履歴が書き換わる（プロバイダが保持していると気づきにくい形で壊れる）。
-    return [...(workingMemory.get(contextId) ?? [])];
+    return [...(conversationContext.get(contextId) ?? [])];
   }
 
   /**
-   * モデルへ渡す会話履歴。**手元に無ければ通信面から取り直す**（ADR 0001）。
+   * モデルへ渡す会話。**手元に無ければ通信面から取り直す**（ADR 0001）。
    *
-   * 再起動で短期記憶は消えるが、会話は Slack 側に残っている。保存する代わりに
+   * 再起動で文脈は消えるが、会話は通信面（Slack 等）に残っている。保存する代わりに
    * 必要になった時点で構成し直す。取れたものは短期記憶に載せるので、2回目以降は叩かない。
    */
   async function conversationFor(msg: InboundMessage): Promise<ModelTurn[]> {
-    const buffered = recallTurns(msg.contextId);
+    const buffered = contextTurns(msg.contextId);
     if (buffered.length > 0) return buffered;
 
     const conversation = services.get<ConversationCapability>(CONVERSATION_SERVICE);
@@ -328,14 +332,14 @@ export async function createAgent(
           ? turns.slice(0, -1)
           : turns;
       if (trimmed.length === 0) return [];
-      for (const turn of trimmed) rememberTurn(msg.contextId, turn);
+      for (const turn of trimmed) appendTurn(msg.contextId, turn);
       await auditLog.registry.record({
         actor: runtime.agentId,
         action: "conversation.recovered",
         payload: { contextId: msg.contextId, turns: trimmed.length },
         trustLabel: msg.trustLabel, // 復元した中身は他者の発言＝untrusted のまま
       });
-      return recallTurns(msg.contextId);
+      return contextTurns(msg.contextId);
     } catch (err) {
       // 取れなくても会話は続ける（流れを踏まえられないだけ）。黙って消さずに残す。
       events.emit("conversation:recover-failed", { contextId: msg.contextId, error: String(err) });
@@ -343,12 +347,12 @@ export async function createAgent(
     }
   }
 
-  function rememberTurn(contextId: string, turn: ModelTurn): void {
-    const turns = workingMemory.get(contextId) ?? [];
+  function appendTurn(contextId: string, turn: ModelTurn): void {
+    const turns = conversationContext.get(contextId) ?? [];
     turns.push(turn);
     // 古いものから捨てる。無制限に伸ばすとトークンも費用も青天井になる。
-    if (turns.length > WORKING_MEMORY_TURNS) turns.splice(0, turns.length - WORKING_MEMORY_TURNS);
-    workingMemory.set(contextId, turns);
+    if (turns.length > CONTEXT_TURNS) turns.splice(0, turns.length - CONTEXT_TURNS);
+    conversationContext.set(contextId, turns);
   }
 
   /** temperament から人格プロンプトを生成する（§6.1）。 */
@@ -600,9 +604,9 @@ export async function createAgent(
       ? (await provider.complete({ system, user: msg.text, history: await conversationFor(msg) }))
           .text
       : "（モデル未登録のため応答できません）";
-    // 今回の往復を覚える。次のターンで「さっきの話」が通じるようにする。
-    rememberTurn(msg.contextId, { role: "user", text: msg.text });
-    rememberTurn(msg.contextId, { role: "assistant", text: replyText });
+    // 今回の往復を文脈に足す。次のターンで「さっきの話」が通じるようにする。
+    appendTurn(msg.contextId, { role: "user", text: msg.text });
+    appendTurn(msg.contextId, { role: "assistant", text: replyText });
     await auditLog.registry.record({
       actor: runtime.agentId,
       action: "model.completed",

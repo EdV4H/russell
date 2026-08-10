@@ -24,6 +24,17 @@ plugin-first では記憶は**コアの機能ではない**。`@edv4h/russell-pl
 「本」= 元情報 + 読書カード（エージェント自身の要約）+ marginalia（後から追記する書き込み）。
 テーブル定義の全体は [`19-data-model.md`](./19-data-model.md)。
 
+> [!IMPORTANT]
+> **会話の文脈（進行中のやりとり）はこの体系に含まない**（[ADR 0002](../adr/0002-conversation-context-is-not-memory.md)）。
+> 記憶システムは Bob が「**保つ**」ものの体系で、会話の文脈は「**いま抱えている**」もの。
+> 単位（Slack のスレッド等）は通信面が決める概念であって、記憶の語彙ではない。
+> 実装と扱いは [`../reference/31-core-api.md`](../reference/31-core-api.md) と
+> [`13-surfaces.md`](./13-surfaces.md)。
+>
+> メモ帳と混ぜないこと。メモ帳は**書き留めたものだけが残る**記憶で、10秒前の発言を
+> メモに取る人はいない。会話の全発言をメモ帳に流すと、夜間バッチが畳む日記が
+> 「今日言われた全部」になって壊れる。
+
 ## 読み出しパス（会話時・予算 ~3,000トークン、§3.2）
 
 1. 受信メッセージからエンティティ抽出（Haiku、~200ms）
@@ -44,6 +55,13 @@ plugin-first では記憶は**コアの機能ではない**。`@edv4h/russell-pl
 | `shelf.add(source, card)` | 読書カードを書いて本棚へ | 意図的に覚える行為 |
 | `shelf.annotate(book_id, note)` | 既存の本に marginalia 追記 | 読み返して書き込む |
 | `deep_recall(query)` | 書庫・日記の深掘り検索 | 思い出す努力 |
+| `shelf.forget(query)` | 対象の本を書庫へ落とす（忘却の L1） | 「それはもういい」 |
+
+> [!NOTE]
+> **実装状況（2026-08-10）**: `note.write` / `shelf.add` / `shelf.forget` / `deep_recall` は登録済み。
+> `shelf.annotate`（本への書き込み）と `entities` / `entity_links`（索引カード）は未実装。
+> `deep_recall` はツールとしては通るが、認知ループから呼ぶ経路がまだ無い
+> （自然言語で発火するのは「覚えて」「メモして」「忘れて」の3つだけ）。
 
 ## 忘却曲線（§3.4）
 
