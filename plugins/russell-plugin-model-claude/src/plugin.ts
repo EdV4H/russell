@@ -26,6 +26,21 @@ export interface ClaudeModelOptions {
   apiKey?: string;
 }
 
+/**
+ * 直近のやりとり＋今回の発言を Messages API の形にする。
+ *
+ * 先頭が assistant で始まる配列は API が受け取らない。バッファが途中で切り詰められると
+ * そうなりうるので、先頭の assistant を落としてから組む。
+ */
+export function toMessages(req: ModelRequest): Anthropic.MessageParam[] {
+  const history = [...(req.history ?? [])];
+  while (history[0]?.role === "assistant") history.shift();
+  return [
+    ...history.map((t) => ({ role: t.role, content: t.text }) as Anthropic.MessageParam),
+    { role: "user" as const, content: req.user },
+  ];
+}
+
 export function createClaudeModelPlugin(options: ClaudeModelOptions = {}): RussellPlugin {
   const providerId = options.id ?? "claude";
   const model = options.model ?? "claude-sonnet-5";
@@ -44,7 +59,7 @@ export function createClaudeModelPlugin(options: ClaudeModelOptions = {}): Russe
             model,
             max_tokens: maxTokens,
             system: req.system,
-            messages: [{ role: "user", content: req.user }],
+            messages: toMessages(req),
           });
           const text = res.content
             .filter((b): b is Anthropic.TextBlock => b.type === "text")

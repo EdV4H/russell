@@ -18,7 +18,7 @@ import type {
   ModelRequest,
   RussellPlugin,
 } from "@edv4h/russell-shared";
-import { assertClaudeCodeAllowed, buildArgs, readResult } from "./invocation.js";
+import { assertClaudeCodeAllowed, buildArgs, readResult, renderPrompt } from "./invocation.js";
 
 export interface ClaudeCodeModelOptions {
   /** provider の id（config.model で参照する）。既定 "claude-code"。 */
@@ -114,7 +114,7 @@ export function createClaudeCodeModelPlugin(options: ClaudeCodeModelOptions = {}
           const stdout = await runClaude(
             cliPath,
             buildArgs({ model, system: req.system }),
-            req.user,
+            renderPrompt(req),
             timeoutMs,
           );
           return { text: readResult(stdout) };

@@ -3,9 +3,26 @@
  * モデル呼び出しと記憶 capability の最小インターフェース。
  */
 
+/** 会話の1発言。 */
+export interface ModelTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
 export interface ModelRequest {
   system: string;
   user: string;
+  /**
+   * 同じ文脈での直近のやりとり（古い順、今回の発言は含まない）。
+   *
+   * **長期記憶（メモ帳・本棚）とは別物。** あちらは「後から思い出すために書き留めたもの」で、
+   * こちらは「いま話している最中に覚えている直前の数往復」。人間で言えば前者が手帳、
+   * 後者が短期記憶にあたる。両方ないと会話にならない——記憶があっても直前の発言を
+   * 忘れていたら話が通じないし、直前しか覚えていなければ昨日の話ができない。
+   *
+   * 対応しないプロバイダは無視してよい（任意項目）。
+   */
+  history?: ModelTurn[];
 }
 
 export interface ModelResponse {
