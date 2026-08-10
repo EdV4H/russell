@@ -55,8 +55,9 @@
 - [ ] Slack アプリを作成し **Socket Mode を有効化**（サーバー inbound 開放不要, §10）
 - [ ] Bot Token Scopes を**最小権限**で申請（§10・§12-6）:
   - `app_mentions:read` / `channels:history` / `im:history` / `chat:write` / `reactions:write` / `commands`（`/russell` キルスイッチ用, §12-4）
+  - スレッド追従を使うなら `groups:history` も（プライベートチャンネル用）。スコープを足したら**再インストールが必要**
   - それ以上は付けない。将来必要になったら都度追加申請
-- [ ] Event Subscriptions: `app_mention` / `message.im` / `message.channels`（参加チャンネル分, §10）
+- [ ] Event Subscriptions: `app_mention` / `message.im`。スレッド追従を使うなら `message.channels` / `message.groups` も（**拾うのは参加スレッドの続きだけ**。allowlist は `RUSSELL_SLACK_CHANNELS`, [`../../concepts/13-surfaces.md`](../../concepts/13-surfaces.md)）
 - [ ] **Slash Command `/russell` を登録**（キルスイッチ, §12-4）。Socket Mode なので Request URL は不要。`commands` スコープが要る → [`../../reference/35-killswitch.md`](../../reference/35-killswitch.md)
 - [ ] Interactivity 有効化（HITL 承認の Block Kit ボタン, §10・§12-2）
 - [ ] **ワークスペース管理者の承認**を取得（アプリのインストール・スコープ承認は管理者権限）
