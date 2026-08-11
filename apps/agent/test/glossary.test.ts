@@ -259,8 +259,8 @@ test("1ターンに複数の用語を載せられる（資料を読むと固有�
   await agent.destroy();
 });
 
-test("1ターンの上限は5件（資料から際限なく拾わない）", async () => {
-  const many = Array.from({ length: 12 }, (_, i) => ({
+test("1ターンの上限は20件（資料から際限なく拾わない）", async () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({
     name: `用語${i}`,
     definition: "説明",
     aliases: [],
@@ -277,7 +277,65 @@ test("1ターンの上限は5件（資料から際限なく拾わない）", asy
   const defined = agent.ctx.audit
     .recent()
     .filter((e) => e.action === "tool.invoked" && e.payload.tool === "term.define");
-  expect(defined).toHaveLength(5);
+  expect(defined).toHaveLength(20);
+
+  await agent.destroy();
+});
+
+test("上限で落としたことを黙らない（silent truncation を作らない）", async () => {
+  const many = Array.from({ length: 30 }, (_, i) => ({
+    name: `用語${i}`,
+    definition: "説明",
+    aliases: [],
+  }));
+  const m = scripted(`{"terms":${JSON.stringify(many)}}`);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("読んでおいて");
+  await drain();
+
+  const truncated = agent.ctx.audit.recent().find((e) => e.action === "memory.terms_truncated");
+  expect(truncated?.payload).toMatchObject({ requested: 30, saved: 20 });
+  // 本文は残さない（A1-5）
+  expect(JSON.stringify(truncated?.payload)).not.toContain("説明");
+
+  await agent.destroy();
+});
+
+test("落としていなければ何も記録しない", async () => {
+  const m = scripted(DEFINE_MQL);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("MQL は見込み顧客のこと");
+  await drain();
+
+  expect(
+    agent.ctx.audit.recent().find((e) => e.action === "memory.terms_truncated"),
+  ).toBeUndefined();
+
+  await agent.destroy();
+});
+
+test("何を書き留めたかを列挙させない（返答の時点では書かれていない）", async () => {
+  const m = scripted(DEFINE_MQL);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("これ読んでおいて");
+  await drain();
+
+  // 会話用の人格プロンプト（判定用ではない）に入っていること
+  const persona = m.requests.find((r) => !r.system.includes("記憶係"));
+  expect(persona?.system).toContain("この返答を送った後に行われます");
+  expect(persona?.system).toContain("何を書き留めたかを列挙しないでください");
 
   await agent.destroy();
 });

@@ -438,7 +438,13 @@ export async function createAgent(
     const memoryHonesty =
       "記憶について: 忘れるよう言われたとき、実際にできるのは本棚から書庫へ下げることだけで、データは残ります。" +
       "「消しました」とは言わず、書庫に下げたことと、完全な削除は運用担当者を通す必要があることを伝えてください。" +
-      "覚えたかどうかを断言せず、できなかったことをできたと言わないでください。";
+      "覚えたかどうかを断言せず、できなかったことをできたと言わないでください。" +
+      // 実際に何を書き留めるかは**この返答の後**に決まる（ADR 0003）。返答の時点では
+      // 1件も書かれていないので、「書いておきました」と実績として語ると必ず嘘になる。
+      // 実際、企画書を読んだ回で20語を列挙したが、保存されたのは5件だった。
+      "記憶への書き込みは、この返答を送った後に行われます。**何を書き留めたかを列挙しないでください。**" +
+      "「書いておきました」ではなく「書き留めておきます」と言い、件数や内訳を断定しないこと。" +
+      "何が残ったかは本人が単語帳や本棚を見れば分かります。";
     // 支給されている装備を人格の一部として渡す。**未支給の装備はここに載らない**（§9.2）
     const tools = lookupInstructions(
       lookupCatalog(equipment.getAll(), toolsMap, TOOL_DESCRIPTIONS),
@@ -594,6 +600,16 @@ export async function createAgent(
           msg.trustLabel,
         );
         events.emit("memory:shelved", { contextId: msg.contextId });
+      }
+      if (decision.termOverflow) {
+        // 何件落としたかを残す。件数だけで本文は入れない（A1-5）
+        await auditLog.registry.record({
+          actor: runtime.agentId,
+          action: "memory.terms_truncated",
+          payload: { contextId: msg.contextId, ...decision.termOverflow },
+          trustLabel: msg.trustLabel,
+        });
+        events.emit("memory:terms-truncated", decision.termOverflow);
       }
       for (const term of decision.terms ?? []) {
         const marks = await markSensitive(`${term.name}\n${term.definition}`, "term.define", msg);

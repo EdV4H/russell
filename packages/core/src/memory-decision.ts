@@ -37,6 +37,8 @@ export interface MemoryDecision {
    * そのうち1つしか残らない（実際そうなった）。
    */
   terms?: { name: string; definition: string; aliases: string[] }[];
+  /** 上限や不備で落ちた用語があったか。無ければ undefined。 */
+  termOverflow?: TermOverflow;
 }
 
 const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。直前のやりとりを読み、何を書き留めるべきかだけを決めます。会話への返答はしません。
@@ -131,17 +133,32 @@ export function parseDecision(text: string): MemoryDecision {
   const title = meaningful(raw.title);
   const forget = meaningful(raw.forget);
   const terms = parseTerms(raw.terms);
+  const requested = Array.isArray(raw.terms) ? raw.terms.length : raw.terms ? 1 : 0;
   if (note) decision.note = note;
   if (shelf) decision.shelf = shelf;
   // 見出しだけ来ても意味がない（載せる本が無い）。本があるときだけ拾う。
   if (shelf && title) decision.shelfTitle = title;
   if (forget) decision.forget = forget;
   if (terms.length > 0) decision.terms = terms;
+  // 上限で落とした分を記録する。**silent truncation を作らない**（この設計が繰り返し踏んだ罠）
+  if (requested > terms.length) decision.termOverflow = { requested, saved: terms.length };
   return decision;
 }
 
-/** 1ターンに載せる用語の上限。資料を読むと際限なく出てくるので頭を打つ。 */
-const MAX_TERMS_PER_TURN = 5;
+/**
+ * 1ターンに載せる用語の上限。
+ *
+ * 5にしていたら、企画書1本で20語近く挙げたうち**5件だけが黙って保存された**。
+ * 用語は本棚と違って一意・更新可能・ビューアで見えるので、雑音の害が小さい。
+ * 資料を1本読む用途では、切り捨てる方が害が大きいと判断して上げた。
+ */
+const MAX_TERMS_PER_TURN = 20;
+
+/** 上限で切り捨てた件数。**黙って捨てない**ために呼び出し側へ渡す。 */
+export interface TermOverflow {
+  requested: number;
+  saved: number;
+}
 
 /** 用語を読む。名前と意味の両方が揃っていなければ採らない（片方だけでは引けない）。 */
 function parseTerms(value: unknown): NonNullable<MemoryDecision["terms"]> {
