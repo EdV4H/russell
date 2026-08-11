@@ -16,6 +16,11 @@ export const BOXES: Box[] = [
   { path: "/notes", title: "メモ帳", description: "スレッド単位の走り書き。TTL 既定7日（§3.1）" },
   { path: "/books", title: "本棚", description: "読書カード。意図的に覚えたもの（§3.1）" },
   {
+    path: "/terms",
+    title: "単語帳",
+    description: "このチームでだけ通じる言葉。忘却しない・別名で引く（ADR 0008）",
+  },
+  {
     path: "/archive",
     title: "書庫",
     description: "忘却曲線と「忘れて」で沈んだ本。削除はしない（§3.4）",
