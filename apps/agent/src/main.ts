@@ -10,6 +10,7 @@
 
 import { createAgent } from "@edv4h/russell-core";
 import { createPgAuditPlugin } from "@edv4h/russell-plugin-audit-pg";
+import { createNotionEquipmentPlugin } from "@edv4h/russell-plugin-equipment-notion";
 import { createPgKillSwitchPlugin } from "@edv4h/russell-plugin-killswitch-pg";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import { createPgMemoryPlugin } from "@edv4h/russell-plugin-memory-pg";
@@ -27,6 +28,9 @@ const useClaude = Boolean(process.env.ANTHROPIC_API_KEY); // ANTHROPIC_API_KEY �
 const useClaudeCode = !useClaude && process.env.RUSSELL_MODEL === "claude-code";
 const usePg = Boolean(process.env.DATABASE_URL); // DATABASE_URL → Postgres、無ければインメモリ
 const useSlack = Boolean(process.env.SLACK_BOT_TOKEN && process.env.SLACK_APP_TOKEN); // → Slack、無ければ CLI
+// 装備は「支給されていれば持っている」。トークンが無ければプラグイン側が自分で降りるので、
+// ここでは常に配列へ入れておく（支給の有無は env が決める, §9.1）。
+const useNotion = Boolean(process.env.NOTION_TOKEN);
 
 /** 会話に使うモデル。上から順に「キーがある / 手元の CLI を使う / ダミー」。 */
 function modelPlugin(): RussellPlugin {
@@ -66,6 +70,7 @@ function assembleSpongePlugins(): RussellPlugin[] {
   return [
     ...(usePg ? [createPgAuditPlugin(), createPgKillSwitchPlugin()] : []),
     usePg ? createPgMemoryPlugin() : createInMemoryMemoryPlugin(),
+    ...(useNotion ? [createNotionEquipmentPlugin()] : []),
     modelPlugin(),
     useSlack ? createSlackSurfacePlugin() : createCliSurfacePlugin({ displayName: BOB.name }),
   ];
