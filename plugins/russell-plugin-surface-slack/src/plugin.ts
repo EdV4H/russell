@@ -20,6 +20,7 @@ import type {
   AgentContext,
   ConversationCapability,
   DeliveryResult,
+  InboundMessage,
   KillSwitchCapability,
   OutboundMessage,
   ReactionRequest,
@@ -27,6 +28,7 @@ import type {
 } from "@edv4h/russell-shared";
 import { CONVERSATION_SERVICE, KILL_SWITCH_SERVICE } from "@edv4h/russell-shared";
 import bolt from "@slack/bolt";
+import { pendingReply, withinWindow } from "./catchup.js";
 import { type SlackHistoryMessage, hasOwnMessage, toTurns } from "./conversation.js";
 import {
   allowedChannelsFromEnv,
@@ -226,6 +228,79 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
             // タイムアウト等は unknown（blind retry しない, §9.2）
             return { status: "unknown" };
           }
+        },
+        /**
+         * 返信し忘れているやりとりを探す（積み残しの確認）。
+         *
+         * 探し方: 参加しているチャンネル/DM の直近の発言を見て、**やりとりの単位**
+         * （スレッド or DM）を候補に挙げ、それぞれの最後の発言が自分でなければ返信が要る。
+         *
+         * ここで API を叩く回数は「チャンネル数 + 候補スレッド数」に比例するので、
+         * 窓と件数の両方で必ず頭を打つようにしてある。**取りこぼしより叩きすぎの方が事故になる。**
+         */
+        async pendingMessages({ since, limit }): Promise<InboundMessage[]> {
+          const found: InboundMessage[] = [];
+          try {
+            const convos = await app.client.users.conversations({
+              types: "public_channel,private_channel,im",
+              exclude_archived: true,
+              limit: 200,
+            });
+            const oldest = String(Math.floor(since.getTime() / 1000));
+
+            for (const c of convos.channels ?? []) {
+              if (found.length >= limit) break;
+              const channel = c.id;
+              if (!channel) continue;
+              const isDm = c.is_im === true;
+              if (!isDm && excludedChannels?.has(channel)) continue;
+              if (!isDm && allowedChannels && !allowedChannels.has(channel)) continue;
+
+              const history = await app.client.conversations.history({
+                channel,
+                oldest,
+                limit: MAX_HISTORY,
+              });
+              const messages = (history.messages ?? []) as SlackHistoryMessage[];
+
+              // 候補のやりとり。DM はチャンネル直下、チャンネルはスレッド単位（ADR 0002）。
+              const contexts = isDm
+                ? [`${channel}:`]
+                : [
+                    ...new Set(
+                      messages
+                        // biome-ignore lint/suspicious/noExplicitAny: history の生要素。thread_ts は型に無い
+                        .map((m) => (m as any).thread_ts as string | undefined)
+                        .filter((t): t is string => Boolean(t)),
+                    ),
+                  ].map((t) => `${channel}:${t}`);
+
+              for (const contextId of contexts) {
+                if (found.length >= limit) break;
+                const thread = await fetchMessages(contextId);
+                const pending = pendingReply(thread, botUserIdRef.value);
+                // 古すぎるものは拾わない。3日前の話に今さら返すのは回復ではなく事故に見える
+                if (!pending || !withinWindow(pending.messageId, since)) continue;
+                found.push({
+                  surfaceId: "slack",
+                  contextId,
+                  author: pending.author,
+                  text: pending.text,
+                  trustLabel: "untrusted",
+                  isMention: true, // 呼ばれた扱い（自分が関与しているやりとりなので）
+                  messageId: pending.messageId,
+                });
+                if (!isDm) activeThreads.add(contextId);
+              }
+            }
+          } catch (err) {
+            // 拾い直しに失敗しても通常の受信は動く。黙らないようにログだけ残す
+            console.warn(
+              `[slack] 積み残しの確認に失敗: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+          if (debug) console.log(`[slack] 積み残し ${found.length}件`);
+          return found;
         },
         async react(req: ReactionRequest): Promise<DeliveryResult> {
           const { channel } = parseContextId(req.contextId);

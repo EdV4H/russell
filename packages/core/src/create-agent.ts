@@ -88,7 +88,33 @@ export interface AgentConfig {
    * いずれ `config_version.sensitive_guard` から来る値で、形は合わせてある。
    */
   sensitiveGuard?: SensitiveGuardConfig;
+  /** 積み残し（返信し忘れ）の拾い直し。 */
+  catchup?: CatchupConfig;
 }
+
+/**
+ * 返信し忘れているやりとりを拾い直す設定。
+ *
+ * **既定値は保守的にしてある。** 起動のたびに古いスレッドへ返信し始めるのは、
+ * 回復ではなく事故に見えるので。
+ */
+export interface CatchupConfig {
+  /** 既定 true。`false` で無効。 */
+  enabled?: boolean;
+  /** どこまで遡るか。既定12時間。 */
+  windowMs?: number;
+  /** 1回の確認で返す上限。既定3件。 */
+  limit?: number;
+  /** 確認の間隔。既定10分。0 で起動時の1回だけ。 */
+  intervalMs?: number;
+}
+
+/** 積み残しの確認の既定値。保守側に倒してある（起動のたびに古い話へ返信しないように）。 */
+const DEFAULT_CATCHUP_WINDOW_MS = 12 * 60 * 60 * 1000;
+const DEFAULT_CATCHUP_LIMIT = 3;
+const DEFAULT_CATCHUP_INTERVAL_MS = 10 * 60 * 1000;
+/** 同じやりとりを何度まで試すか。失敗が続くと無限に試し続けるのを防ぐ。 */
+const MAX_CATCHUP_ATTEMPTS = 2;
 
 export interface AgentHandle {
   ctx: AgentContext;
@@ -590,6 +616,10 @@ export async function createAgent(
     return result.categories;
   }
 
+  const catchup = config.catchup ?? {};
+  /** 拾い直しを試した回数（contextId ごと）。失敗が続くループを防ぐ。 */
+  const catchupAttempts = new Map<string, number>();
+
   const modelId = config.model ?? [...modelsMap.keys()][0];
   // 記憶の判定に使うモデル。既定は会話用と同じ。安いモデルに寄せたいときに分ける
   // （設計は気づきのスコアラーに Haiku を想定している, §6）。
@@ -777,27 +807,87 @@ export async function createAgent(
     trustLabel: "trusted",
   });
 
+  /**
+   * 積み残しの確認。**返信し忘れているやりとりを探して、通常のターンとして流す。**
+   *
+   * Bob が黙る原因は1つではない（プロセスが落ちていた・再起動中だった・Slack の
+   * イベントが届かなかった・ターンが例外で落ちた）。個別に潰しても次の原因が現れるので、
+   * **結果の側から回復する**。
+   *
+   * べき等性は通信面の判定に委ねている——「最後の発言が自分か」で決まるので、
+   * 返信した時点で対象から外れる。コア側に「返信済み」の台帳を持たない。
+   */
+  async function sweepPending(): Promise<void> {
+    if (catchup.enabled === false) return;
+    // 対応する通信面が無ければ何もしない。**凍結の検査より先に見る**——
+    // 拾い直しようが無いのにキルスイッチを読みに行く必要はない（DB を1回叩く）。
+    const capable = surfaces.getAll().filter((s) => s.pendingMessages);
+    if (capable.length === 0) return;
+    // 凍結中は自発的に動かない（§12-4）。解除後の確認で拾えばよい
+    if ((await runtime.freezeLevel()) !== "none") return;
+    const since = new Date(Date.now() - (catchup.windowMs ?? DEFAULT_CATCHUP_WINDOW_MS));
+    const limit = catchup.limit ?? DEFAULT_CATCHUP_LIMIT;
+
+    for (const surface of capable) {
+      if (!surface.pendingMessages) continue;
+      let pending: InboundMessage[];
+      try {
+        pending = await surface.pendingMessages({ since, limit });
+      } catch (err) {
+        events.emit("catchup:error", err);
+        continue;
+      }
+      if (pending.length === 0) continue;
+      await auditLog.registry.record({
+        actor: runtime.agentId,
+        action: "catchup.found",
+        payload: { surfaceId: surface.id, count: pending.length },
+        trustLabel: "trusted",
+      });
+      for (const msg of pending) {
+        // 同じやりとりを何度も試し続けない。**失敗が続くとループになる**ので上限を持つ。
+        // プロセス内にしか持たないのは、再起動が実質のリセットとして働くため。
+        const attempts = catchupAttempts.get(msg.contextId) ?? 0;
+        if (attempts >= MAX_CATCHUP_ATTEMPTS) continue;
+        catchupAttempts.set(msg.contextId, attempts + 1);
+        enqueueTurn(msg);
+      }
+    }
+  }
+
   // surfaces を購読して認知ループを起動。
   // 同一 context（スレッド）のターンは直列化する（記憶の読み書き順を保つ）。
   const turnQueues = new Map<string, Promise<void>>();
-  for (const surface of surfaces.getAll()) {
-    await surface.start((msg) => {
-      const prev = turnQueues.get(msg.contextId) ?? Promise.resolve();
-      const next = prev
-        .then(() => handleInbound(msg))
-        .catch(async (err) => {
-          await auditLog.registry.record({
-            actor: runtime.agentId,
-            action: "turn.failed",
-            payload: { contextId: msg.contextId, error: String(err) },
-            trustLabel: msg.trustLabel,
-          });
-          events.emit("turn:error", err);
-          await notifyTurnFailed(msg);
+  function enqueueTurn(msg: InboundMessage): void {
+    const prev = turnQueues.get(msg.contextId) ?? Promise.resolve();
+    const next = prev
+      .then(() => handleInbound(msg))
+      .catch(async (err) => {
+        await auditLog.registry.record({
+          actor: runtime.agentId,
+          action: "turn.failed",
+          payload: { contextId: msg.contextId, error: String(err) },
+          trustLabel: msg.trustLabel,
         });
-      turnQueues.set(msg.contextId, next);
-    });
+        events.emit("turn:error", err);
+        await notifyTurnFailed(msg);
+      });
+    turnQueues.set(msg.contextId, next);
   }
+  for (const surface of surfaces.getAll()) {
+    await surface.start(enqueueTurn);
+  }
+
+  // 起動直後に1回。**再起動中に来たメッセージを拾うのが本来の目的**なので、
+  // 間隔を待たずにまず確認する。
+  await sweepPending();
+  const catchupTimer =
+    (catchup.intervalMs ?? DEFAULT_CATCHUP_INTERVAL_MS) > 0
+      ? setInterval(() => {
+          void sweepPending();
+        }, catchup.intervalMs ?? DEFAULT_CATCHUP_INTERVAL_MS)
+      : undefined;
+  catchupTimer?.unref();
 
   return {
     ctx,
@@ -805,6 +895,7 @@ export async function createAgent(
       return await invokeTool(name, input, trustLabel);
     },
     async destroy() {
+      if (catchupTimer) clearInterval(catchupTimer);
       // 実行中のターンを待ってから片付ける。待たずに teardown するとプールも surface も
       // 閉じてしまい、**終了直前のターンだけが黙って消える**（`echo ... | pnpm dev` のように
       // 入力の直後に EOF が来る経路で顕著）。ハングしたターンで終われなくならないよう上限付き。

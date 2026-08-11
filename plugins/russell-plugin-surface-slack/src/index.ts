@@ -25,3 +25,5 @@ export { operatorCheckFromEnv, runRussellCommand } from "./killswitch-command.js
 export type { CommandResult, KillSwitchCommandDeps } from "./killswitch-command.js";
 export { createSlackSurfacePlugin } from "./plugin.js";
 export type { SlackSurfaceOptions } from "./plugin.js";
+export { pendingReply, withinWindow } from "./catchup.js";
+export type { PendingReply } from "./catchup.js";
