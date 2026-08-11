@@ -20,6 +20,8 @@ export interface MemoryDecision {
   note?: string;
   /** 後々まで効く知識（本棚）。読書カードとして1〜2文。 */
   shelf?: string;
+  /** 本棚に載せるときの見出し。索引として読むのはこちらなので、要約であって切り出しではない。 */
+  shelfTitle?: string;
   /** 忘れる対象を指す語。本棚の検索に使う。 */
   forget?: string;
 }
@@ -27,10 +29,12 @@ export interface MemoryDecision {
 const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。直前のやりとりを読み、何を書き留めるべきかだけを決めます。会話への返答はしません。
 
 次の JSON だけを出力してください（前後に説明を書かない）:
-{"note": string|null, "shelf": string|null, "forget": string|null}
+{"note": string|null, "shelf": string|null, "title": string|null, "forget": string|null}
 
 - note: このスレッドの作業メモ。数日で価値が消える具体（日時・数量・担当・決まったこと）。
 - shelf: 後々まで効く知識。人・仕事の進め方・繰り返し出てくる事実。1〜2文の要約で書く。
+- title: shelf の見出し。**本棚を眺めたときに何の話か分かる**ように、20文字前後で内容を言い当てる。
+  文の先頭を切り出したものにしない。shelf が null なら null。
 - forget: 相手が忘れるよう求めた対象を指す語。求められていなければ null。
 
 判断の基準:
@@ -80,9 +84,12 @@ export function parseDecision(text: string): MemoryDecision {
   const decision: MemoryDecision = {};
   const note = meaningful(raw.note);
   const shelf = meaningful(raw.shelf);
+  const title = meaningful(raw.title);
   const forget = meaningful(raw.forget);
   if (note) decision.note = note;
   if (shelf) decision.shelf = shelf;
+  // 見出しだけ来ても意味がない（載せる本が無い）。本があるときだけ拾う。
+  if (shelf && title) decision.shelfTitle = title;
   if (forget) decision.forget = forget;
   return decision;
 }
