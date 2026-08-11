@@ -11,3 +11,12 @@ export type {
   SensitiveFinding,
   SensitiveGuardConfig,
 } from "./sensitive-guard.js";
+export {
+  TOOL_DESCRIPTIONS,
+  allowedLookup,
+  lookupCatalog,
+  lookupInstructions,
+  parseLookup,
+  renderLookupResult,
+} from "./lookup.js";
+export type { LookupRequest, LookupTool } from "./lookup.js";
