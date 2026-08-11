@@ -39,19 +39,29 @@ export interface MemoryDecision {
   terms?: { name: string; definition: string; aliases: string[] }[];
   /** 上限や不備で落ちた用語があったか。無ければ undefined。 */
   termOverflow?: TermOverflow;
+  /**
+   * 個人カルテに載せる人（索引カード, ADR 0008）。
+   *
+   * **器を作ること自体が危ない機能**でもある。人物評価が集まる場所になりうるので、
+   * 何を書かないかを判定プロンプトで強く縛っている。
+   */
+  people?: { name: string; note: string; aliases: string[] }[];
 }
 
 const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。直前のやりとりを読み、何を書き留めるべきかだけを決めます。会話への返答はしません。
 
 次の JSON だけを出力してください（前後に説明を書かない）:
 {"note": string|null, "shelf": string|null, "title": string|null, "forget": string|null,
- "terms": [{"name": string, "definition": string, "aliases": [string]}]}
+ "terms": [{"name": string, "definition": string, "aliases": [string]}],
+ "people": [{"name": string, "note": string, "aliases": [string]}]}
 
 - note: このスレッドの作業メモ。数日で価値が消える具体（日時・数量・担当・決まったこと）。
 - shelf: **相手が「覚えておいて」と明示的に求めたときだけ**書く。それ以外は null。
   言われなくても効く知識は、後で夜間バッチがメモから昇格させるので、ここで書かなくてよい。
 - title: shelf の見出し。**本棚を眺めたときに何の話か分かる**ように、20文字前後で内容を言い当てる。
   文の先頭を切り出したものにしない。shelf が null なら null。
+- people: 一緒に働く人について**新しく分かった事実**（0〜5件）。個人カルテに載る。
+  aliases には呼び名・略称を入れる（「丸山さん」に対する「マルさん」など）。
 - forget: 相手が忘れるよう求めた対象を指す語。求められていなければ null。
 - terms: **このチームでだけ通じる言葉**の一覧（0〜5件）。単語帳に載る。
   略語、社内の呼び名、製品・機能・プロジェクトの固有名など。**辞書を引けば分かる一般語は載せない**。
@@ -72,6 +82,15 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
 - **読んだものがあるときは、そこからも拾う。** 資料の中で説明されている用語・決まったことは、
   相手が口で言っていなくても対象になる（読んだのに覚えないのは不自然）。
   ただし基準は同じで、**資料に書いてあるという理由だけでは書き留めない**。
+
+人について書くときの決まり（これは特に厳しく守ること）:
+- **書いてよいのは事実だけ。** 呼び名、所属、担当、何に詳しいか、連絡や進め方の好み。
+- **評価・人物評は書かない。** 「Notion に詳しい」「マーケを担当している」は事実だが、
+  「優秀」「詰めが甘い」「頼りになる」は評価。**褒めるものも書かない。**
+- 健康・人事・給与・対人トラブルは書かない。
+- **Slack を見れば分かることは書かない**（表示名・アイコン・タイムゾーン）。
+  書くのは**一緒に働いて分かったこと**だけ。
+- **推測を事実として書かない。** 役割が推測なら書かないか、推測だと分かるように書く。
 
 ${DO_NOT_WRITE_PROMPT}`;
 
@@ -134,6 +153,7 @@ export function parseDecision(text: string): MemoryDecision {
   const forget = meaningful(raw.forget);
   const terms = parseTerms(raw.terms);
   const requested = Array.isArray(raw.terms) ? raw.terms.length : raw.terms ? 1 : 0;
+  const people = parsePeople(raw.people);
   if (note) decision.note = note;
   if (shelf) decision.shelf = shelf;
   // 見出しだけ来ても意味がない（載せる本が無い）。本があるときだけ拾う。
@@ -142,8 +162,12 @@ export function parseDecision(text: string): MemoryDecision {
   if (terms.length > 0) decision.terms = terms;
   // 上限で落とした分を記録する。**silent truncation を作らない**（この設計が繰り返し踏んだ罠）
   if (requested > terms.length) decision.termOverflow = { requested, saved: terms.length };
+  if (people.length > 0) decision.people = people;
   return decision;
 }
+
+/** 1ターンに載せる人の上限。用語より少なくてよい（人はそう増えない）。 */
+const MAX_PEOPLE_PER_TURN = 5;
 
 /**
  * 1ターンに載せる用語の上限。
@@ -185,5 +209,34 @@ function parseTerms(value: unknown): NonNullable<MemoryDecision["terms"]> {
 
 /** 何か書き留めることがあるか。 */
 export function isEmptyDecision(decision: MemoryDecision): boolean {
-  return !decision.note && !decision.shelf && !decision.forget && !decision.terms?.length;
+  return (
+    !decision.note &&
+    !decision.shelf &&
+    !decision.forget &&
+    !decision.terms?.length &&
+    !decision.people?.length
+  );
+}
+
+/** 人を読む。名前と中身の両方が要る（用語と同じ規律）。 */
+function parsePeople(value: unknown): NonNullable<MemoryDecision["people"]> {
+  const items = Array.isArray(value) ? value : [value];
+  const people: NonNullable<MemoryDecision["people"]> = [];
+  const seen = new Set<string>();
+
+  for (const item of items) {
+    if (people.length >= MAX_PEOPLE_PER_TURN) break;
+    if (typeof item !== "object" || item === null) continue;
+    const raw = item as Record<string, unknown>;
+    const name = meaningful(raw.name);
+    const note = meaningful(raw.note);
+    if (!name || !note) continue;
+    if (seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    const aliases = (Array.isArray(raw.aliases) ? raw.aliases : [])
+      .map((a) => meaningful(a))
+      .filter((a): a is string => a !== undefined && a !== name);
+    people.push({ name, note, aliases: [...new Set(aliases)] });
+  }
+  return people;
 }

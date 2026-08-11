@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "consolidate": "node --env-file-if-exists=../../.env dist/main.js"
+    "consolidate": "node --env-file-if-exists=../../.env dist/main.js",
+    "forget-person": "node --env-file-if-exists=../../.env dist/forget-person.js"
   },
   "dependencies": {
     "@edv4h/russell-plugin-audit-pg": "workspace:*",

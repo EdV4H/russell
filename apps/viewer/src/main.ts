@@ -55,6 +55,14 @@ const VIEWS: Record<string, View> = {
            WHERE type = 'term' AND ($1::text IS NULL OR agent_id = $1)
            ORDER BY updated_at DESC LIMIT ${LIMIT}`,
   },
+  "/people": {
+    ...pick("/people"),
+    columns: ["updated_at", "agent_id", "name", "aliases", "summary", "sensitive_categories"],
+    sql: `SELECT updated_at, agent_id, name, aliases, summary, sensitive_categories
+            FROM entities
+           WHERE type = 'person' AND ($1::text IS NULL OR agent_id = $1)
+           ORDER BY updated_at DESC LIMIT ${LIMIT}`,
+  },
   "/books": {
     ...pick("/books"),
     columns: [
@@ -117,6 +125,7 @@ async function overview(pool: pg.Pool, agent?: string): Promise<string> {
     `SELECT 'メモ帳' AS box, count(*)::text AS n FROM notes WHERE ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '本棚', count(*)::text FROM books WHERE status = 'active' AND ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '単語帳', count(*)::text FROM entities WHERE type = 'term' AND ($1::text IS NULL OR agent_id = $1)
+     UNION ALL SELECT '個人カルテ', count(*)::text FROM entities WHERE type = 'person' AND ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '書庫', count(*)::text FROM books WHERE status = 'archived' AND ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '日記', count(*)::text FROM journal_entries WHERE ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '監査ログ', count(*)::text FROM event_log WHERE ($1::text IS NULL OR agent_id = $1)

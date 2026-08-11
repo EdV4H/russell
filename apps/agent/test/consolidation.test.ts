@@ -431,3 +431,66 @@ describe.skipIf(!DB)("機微情報の印と公開の境界（A-1 / ADR 0007, DAT
     await pool.end();
   });
 });
+
+describe.skipIf(!DB)("個人カルテは公開経路に出ない（ADR 0008, DATABASE_URL 必須）", () => {
+  test("日記に人のカルテが混ざらない", async () => {
+    const agentId = `person-journal-${Date.now()}`;
+    const pool = new pg.Pool({ connectionString: DB });
+    await pool.query(
+      `INSERT INTO entities (agent_id, name, type, aliases, summary) VALUES
+         ($1,'丸山','person','{丸山さん}','マーケ担当。Notion に詳しい'),
+         ($1,'MQL','term','{}','マーケが獲得した見込み顧客')`,
+      [agentId],
+    );
+    await pool.query(
+      "INSERT INTO notes (agent_id, context_id, content) VALUES ($1,'c1','Aの仕様が決まった')",
+      [agentId],
+    );
+
+    const result = await runConsolidation({
+      connectionString: DB,
+      agentId,
+      now: new Date("2026-07-29T18:00:00Z"),
+    });
+
+    // 日記はメモから作られる。カルテも単語帳も材料に入らない
+    expect(result.narrative).toContain("Aの仕様が決まった");
+    expect(result.narrative).not.toContain("マーケ担当");
+    expect(result.narrative).not.toContain("丸山");
+
+    const journal = await pool.query<{ narrative: string; events: unknown }>(
+      "SELECT narrative, events FROM journal_entries WHERE agent_id=$1",
+      [agentId],
+    );
+    expect(JSON.stringify(journal.rows[0])).not.toContain("Notion に詳しい");
+
+    await pool.end();
+  });
+
+  test("本棚の統合・昇格の対象にもならない（カルテは索引カードで、本ではない）", async () => {
+    const agentId = `person-organize-${Date.now()}`;
+    const pool = new pg.Pool({ connectionString: DB });
+    await pool.query(
+      "INSERT INTO entities (agent_id, name, type, aliases, summary) VALUES ($1,'丸山','person','{}','マーケ担当')",
+      [agentId],
+    );
+
+    // 整理のモデルが「カルテを畳め」と言ってきても、材料に入っていないので届かない
+    const result = await runConsolidation({
+      connectionString: DB,
+      agentId,
+      organize: async (req) => {
+        expect(req.user).not.toContain("マーケ担当");
+        return '{"merges":[],"retitles":[]}';
+      },
+    });
+
+    expect(result.booksMerged).toBe(0);
+    const person = await pool.query("SELECT 1 FROM entities WHERE agent_id=$1 AND type='person'", [
+      agentId,
+    ]);
+    expect(person.rowCount).toBe(1); // 消えていない
+
+    await pool.end();
+  });
+});

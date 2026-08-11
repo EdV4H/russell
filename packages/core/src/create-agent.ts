@@ -611,6 +611,20 @@ export async function createAgent(
         });
         events.emit("memory:terms-truncated", decision.termOverflow);
       }
+      for (const person of decision.people ?? []) {
+        const marks = await markSensitive(`${person.name}\n${person.note}`, "person.remember", msg);
+        await invokeTool(
+          "person.remember",
+          {
+            name: person.name,
+            note: person.note,
+            aliases: person.aliases,
+            sensitive: marks,
+          },
+          msg.trustLabel,
+        );
+        events.emit("memory:person-remembered", { contextId: msg.contextId, name: person.name });
+      }
       for (const term of decision.terms ?? []) {
         const marks = await markSensitive(`${term.name}\n${term.definition}`, "term.define", msg);
         await invokeTool(
@@ -637,7 +651,9 @@ export async function createAgent(
         });
       }
       // 書き留めたことを発言に見せる（§10.1）。何も書かなければ付けない。
-      if (decision.note || decision.shelf || decision.terms?.length) await reactNoted(msg);
+      if (decision.note || decision.shelf || decision.terms?.length || decision.people?.length) {
+        await reactNoted(msg);
+      }
     } catch (err) {
       // Policy Gate や監査で止まることがある（凍結中など）。それは正しい挙動なので、
       // 会話は壊さずに記録だけ残す。
@@ -730,6 +746,8 @@ export async function createAgent(
     // 単語帳（索引カード）。**この文に出てきた語**を引く（recency ではなく一致）。
     // モデルを使わない照合なので、レイテンシは増えない。
     const terms = mem?.terms ? await mem.terms(msg.text) : [];
+    // 個人カルテ。**会話に入れるだけで、公開経路には出さない**（ADR 0008）
+    const people = mem?.people ? await mem.people(msg.text) : [];
 
     // 文脈構築
     const memoryBlock = [
@@ -740,6 +758,9 @@ export async function createAgent(
       // このチームでだけ通じる言葉。**知らない前提で説明し直さない**ために先に渡す
       terms.length
         ? `この会話に出てくる言葉:\n- ${terms.map((t) => `${t.name}: ${t.definition}`).join("\n- ")}`
+        : "",
+      people.length
+        ? `この会話に出てくる人:\n- ${people.map((p) => `${p.name}: ${p.note}`).join("\n- ")}`
         : "",
     ]
       .filter(Boolean)
