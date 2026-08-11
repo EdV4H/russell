@@ -21,6 +21,7 @@ import {
   runConsolidation,
 } from "@edv4h/russell-plugin-memory-pg";
 import { createClaudeCodeProvider } from "@edv4h/russell-plugin-model-claude-code";
+import { JOURNAL_CHANNEL_KEY, readSetting } from "@edv4h/russell-plugin-settings-pg";
 import { createSlackPoster } from "@edv4h/russell-plugin-surface-slack";
 import pg from "pg";
 
@@ -93,7 +94,6 @@ async function main(): Promise<void> {
    * 日報の投稿先（§10.1）。**未設定なら投稿しない。**
    * 「どこへ出すか」は運用が決めることなので、既定でどこかへ流し始めない。
    */
-  const journalChannel = process.env.RUSSELL_JOURNAL_CHANNEL;
   /** worker も実行モードに従う（§6.5）。投稿は external_send なので dryrun では出さない。 */
   const mode = resolveMode();
 
@@ -143,6 +143,12 @@ async function main(): Promise<void> {
   auditPool.on("error", (err) => {
     console.error("[worker] 監査用 Postgres 接続エラー:", err.message);
   });
+
+  // **設定（DB）が先、env はフォールバック。** どこへ出すかは Slack から変えられる
+  // （`/russell journal here`）ので、env で固定するものではない。
+  const journalChannel =
+    (await readSetting(auditPool, agentId, JOURNAL_CHANNEL_KEY)) ??
+    process.env.RUSSELL_JOURNAL_CHANNEL;
 
   try {
     if (backfill) {

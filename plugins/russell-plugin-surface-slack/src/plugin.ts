@@ -25,8 +25,9 @@ import type {
   OutboundMessage,
   ReactionRequest,
   RussellPlugin,
+  SettingsCapability,
 } from "@edv4h/russell-shared";
-import { CONVERSATION_SERVICE, KILL_SWITCH_SERVICE } from "@edv4h/russell-shared";
+import { CONVERSATION_SERVICE, KILL_SWITCH_SERVICE, SETTINGS_SERVICE } from "@edv4h/russell-shared";
 import bolt from "@slack/bolt";
 import { pendingReply, withinWindow } from "./catchup.js";
 import { type SlackHistoryMessage, hasOwnMessage, toTurns } from "./conversation.js";
@@ -167,8 +168,18 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
                 capability: ctx.services.get<KillSwitchCapability>(KILL_SWITCH_SERVICE),
                 selfAgentId: ctx.runtime.agentId,
                 isOperator,
+                settings: ctx.services.get<SettingsCapability>(SETTINGS_SERVICE),
+                channelId: command.channel_id,
               });
               await respond({ response_type: "ephemeral", text: result.reply });
+              // **宣言はチャンネル全員に見える形で出す**（ephemeral では意味がない）。
+              // 日報の出し先が静かに移らないための仕掛け。
+              if (result.declare && command.channel_id) {
+                await app.client.chat.postMessage({
+                  channel: command.channel_id,
+                  text: result.declare,
+                });
+              }
               if (result.announce && adminChannel) {
                 await app.client.chat.postMessage({ channel: adminChannel, text: result.announce });
               }

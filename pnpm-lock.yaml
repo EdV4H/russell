@@ -53,6 +53,9 @@ importers:
       '@edv4h/russell-plugin-model-echo':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-model-echo
+      '@edv4h/russell-plugin-settings-pg':
+        specifier: workspace:*
+        version: link:../../plugins/russell-plugin-settings-pg
       '@edv4h/russell-plugin-surface-cli':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-surface-cli
@@ -112,6 +115,9 @@ importers:
       '@edv4h/russell-plugin-model-claude-code':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-model-claude-code
+      '@edv4h/russell-plugin-settings-pg':
+        specifier: workspace:*
+        version: link:../../plugins/russell-plugin-settings-pg
       '@edv4h/russell-plugin-surface-slack':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-surface-slack
@@ -295,6 +301,28 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared
     devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  plugins/russell-plugin-settings-pg:
+    dependencies:
+      '@edv4h/russell-migrate':
+        specifier: workspace:*
+        version: link:../../packages/migrate
+      '@edv4h/russell-shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      pg:
+        specifier: ^8.13.0
+        version: 8.22.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      '@types/pg':
+        specifier: ^8.11.0
+        version: 8.20.0
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

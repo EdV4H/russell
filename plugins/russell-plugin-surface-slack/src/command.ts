@@ -26,10 +26,13 @@ export type RussellCommand =
   | { kind: "stop"; scope: StopScope; agentId: string; reason?: string }
   | { kind: "start"; scope: StopScope; agentId: string }
   | { kind: "status" }
+  /** 日報の投稿先。**打ったチャンネルだけ**が対象（任意の宛先を渡せない）。 */
+  | { kind: "journal"; action: "here" | "off" }
   | { kind: "help"; message: string };
 
 const USAGE =
-  "使い方: `/russell stop [--all|--agent=<個体>] [理由]` / `/russell start [--all|--agent=<個体>]` / `/russell status`";
+  "使い方: `/russell stop [--all|--agent=<個体>] [理由]` / `/russell start [--all|--agent=<個体>]` / `/russell status`" +
+  " / `/russell journal here|off`";
 
 /** `--agent=x` / `--all` を取り出し、残りの語を返す。 */
 function takeFlags(tokens: string[]): {
@@ -74,6 +77,19 @@ export function parseRussellCommand(text: string, selfAgentId: string): RussellC
   }
 
   if (verb === "status") return { kind: "status" };
+
+  // 日報の投稿先。**打ったチャンネルしか指定できない**——任意のチャンネル ID を渡せると、
+  // Bob が居ない場所や、より広い場所へ黙って向けられる（#37 と同じ「opt-in の実体は Slack の操作」）。
+  if (verb === "journal") {
+    const target = (rest[0] ?? "").toLowerCase();
+    if (target === "here") return { kind: "journal", action: "here" };
+    if (target === "off") return { kind: "journal", action: "off" };
+    return {
+      kind: "help",
+      message:
+        "使い方: `/russell journal here`（このチャンネルに日報を出す） / `/russell journal off`",
+    };
+  }
 
   if (verb === "stop" || verb === "start") {
     const scope: StopScope = all ? "all" : "agent";

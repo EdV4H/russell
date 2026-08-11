@@ -9,14 +9,19 @@
  *   （fail-closed。設定漏れが「誰でも解除できる」に倒れてはいけない）。
  */
 
-import type { KillSwitchCapability, StopState } from "@edv4h/russell-shared";
+import type { KillSwitchCapability, SettingsCapability, StopState } from "@edv4h/russell-shared";
 import { type RussellCommand, parseRussellCommand } from "./command.js";
+import { JOURNAL_CHANNEL_SETTING } from "./journal-setting.js";
 
 export interface KillSwitchCommandDeps {
   /** 通常経路の実体。未設定（オフライン構成）ならその旨を返す。 */
   capability?: KillSwitchCapability;
   selfAgentId: string;
   isOperator(userId: string): boolean;
+  /** 運用設定（日報の投稿先）。未設定なら journal コマンドは使えないと返す。 */
+  settings?: SettingsCapability;
+  /** コマンドが打たれたチャンネル。`journal here` の対象。 */
+  channelId?: string;
 }
 
 export interface CommandResult {
@@ -24,6 +29,8 @@ export interface CommandResult {
   reply: string;
   /** 管理チャンネルへ流す記録（kill-switch.md「発動後の連絡フロー」）。無ければ流さない。 */
   announce?: string;
+  /** **打たれたチャンネル自身**へ出す宣言。日報の出し先が静かに移らないようにする。 */
+  declare?: string;
 }
 
 function describe(state: StopState): string {
@@ -40,6 +47,11 @@ export async function runRussellCommand(
 ): Promise<CommandResult> {
   const cmd: RussellCommand = parseRussellCommand(text, deps.selfAgentId);
   if (cmd.kind === "help") return { reply: cmd.message };
+
+  // 日報の投稿先。**キルスイッチとは別の権限**で、誰でも変えられる。
+  // 代わりに「黙って変えられない」形にしてある——変更は監査に残り、
+  // 新しい投稿先に宣言が出て、管理チャンネルにも流れる。
+  if (cmd.kind === "journal") return await runJournalCommand(cmd.action, userId, deps);
 
   const cap = deps.capability;
   if (!cap) {
@@ -96,4 +108,47 @@ export function operatorCheckFromEnv(
       .filter(Boolean),
   );
   return (id: string) => ids.has(id);
+}
+
+/**
+ * 日報の投稿先を切り替える。
+ *
+ * **打ったチャンネルしか指定できない**（`here` か `off` だけ）。任意の宛先を渡せると、
+ * Bob が居ない場所やより広い場所へ黙って向けられる。opt-in の実体を Slack の操作に
+ * 置くのは、チャンネル追従と同じ考え方。
+ *
+ * 権限で縛らない代わりに、**変えたことが必ず見える**ようにしている:
+ * 監査に残り、新しい投稿先に宣言が出て、管理チャンネルにも流れる。
+ */
+async function runJournalCommand(
+  action: "here" | "off",
+  userId: string,
+  deps: KillSwitchCommandDeps,
+): Promise<CommandResult> {
+  const settings = deps.settings;
+  if (!settings) {
+    return { reply: "この個体は運用設定（DB）を持っていないため、日報の投稿先を変えられません。" };
+  }
+
+  if (action === "off") {
+    const { before } = await settings.set(JOURNAL_CHANNEL_SETTING, null, userId);
+    if (!before) return { reply: "日報の投稿先はもともと設定されていません。" };
+    return {
+      reply: "日報の投稿を止めました。日記そのものは今までどおり書かれます。",
+      announce: `:newspaper: 日報の投稿を停止: <#${before}> / 実行者: <@${userId}>`,
+    };
+  }
+
+  const channel = deps.channelId;
+  if (!channel) return { reply: "チャンネルが分からないため設定できません。" };
+  const { before } = await settings.set(JOURNAL_CHANNEL_SETTING, channel, userId);
+  if (before === channel) return { reply: "すでにこのチャンネルへ出す設定になっています。" };
+  return {
+    reply: "日報の投稿先をこのチャンネルにしました。",
+    // **新しい投稿先に宣言する。** 静かに移らない
+    declare: `:newspaper: これから毎日の日報はこのチャンネルに出します（設定: <@${userId}>）。`,
+    announce: before
+      ? `:newspaper: 日報の投稿先を変更: <#${before}> → <#${channel}> / 実行者: <@${userId}>`
+      : `:newspaper: 日報の投稿先を設定: <#${channel}> / 実行者: <@${userId}>`,
+  };
 }
