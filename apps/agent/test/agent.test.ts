@@ -81,7 +81,7 @@ test("モデルが本棚に入れると決めたら、次のターンの想起�
   const s = captureSurface();
   const m = scriptedModel('{"note":null,"shelf":"金曜の定例は15時","forget":null}');
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
 
@@ -99,7 +99,7 @@ test("モデルが本棚に入れると決めたら、次のターンの想起�
 test("mention に応答する（P0-1/P0-2 相当）", async () => {
   const s = captureSurface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     offlinePlugins(s.plugin),
   );
   s.push("こんにちは");
@@ -113,7 +113,7 @@ test("キルスイッチ（RUSSELL_KILL=1）で自発/応答が凍結する（§
   try {
     const s = captureSurface();
     const agent = await createAgent(
-      { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+      { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
       offlinePlugins(s.plugin),
     );
     s.push("覚えておいて: これは凍結中");
@@ -130,7 +130,7 @@ test("メモを取ったら、その発言に「メモしました」を可視�
   const s = captureSurface();
   const m = scriptedModel('{"note":"金曜15時に定例","shelf":null,"forget":null}');
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
 
@@ -149,7 +149,7 @@ test("何も書き留めないターンにはリアクションを付けない",
   const s = captureSurface();
   const m = scriptedModel(); // 既定＝何も書かない
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
 
@@ -164,7 +164,7 @@ test("react を実装しない通信面でも、メモ自体は成立する", as
   const s = captureSurface({ react: false });
   const m = scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}');
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
 
@@ -194,7 +194,7 @@ test("destroy() は実行中のターンを待ってから片付ける", async (
     },
   };
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [createInMemoryMemoryPlugin(), slowModel, s.plugin],
   );
 
@@ -239,7 +239,7 @@ test("ターンが落ちたら黙らずに伝える（#25）", async () => {
     },
   };
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [createInMemoryMemoryPlugin(), broken, s.plugin],
   );
 
@@ -272,7 +272,7 @@ test("凍結中はターンが落ちても沈黙する", async () => {
     },
   };
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [createInMemoryMemoryPlugin(), broken, s.plugin],
   );
   process.env.RUSSELL_KILL = "1";

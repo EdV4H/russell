@@ -106,7 +106,7 @@ test("手元に会話が無ければ通信面から取り直す（再起動後�
     { role: "assistant", text: "資料を用意します" },
   ]);
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), c.plugin, m.plugin, s.plugin],
   );
 
@@ -142,7 +142,7 @@ test("取得物の末尾に今回の発言が入っていても二重にしな�
     { role: "user", text: "いまの発言" },
   ]);
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), c.plugin, m.plugin, s.plugin],
   );
 
@@ -170,7 +170,7 @@ test("取り直せなくても会話は続ける（流れを踏まえられな�
     },
   };
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), failing, m.plugin, s.plugin],
   );
 

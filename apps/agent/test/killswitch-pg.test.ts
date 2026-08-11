@@ -108,7 +108,7 @@ describe.skipIf(!DB)("killswitch-pg（DATABASE_URL 必須）", () => {
     const agentId = uniqueId("ks");
     const s = captureSurface();
     const agent = await createAgent(
-      { agentId, configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+      { agentId, configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
       [
         createPgAuditPlugin(),
         createPgKillSwitchPlugin(),
@@ -179,7 +179,7 @@ describe.skipIf(!DB)("killswitch-pg（DATABASE_URL 必須）", () => {
   test("監査が壊れていても止まれる。ただし解除はできない（§12-7）", async () => {
     const agentId = uniqueId("ks-degraded");
     const agent = await createAgent(
-      { agentId, configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+      { agentId, configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
       [failingAuditPlugin, createPgKillSwitchPlugin()],
     );
     const cap = agent.ctx.services.get<KillSwitchCapability>(KILL_SWITCH_SERVICE);

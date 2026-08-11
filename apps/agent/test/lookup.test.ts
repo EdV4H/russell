@@ -165,7 +165,7 @@ const drain = async () => {
 
 async function run(plugins: RussellPlugin[]) {
   return createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     plugins,
   );
 }

@@ -87,7 +87,7 @@ describe.skipIf(!DB)("マイグレーション（DATABASE_URL 必須）", () => 
   test("未適用の DB ではエージェントが起動しない（起動時 CREATE TABLE をしない）", async () => {
     await withEmptyDatabase(async (url) => {
       await expect(
-        createAgent({ agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun" }, [
+        createAgent({ agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live" }, [
           createPgAuditPlugin({ connectionString: url }),
         ]),
       ).rejects.toThrow(/pnpm migrate/);
@@ -134,7 +134,7 @@ describe.skipIf(!DB)("マイグレーション（DATABASE_URL 必須）", () => 
 
       // 同じ DB でエージェントが起動する
       const agent = await createAgent(
-        { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun" },
+        { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live" },
         [createPgAuditPlugin({ connectionString: url })],
       );
       await agent.destroy();

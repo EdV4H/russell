@@ -92,7 +92,7 @@ async function run(decision: string, text: string) {
   const m = scripted(decision);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push(text);

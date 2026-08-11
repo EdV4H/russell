@@ -118,7 +118,7 @@ test("凍結中（レベル1/2）は mention に停止中とだけ返し、モ�
   const s = captureSurface();
   const ks = fakeKillSwitch(() => STOPPED);
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     plugins(ks.plugin, s.plugin),
   );
 
@@ -140,7 +140,7 @@ test("凍結状態が読めないときは完全沈黙（fail-closed, §12-7）"
     throw new Error("DB 障害");
   });
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     plugins(ks.plugin, s.plugin),
   );
 
@@ -158,7 +158,7 @@ test("ターンの途中で発動されたら応答を送らない（副作用�
   // 1回目（ターン開始時）は稼働中、2回目（送信直前）は凍結 = モデル呼び出し中に発動された状況
   const ks = fakeKillSwitch((call) => (call === 1 ? RUNNING : STOPPED));
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     plugins(ks.plugin, s.plugin),
   );
 
@@ -179,7 +179,7 @@ test("凍結中の Policy Gate は状態を変える行為を stopped で止め�
   // 返答は通し、**記憶を書く段になってから**発動された状況を作る。
   const ks = fakeKillSwitch((call) => (call <= 2 ? RUNNING : STOPPED));
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     plugins(ks.plugin, s.plugin),
   );
 
@@ -199,7 +199,7 @@ test("env RUSSELL_KILL=1 が最優先で、通常経路（DB）を読まない�
     const s = captureSurface();
     const ks = fakeKillSwitch(() => RUNNING); // DB 上は「稼働中」でも黙る
     const agent = await createAgent(
-      { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+      { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
       plugins(ks.plugin, s.plugin),
     );
 

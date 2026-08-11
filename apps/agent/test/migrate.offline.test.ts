@@ -88,13 +88,13 @@ describe("本番では起動時にスキーマを作らない（§11）", () => 
   test("本番で autoMigrate を渡したエージェントは起動しない", async () => {
     process.env.NODE_ENV = "production";
     await expect(
-      createAgent({ agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun" }, [
+      createAgent({ agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live" }, [
         createPgAuditPlugin({ autoMigrate: true, connectionString: UNUSED_DSN }),
       ]),
     ).rejects.toThrow(/本番で autoMigrate は使えません/);
 
     await expect(
-      createAgent({ agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun" }, [
+      createAgent({ agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live" }, [
         createPgMemoryPlugin({ autoMigrate: true, connectionString: UNUSED_DSN }),
       ]),
     ).rejects.toThrow(/本番で autoMigrate は使えません/);

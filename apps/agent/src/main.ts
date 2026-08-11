@@ -19,7 +19,7 @@ import { createClaudeCodeModelPlugin } from "@edv4h/russell-plugin-model-claude-
 import { createEchoModelPlugin } from "@edv4h/russell-plugin-model-echo";
 import { createCliSurfacePlugin } from "@edv4h/russell-plugin-surface-cli";
 import { createSlackSurfacePlugin } from "@edv4h/russell-plugin-surface-slack";
-import type { RussellPlugin, Temperament } from "@edv4h/russell-shared";
+import type { Mode, RussellPlugin, Temperament } from "@edv4h/russell-shared";
 
 // env に応じて本番プラグイン/オフライン stub を選ぶ。
 const useClaude = Boolean(process.env.ANTHROPIC_API_KEY); // ANTHROPIC_API_KEY → 実 Claude、無ければ echo
@@ -76,13 +76,29 @@ function assembleSpongePlugins(): RussellPlugin[] {
   ];
 }
 
+/**
+ * 実行モード（§6.5）。**既定は dryrun**——安全側から始める。
+ *
+ * dryrun では外部への送信を止める（Slack に返信しない）。本番ワークスペースへ繋ぐ前に
+ * 挙動を確かめるための段階で、`RUSSELL_MODE=live` を明示して初めて喋る。
+ * 未知の値は dryrun に倒す（打ち間違いが live にならないように）。
+ */
+function resolveMode(): Mode {
+  const raw = process.env.RUSSELL_MODE?.trim();
+  if (raw === "live" || raw === "off") return raw;
+  if (raw && raw !== "dryrun") {
+    console.warn(`[agent] RUSSELL_MODE="${raw}" は解釈できません。dryrun で起動します。`);
+  }
+  return "dryrun";
+}
+
 async function main(): Promise<void> {
   const agent = await createAgent(
     {
       agentId: "bob",
       configVersion: "v0",
       temperament: BOB,
-      mode: "dryrun", // §6.5: off → dryrun → live
+      mode: resolveMode(), // §6.5: off → dryrun → live
       model: MODEL_ID,
     },
     assembleSpongePlugins(),
