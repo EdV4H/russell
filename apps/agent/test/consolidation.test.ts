@@ -577,3 +577,92 @@ describe.skipIf(!DB)("日記は日付ごとで、再実行しても壊れない�
     await pool.end();
   });
 });
+
+describe.skipIf(!DB)("日記の文章はモデルが書く（§4-1）", () => {
+  async function withDay(
+    opts: {
+      narrate?: (req: { system: string; user: string }) => Promise<string>;
+      screen?: (text: string) => string[];
+    } = {},
+  ) {
+    const agentId = `narrate-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const pool = new pg.Pool({ connectionString: DB });
+    await pool.query(
+      `INSERT INTO notes (agent_id, context_id, content, created_at) VALUES
+         ($1,'c1','Aの仕様が決まった','2026-07-29T12:00:00Z'),
+         ($1,'c1','Bのレビューを終えた','2026-07-29T13:00:00Z')`,
+      [agentId],
+    );
+    const audited: { action: string; payload: Record<string, unknown> }[] = [];
+    const result = await runConsolidation({
+      connectionString: DB,
+      agentId,
+      agentName: "Bob",
+      doNotWrite: "（テスト用の DO-NOT-WRITE）",
+      now: new Date("2026-07-29T12:00:00Z"),
+      audit: async (e) => {
+        audited.push(e);
+      },
+      ...opts,
+    });
+    await pool.end();
+    return { result, audited };
+  }
+
+  test("モデルが書いた文章が日記になる", async () => {
+    const requests: { system: string; user: string }[] = [];
+    const { result } = await withDay({
+      narrate: async (req) => {
+        requests.push(req);
+        return "今日はAの仕様が決まって、Bのレビューも終えた。順調な一日だった。".repeat(2);
+      },
+    });
+
+    expect(result.narrative).toContain("順調な一日だった");
+    expect(result.narrative).not.toContain("件の記録"); // 連結ではない
+    // 材料としてその日のメモが渡っている
+    expect(requests[0]?.user).toContain("Aの仕様が決まった");
+    // 公開される前提であることと、DO-NOT-WRITE が渡っている
+    expect(requests[0]?.system).toContain("毎朝チームのチャンネルに投稿されます");
+    expect(requests[0]?.system).toContain("（テスト用の DO-NOT-WRITE）");
+    // 箇条書きの要約ではなく振り返りを頼んでいる
+    expect(requests[0]?.system).toContain("その日を振り返って書く");
+  });
+
+  test("モデルが無ければ決定論的な連結に落ちる（記録は必ず残す）", async () => {
+    const { result } = await withDay();
+    expect(result.narrative).toContain("2件の記録");
+    expect(result.narrative).toContain("Aの仕様が決まった");
+  });
+
+  test("モデルが落ちても日記は残る", async () => {
+    const { result } = await withDay({
+      narrate: async () => {
+        throw new Error("ECONNREFUSED");
+      },
+    });
+    expect(result.narrative).toContain("2件の記録");
+  });
+
+  test("使えない出力（短すぎ・JSON）は採らない", async () => {
+    for (const bad of ["", "はい", '{"narrative":"…"}']) {
+      const { result } = await withDay({ narrate: async () => bad });
+      expect(result.narrative).toContain("2件の記録");
+    }
+  });
+
+  test("生成物が機微情報に当たったら採らず、監査に残す（二次フィルタ, A-1）", async () => {
+    const { result, audited } = await withDay({
+      narrate: async () => "今日は給与の話をした。年収の見直しについて相談を受けた。".repeat(2),
+      screen: () => ["salary"],
+    });
+
+    // 生成物は捨てて、材料（機微情報を除いたメモ）からの連結に落とす
+    expect(result.narrative).toContain("2件の記録");
+    expect(result.narrative).not.toContain("年収");
+    const rejected = audited.find((e) => e.action === "journal.narrative_rejected");
+    expect(rejected?.payload).toMatchObject({ entryDate: "2026-07-29", categories: ["salary"] });
+    // 本文は残さない（A1-5）
+    expect(JSON.stringify(rejected?.payload)).not.toContain("年収");
+  });
+});

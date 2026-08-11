@@ -12,6 +12,7 @@
  *   pnpm consolidate --backfill   # 未処理のメモが残っている日を、古い順に1日ずつ書く
  */
 
+import { DO_NOT_WRITE_PROMPT, inspectSensitive } from "@edv4h/russell-core";
 import { appendAuditEvent } from "@edv4h/russell-plugin-audit-pg";
 import { isFrozen } from "@edv4h/russell-plugin-killswitch-pg";
 import { type OrganizePlan, runConsolidation } from "@edv4h/russell-plugin-memory-pg";
@@ -63,6 +64,11 @@ async function main(): Promise<void> {
   } catch (err) {
     console.warn(`[worker] 本棚の整理はモデルが用意できないため行いません: ${String(err)}`);
   }
+  /** 日記の文章もモデルで書く（§4-1）。同じ provider を使い回す。 */
+  const narrate = organize;
+  /** 生成後の二次フィルタ（A-1）。判定はコアが持っているので注入で渡す。 */
+  const screen = (text: string) => inspectSensitive(text).categories;
+  const agentName = process.env.RUSSELL_AGENT_NAME ?? "Bob";
 
   // 監査は worker 自身のプールで残す（コアの AuditRegistry はこのプロセスに無い）。
   const auditPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -88,6 +94,10 @@ async function main(): Promise<void> {
           // 日境界から離しておく方が事故が少ない
           now: new Date(`${d}T12:00:00Z`),
           organize,
+          narrate,
+          screen,
+          agentName,
+          doNotWrite: DO_NOT_WRITE_PROMPT,
           audit: (event) =>
             appendAuditEvent(auditPool, {
               agentId,
@@ -110,6 +120,10 @@ async function main(): Promise<void> {
     const result = await runConsolidation({
       agentId,
       organize,
+      narrate,
+      screen,
+      agentName,
+      doNotWrite: DO_NOT_WRITE_PROMPT,
       dryRun,
       audit: (event) =>
         appendAuditEvent(auditPool, {
