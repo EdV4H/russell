@@ -78,6 +78,8 @@ export interface ConsolidationResult {
   plan: OrganizePlan;
   /** 何も書き込んでいない。数字は「やったらどうなるか」の見積り。 */
   dryRun: boolean;
+  /** 機微情報の印が付いていて日記に載せなかったメモの件数（A-1）。 */
+  notesWithheld: number;
 }
 
 /** 1回のコンソリデーションを実行する（worker から呼ぶ）。 */
@@ -105,17 +107,28 @@ export async function runConsolidation(
     }
 
     // 1. 未処理メモを集める（§4-1）
-    const notes = await pool.query<{ id: string; content: string }>(
-      "SELECT id, content FROM notes WHERE agent_id = $1 AND consolidated = false ORDER BY created_at ASC",
+    const notes = await pool.query<{
+      id: string;
+      content: string;
+      sensitive_categories: string[] | null;
+    }>(
+      `SELECT id, content, sensitive_categories FROM notes
+        WHERE agent_id = $1 AND consolidated = false ORDER BY created_at ASC`,
       [agentId],
     );
 
     // 2. 日記を書く（P1 フルはモデルで narrative。ここは決定論的要約）
-    const events = notes.rows.map((r) => ({ summary: r.content }));
+    //
+    // **機微情報の印が付いたメモは日記に載せない**（A-1 / ADR 0007）。日記は毎朝
+    // #<個体名>-日報 へ投稿される＝ここが公開の境界。記憶からは落とさないので、
+    // 会話の中では引き続き使える（知っているが公開しない）。
+    const publishable = notes.rows.filter((r) => (r.sensitive_categories ?? []).length === 0);
+    const withheld = notes.rows.length - publishable.length;
+    const events = publishable.map((r) => ({ summary: r.content }));
     const narrative =
-      notes.rows.length === 0
+      publishable.length === 0
         ? `${entryDate}: 記録すべき出来事はなかった。`
-        : `${entryDate}: ${notes.rows.length}件の記録。${notes.rows.map((r) => r.content).join(" / ")}`;
+        : `${entryDate}: ${publishable.length}件の記録。${publishable.map((r) => r.content).join(" / ")}`;
 
     const dryRun = options.dryRun ?? false;
 
@@ -153,6 +166,15 @@ export async function runConsolidation(
       dryRun || isEmptyPlan(plan)
         ? { merged: 0, absorbed: 0, retitled: 0 }
         : await applyPlan(pool, agentId, plan);
+    if (!dryRun && options.audit && withheld > 0) {
+      await options.audit({
+        action: "journal.withheld",
+        payload: {
+          notes: withheld,
+          categories: [...new Set(notes.rows.flatMap((r) => r.sensitive_categories ?? []))],
+        },
+      });
+    }
     if (!dryRun && options.audit && promoted.books > 0) {
       await options.audit({
         action: "memory.books.promoted",
@@ -179,6 +201,7 @@ export async function runConsolidation(
       entryDate,
       narrative,
       notesConsolidated: notes.rows.length,
+      notesWithheld: withheld,
       booksDecayed: forgetting.decayed,
       booksArchived: forgetting.archived,
       booksPromoted: promoted.books,
@@ -319,8 +342,8 @@ async function planPromotions(
   complete: (req: { system: string; user: string }) => Promise<string>,
   windowDays: number,
 ): Promise<PromotionPlan[]> {
-  const res = await pool.query<PromotableNote>(
-    `SELECT id, content FROM notes
+  const res = await pool.query<PromotableNote & { sensitive_categories: string[] | null }>(
+    `SELECT id, content, sensitive_categories FROM notes
       WHERE agent_id = $1 AND promoted_at IS NULL
         AND created_at > now() - ($2 || ' days')::interval
       ORDER BY created_at ASC`,
@@ -354,10 +377,24 @@ async function applyPromotions(
   try {
     await client.query("BEGIN");
     for (const plan of plans) {
+      // 材料のメモに付いていた印は本にも引き継ぐ。**昇格を印の抜け道にしない**
+      const marks = await client.query<{ categories: string[] }>(
+        `SELECT coalesce(array_agg(DISTINCT c), '{}') AS categories
+           FROM notes, unnest(coalesce(sensitive_categories, '{}')) AS c
+          WHERE agent_id = $1 AND id = ANY($2)`,
+        [agentId, plan.noteIds],
+      );
       await client.query(
-        `INSERT INTO books (agent_id, title, card, source, origin, source_note_ids)
-         VALUES ($1, $2, $3, $4, 'promoted', $5)`,
-        [agentId, plan.title, plan.card, `notes:${plan.noteIds.join(",")}`, plan.noteIds],
+        `INSERT INTO books (agent_id, title, card, source, origin, source_note_ids, sensitive_categories)
+         VALUES ($1, $2, $3, $4, 'promoted', $5, $6)`,
+        [
+          agentId,
+          plan.title,
+          plan.card,
+          `notes:${plan.noteIds.join(",")}`,
+          plan.noteIds,
+          marks.rows[0]?.categories ?? [],
+        ],
       );
       const res = await client.query(
         "UPDATE notes SET promoted_at = now() WHERE agent_id = $1 AND id = ANY($2) AND promoted_at IS NULL",

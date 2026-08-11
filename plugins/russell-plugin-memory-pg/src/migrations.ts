@@ -79,5 +79,16 @@ ALTER TABLE books ADD COLUMN IF NOT EXISTS source_note_ids BIGINT[];
 UPDATE books SET origin = 'conversation' WHERE origin IS NULL;
 `,
     },
+    {
+      // 機微情報の印（A-1 / ADR 0007）。記憶からは落とさず、公開経路に出さないための列。
+      id: "0004_sensitive_marks",
+      phase: "expand",
+      sql: `
+-- 当たった DO-NOT-WRITE カテゴリ。空配列ではなく NULL = 未検査（既存行と区別する）
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS sensitive_categories TEXT[];
+ALTER TABLE books ADD COLUMN IF NOT EXISTS sensitive_categories TEXT[];
+CREATE INDEX IF NOT EXISTS notes_sensitive_idx ON notes USING GIN (sensitive_categories);
+`,
+    },
   ],
 };

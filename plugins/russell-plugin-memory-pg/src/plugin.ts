@@ -90,11 +90,12 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
       const offNote = ctx.tools.register("note.write", {
         name: "note.write",
         effect: "internal_write",
-        async run(input: { contextId: string; content: string }) {
+        async run(input: { contextId: string; content: string; sensitive?: string[] }) {
+          // 機微情報の印（A-1 / ADR 0007）。記憶からは落とさず、公開経路がこれを見て出さない。
           await pool.query(
-            `INSERT INTO notes (agent_id, context_id, content, expires_at)
-             VALUES ($1, $2, $3, now() + ($4 || ' days')::interval)`,
-            [agentId, input.contextId, input.content, String(ttlDays)],
+            `INSERT INTO notes (agent_id, context_id, content, expires_at, sensitive_categories)
+             VALUES ($1, $2, $3, now() + ($4 || ' days')::interval, $5)`,
+            [agentId, input.contextId, input.content, String(ttlDays), input.sensitive ?? []],
           );
           return { status: "succeeded" as const };
         },
@@ -103,15 +104,16 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
       const offShelf = ctx.tools.register("shelf.add", {
         name: "shelf.add",
         effect: "internal_write",
-        async run(input: { source: string; card: string; title?: string }) {
+        async run(input: { source: string; card: string; title?: string; sensitive?: string[] }) {
           // 見出しはモデルが書く。無ければ本文の頭を切る——索引としては読めないが、
           // 本が載らないよりはよい（判定が壊れても記憶は残す, ADR 0003）。
           const title = input.title?.trim() || input.card.slice(0, 24);
           // 会話中に直接書かれた本（明示的に頼まれた場合だけ）。言われずに効く知識は
           // 夜間バッチがメモから昇格させる（origin='promoted', ADR 0005）。
           await pool.query(
-            "INSERT INTO books (agent_id, title, source, card, origin) VALUES ($1, $2, $3, $4, 'conversation')",
-            [agentId, title, input.source, input.card],
+            `INSERT INTO books (agent_id, title, source, card, origin, sensitive_categories)
+             VALUES ($1, $2, $3, $4, 'conversation', $5)`,
+            [agentId, title, input.source, input.card, input.sensitive ?? []],
           );
           return { status: "succeeded" as const, title };
         },

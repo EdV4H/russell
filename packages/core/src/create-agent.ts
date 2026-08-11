@@ -54,6 +54,11 @@ import {
   isEmptyDecision,
   parseDecision,
 } from "./memory-decision.js";
+import {
+  type SensitiveCategory,
+  type SensitiveGuardConfig,
+  inspectSensitive,
+} from "./sensitive-guard.js";
 
 /**
  * 凍結中（レベル1/2）に mention へ返す唯一の文。
@@ -78,6 +83,11 @@ export interface AgentConfig {
   model?: string;
   /** 記憶の判定に使うモデルの id。未指定なら会話用と同じ。安いモデルに分けられる。 */
   memoryModel?: string;
+  /**
+   * 機微情報ガード（A-1）。既定は conservative / 全カテゴリ ON（仕様の既定値）。
+   * いずれ `config_version.sensitive_guard` から来る値で、形は合わせてある。
+   */
+  sensitiveGuard?: SensitiveGuardConfig;
 }
 
 export interface AgentHandle {
@@ -508,16 +518,28 @@ export async function createAgent(
     // 書き込みは通常どおり Policy Gate と監査を通す。モデルが決めたからといって素通しにしない。
     try {
       if (decision.note) {
+        const marks = await markSensitive(decision.note, "note.write", msg);
         await invokeTool(
           "note.write",
-          { contextId: msg.contextId, content: decision.note },
+          { contextId: msg.contextId, content: decision.note, sensitive: marks },
           msg.trustLabel,
         );
       }
       if (decision.shelf) {
+        // 見出しも公開に出るので、本文と一緒に検査する
+        const marks = await markSensitive(
+          `${decision.shelfTitle ?? ""}\n${decision.shelf}`,
+          "shelf.add",
+          msg,
+        );
         await invokeTool(
           "shelf.add",
-          { source: msg.contextId, card: decision.shelf, title: decision.shelfTitle },
+          {
+            source: msg.contextId,
+            card: decision.shelf,
+            title: decision.shelfTitle,
+            sensitive: marks,
+          },
           msg.trustLabel,
         );
         events.emit("memory:shelved", { contextId: msg.contextId });
@@ -540,6 +562,32 @@ export async function createAgent(
       // 会話は壊さずに記録だけ残す。
       events.emit("memory:write-failed", { contextId: msg.contextId, error: String(err) });
     }
+  }
+
+  /**
+   * 記憶に書く前に機微情報を検査し、**印を付ける**（A-1 / ADR 0007）。
+   *
+   * 落とさないのは、落とすと仕事に使えなくなるから。マーケの相談相手に予算の数字を
+   * 覚えさせないなら、そもそも相談相手にならない。**知っているが公開しない**のは
+   * 同僚として自然な振る舞いで、公開経路（日記・日報）がこの印を見て出さない。
+   *
+   * 監査に残すのは**カテゴリだけ**。機微情報を止めた記録に機微情報を書いたら本末転倒（A1-5）。
+   */
+  async function markSensitive(
+    text: string,
+    tool: string,
+    msg: InboundMessage,
+  ): Promise<SensitiveCategory[]> {
+    const result = inspectSensitive(text, config.sensitiveGuard);
+    if (!result.hit) return [];
+    await auditLog.registry.record({
+      actor: runtime.agentId,
+      action: "memory.sensitive_marked",
+      payload: { tool, contextId: msg.contextId, categories: result.categories },
+      trustLabel: msg.trustLabel,
+    });
+    events.emit("memory:sensitive", { contextId: msg.contextId, categories: result.categories });
+    return result.categories;
   }
 
   const modelId = config.model ?? [...modelsMap.keys()][0];

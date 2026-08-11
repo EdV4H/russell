@@ -13,6 +13,7 @@
  */
 
 import type { ModelRequest } from "@edv4h/russell-shared";
+import { DO_NOT_WRITE_PROMPT } from "./sensitive-guard.js";
 
 /** モデルに決めさせる内容。**それぞれ「無し」が既定**で、迷ったら書かない側に倒す。 */
 export interface MemoryDecision {
@@ -50,7 +51,9 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
 - あなた（同僚）が「覚えておきます」と答えていたら、その約束を守れるように書き留める。
 - 否定（「覚えなくていい」「忘れないで」）を取り違えない。「忘れないで」は forget ではない。
 - 言語は問わない。どの言語のやりとりでも同じ基準で判断する。
-- **基本は note だけ**。shelf が埋まるのは明示的に頼まれた時に限られる。`;
+- **基本は note だけ**。shelf が埋まるのは明示的に頼まれた時に限られる。
+
+${DO_NOT_WRITE_PROMPT}`;
 
 /** 判定用のモデル要求を組み立てる。会話用とは別プロンプトで、履歴は渡さない（直前の1往復で足りる）。 */
 export function buildDecisionRequest(userText: string, assistantText: string): ModelRequest {
