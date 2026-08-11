@@ -7,8 +7,9 @@
  * 要 DATABASE_URL（app と同じ Postgres を参照）。
  *
  * 使い方:
- *   pnpm consolidate              # 実行する
+ *   pnpm consolidate              # 実行する（今日の分）
  *   pnpm consolidate --dry-run    # 本棚をどう整理するかだけ見せる（DB は変えない）
+ *   pnpm consolidate --backfill   # 未処理のメモが残っている日を、古い順に1日ずつ書く
  */
 
 import { appendAuditEvent } from "@edv4h/russell-plugin-audit-pg";
@@ -37,6 +38,12 @@ async function main(): Promise<void> {
   }
   const agentId = process.env.RUSSELL_AGENT_ID ?? "bob";
   const dryRun = process.argv.includes("--dry-run");
+  /**
+   * 走らせ損ねた日を埋める。**自動起動がまだ無い**ので、手で流すまで日記は書かれない。
+   * 1日ずつ書くのは、複数日分を1つの日記に混ぜないため（日記はエピソード記憶で、
+   * 「いつの話か」が失われると意味が薄れる）。
+   */
+  const backfill = process.argv.includes("--backfill");
 
   // 夜間バッチは自発行動そのものなので、凍結中は走らせない（§12-4）。
   // app とは別プロセス＝別経路なので、ここでも独立に確かめる必要がある。
@@ -64,6 +71,41 @@ async function main(): Promise<void> {
   });
 
   try {
+    if (backfill) {
+      const days = await auditPool.query<{ d: string }>(
+        `SELECT DISTINCT created_at::date::text AS d FROM notes
+          WHERE agent_id = $1 AND consolidated = false ORDER BY d ASC`,
+        [agentId],
+      );
+      if (days.rowCount === 0) {
+        console.log("[worker] 未処理のメモはありません。");
+        return;
+      }
+      for (const { d } of days.rows) {
+        const r = await runConsolidation({
+          agentId,
+          // その日の 12:00 UTC を基準にする。日付キーだけが効くので時刻は何でもよいが、
+          // 日境界から離しておく方が事故が少ない
+          now: new Date(`${d}T12:00:00Z`),
+          organize,
+          audit: (event) =>
+            appendAuditEvent(auditPool, {
+              agentId,
+              configVersion: process.env.RUSSELL_CONFIG_VERSION ?? "v0",
+              actor: agentId,
+              action: event.action,
+              payload: event.payload,
+            }),
+        });
+        console.log(
+          `[worker] ${r.entryDate}: notes=${r.notesConsolidated} withheld=${r.notesWithheld} ` +
+            `promoted=${r.booksPromoted} merged=${r.booksMerged}`,
+        );
+        console.log(`  [日報] ${r.narrative}`);
+      }
+      return;
+    }
+
     // autoMigrate は渡さない＝起動時に DDL を流さない（§11）。未適用なら throw して止まる。
     const result = await runConsolidation({
       agentId,
