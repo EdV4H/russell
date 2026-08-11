@@ -548,13 +548,17 @@ export async function createAgent(
    *
    * 記憶係の不調で会話を壊さない。判定が読めなければ何も書き留めずに終わる。
    */
-  async function decideMemory(msg: InboundMessage, replyText: string): Promise<void> {
+  async function decideMemory(
+    msg: InboundMessage,
+    replyText: string,
+    readings: string[] = [],
+  ): Promise<void> {
     const decider = memoryModelId ? models.get(memoryModelId) : undefined;
     if (!decider) return;
 
     let decision: MemoryDecision;
     try {
-      const req = buildDecisionRequest(msg.text, replyText);
+      const req = buildDecisionRequest(msg.text, replyText, readings);
       decision = parseDecision((await decider.complete(req)).text);
     } catch (err) {
       events.emit("memory:decision-failed", { contextId: msg.contextId, error: String(err) });
@@ -755,6 +759,11 @@ export async function createAgent(
       }
     }
     const history = provider ? await conversationFor(msg) : [];
+    /**
+     * このターンで読んだもの。返答の材料であり、**記憶の材料でもある**。
+     * ここに溜めておかないと「これ読んでおいて」で読んだ内容が記憶に残らない。
+     */
+    const gathered: string[] = [];
     let replyText = provider
       ? (await provider.complete({ system, user: msg.text, history })).text
       : "（モデル未登録のため応答できません）";
@@ -773,7 +782,6 @@ export async function createAgent(
         const deadline = Date.now() + LOOKUP_DEADLINE_MS;
         /** 同じ道具・同じ入力を繰り返させない（同じ結果で往復し続けるため）。 */
         const tried = new Set<string>();
-        const gathered: string[] = [];
         let steps = 0;
         let stop: string | undefined;
 
@@ -872,7 +880,7 @@ export async function createAgent(
     }
     const delivery = await surface.send({ contextId: msg.contextId, text });
     // 返答を送ってから、何を書き留めるかを決める（レイテンシを返答の前に積まない）。
-    await decideMemory(msg, replyText);
+    await decideMemory(msg, replyText, gathered);
     if (delivery.status !== "succeeded") {
       await auditLog.registry.record({
         actor: runtime.agentId,
