@@ -96,32 +96,38 @@ function runClaude(
   });
 }
 
-export function createClaudeCodeModelPlugin(options: ClaudeCodeModelOptions = {}): RussellPlugin {
+/**
+ * ModelProvider だけを作る。**worker のようにコアの外にいるプロセス**が、
+ * プラグイン機構を通さずにモデルを1回呼びたいときに使う（夜間バッチの本棚整理など）。
+ */
+export function createClaudeCodeProvider(options: ClaudeCodeModelOptions = {}): ModelProvider {
   const providerId = options.id ?? "claude-code";
   const model = options.model ?? "opus";
   const cliPath = options.cliPath ?? "claude";
   const timeoutMs = options.timeoutMs ?? 120_000;
 
+  assertClaudeCodeAllowed();
+
+  return {
+    id: providerId,
+    async complete(req: ModelRequest) {
+      const stdout = await runClaude(
+        cliPath,
+        buildArgs({ model, system: req.system }),
+        renderPrompt(req),
+        timeoutMs,
+      );
+      return { text: readResult(stdout) };
+    },
+  };
+}
+
+export function createClaudeCodeModelPlugin(options: ClaudeCodeModelOptions = {}): RussellPlugin {
   return {
     id: "russell-plugin-model-claude-code",
     name: "Claude Code CLI Model (dev only)",
     setup(ctx: AgentContext) {
-      assertClaudeCodeAllowed();
-
-      const provider: ModelProvider = {
-        id: providerId,
-        async complete(req: ModelRequest) {
-          const stdout = await runClaude(
-            cliPath,
-            buildArgs({ model, system: req.system }),
-            renderPrompt(req),
-            timeoutMs,
-          );
-          return { text: readResult(stdout) };
-        },
-      };
-
-      const off = ctx.models.register(provider);
+      const off = ctx.models.register(createClaudeCodeProvider(options));
       return () => off();
     },
   };

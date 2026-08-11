@@ -36,3 +36,4 @@ ADR より前に下した決定は各ドキュメント内の決定ブロック�
 | [0001](./0001-conversation-context-from-slack.md) | 会話の文脈は Slack から取り直す（保存しない） | 採用 |
 | [0002](./0002-conversation-context-is-not-memory.md) | 会話の文脈は記憶ではない（通信面の関心事） | 採用 |
 | [0003](./0003-model-decides-what-to-remember.md) | 何を記憶するかはモデルが決める（正規表現をやめる） | 採用 |
+| [0004](./0004-shelf-organizing-is-reversible.md) | 本棚の整理は夜間バッチで行い、可逆にする | 採用 |
