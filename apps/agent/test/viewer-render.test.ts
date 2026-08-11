@@ -6,6 +6,7 @@
  */
 
 import {
+  BOXES,
   escapeHtml,
   formatCell,
   renderAgentPicker,
@@ -97,4 +98,21 @@ test("個体名は URL に載るのでエスケープする", () => {
 
 test("個体がいなければ切り替えは出さない", () => {
   expect(renderAgentPicker([], undefined, "/books")).toBe("");
+});
+
+test("単語帳の箱がある（本棚とは別の箱として見える）", () => {
+  const terms = BOXES.find((b) => b.path === "/terms");
+
+  expect(terms?.title).toBe("単語帳");
+  // 本棚との違い（忘却しない・別名で引く）が説明に出ている
+  expect(terms?.description).toContain("忘却しない");
+  expect(terms?.description).toContain("別名");
+});
+
+test("箱の並びは記憶の流れに沿っている（メモ帳 → 本棚 → 単語帳 → 書庫）", () => {
+  const paths = BOXES.map((b) => b.path);
+
+  expect(paths.indexOf("/notes")).toBeLessThan(paths.indexOf("/books"));
+  expect(paths.indexOf("/books")).toBeLessThan(paths.indexOf("/terms"));
+  expect(paths.indexOf("/terms")).toBeLessThan(paths.indexOf("/archive"));
 });

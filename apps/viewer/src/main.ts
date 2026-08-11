@@ -33,14 +33,41 @@ interface View {
 const VIEWS: Record<string, View> = {
   "/notes": {
     ...pick("/notes"),
-    columns: ["created_at", "agent_id", "context_id", "content", "expires_at", "consolidated"],
-    sql: `SELECT created_at, agent_id, context_id, content, expires_at, consolidated
+    columns: [
+      "created_at",
+      "agent_id",
+      "context_id",
+      "content",
+      "sensitive_categories",
+      "promoted_at",
+      "consolidated",
+    ],
+    // sensitive_categories を出すのは、**どのメモが日記に出ないか**を目で確かめられるようにするため（#54）
+    sql: `SELECT created_at, agent_id, context_id, content, sensitive_categories, promoted_at, consolidated
             FROM notes WHERE ($1::text IS NULL OR agent_id = $1) ORDER BY id DESC LIMIT ${LIMIT}`,
+  },
+  "/terms": {
+    ...pick("/terms"),
+    columns: ["updated_at", "agent_id", "name", "aliases", "summary", "sensitive_categories"],
+    // 更新順に並べる。単語帳は**積み上がらず更新される**ので、created_at より updated_at が効く
+    sql: `SELECT updated_at, agent_id, name, aliases, summary, sensitive_categories
+            FROM entities
+           WHERE type = 'term' AND ($1::text IS NULL OR agent_id = $1)
+           ORDER BY updated_at DESC LIMIT ${LIMIT}`,
   },
   "/books": {
     ...pick("/books"),
-    columns: ["created_at", "agent_id", "title", "card", "shelf", "strength", "source"],
-    sql: `SELECT created_at, agent_id, title, card, shelf, round(strength::numeric, 2) AS strength, source
+    columns: [
+      "created_at",
+      "agent_id",
+      "title",
+      "card",
+      "origin",
+      "strength",
+      "sensitive_categories",
+    ],
+    // origin は「会話中に直接書かれた本」と「メモから昇格した本」の区別（ADR 0005）
+    sql: `SELECT created_at, agent_id, title, card, origin, round(strength::numeric, 2) AS strength, sensitive_categories
             FROM books WHERE status = 'active' AND ($1::text IS NULL OR agent_id = $1) ORDER BY id DESC LIMIT ${LIMIT}`,
   },
   "/archive": {
@@ -89,6 +116,7 @@ async function overview(pool: pg.Pool, agent?: string): Promise<string> {
   const counts = await pool.query<{ box: string; n: string }>(
     `SELECT 'メモ帳' AS box, count(*)::text AS n FROM notes WHERE ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '本棚', count(*)::text FROM books WHERE status = 'active' AND ($1::text IS NULL OR agent_id = $1)
+     UNION ALL SELECT '単語帳', count(*)::text FROM entities WHERE type = 'term' AND ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '書庫', count(*)::text FROM books WHERE status = 'archived' AND ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '日記', count(*)::text FROM journal_entries WHERE ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '監査ログ', count(*)::text FROM event_log WHERE ($1::text IS NULL OR agent_id = $1)
