@@ -83,6 +83,47 @@ function fakeEquipment(effect: "read" | "external_write" = "read", result: unkno
   return { plugin, calls };
 }
 
+/** 検索と読み出しの2つを持つ装備（実物と同じ形）。 */
+function twoTools() {
+  const calls: { tool: string; input: unknown }[] = [];
+  const plugin: RussellPlugin = {
+    id: "two-tools",
+    name: "two tools",
+    setup(ctx) {
+      const offs: (() => void)[] = [];
+      for (const name of ["notion.search", "notion.read_page"]) {
+        ctx.policy.declareEffect(name, "read");
+        offs.push(
+          ctx.tools.register(name, {
+            name,
+            effect: "read",
+            async run(input) {
+              calls.push({ tool: name, input });
+              return { status: "complete", data: { id: "page-1", text: "金曜15時" } };
+            },
+          }),
+        );
+      }
+      offs.push(
+        ctx.equipment.register({
+          id: "notion",
+          mcpServer: {},
+          scopes: [],
+          dangerLevel: 0,
+          tools: () => [
+            { name: "notion.search", effect: "read" },
+            { name: "notion.read_page", effect: "read" },
+          ],
+        }),
+      );
+      return () => {
+        for (const off of offs) off();
+      };
+    },
+  };
+  return { plugin, calls };
+}
+
 function surface() {
   const sent: string[] = [];
   let sink: ((m: InboundMessage) => void) | undefined;
@@ -210,7 +251,9 @@ test("持っていない道具を名乗っても実行しない", async () => {
 
   expect(eq.calls).toEqual([]);
   expect(rejected).toHaveLength(1);
-  expect(m.requests).toHaveLength(1); // 2回目は呼ばない
+  // 実行はしないが、**定型文で打ち切らず**「持っていない」ことを踏まえて答えさせる
+  expect(m.requests.at(-1)?.user).toContain("「shell.exec」は持っていません");
+  expect(s.sent[0]).toBe("できません");
   await agent.destroy();
 });
 
@@ -264,10 +307,30 @@ test("道具が失敗しても会話は壊れない", async () => {
   await agent.destroy();
 });
 
-test("2回目も JSON を返したら、そのまま流さない", async () => {
+test("検索してから中身を読む（1ターンで2手）", async () => {
   const m = replies(
-    '{"lookup": {"tool": "notion.search", "input": {"query": "a"}}}',
-    '{"lookup": {"tool": "notion.search", "input": {"query": "b"}}}',
+    '{"lookup": {"tool": "notion.search", "input": {"query": "定例"}}}',
+    '{"lookup": {"tool": "notion.read_page", "input": {"pageId": "page-1"}}}',
+    "定例は金曜15時からです",
+  );
+  const s = surface();
+  const eq = twoTools();
+  const agent = await run([createInMemoryMemoryPlugin(), eq.plugin, m.plugin, s.plugin]);
+  s.push("Notion で定例の中身見て");
+  await drain();
+
+  expect(eq.calls.map((c) => c.tool)).toEqual(["notion.search", "notion.read_page"]);
+  expect(s.sent).toEqual(["定例は金曜15時からです"]);
+  await agent.destroy();
+});
+
+test("歩数を使い切ったら、定型文ではなく分かった範囲で答えさせる", async () => {
+  const m = replies(
+    '{"lookup": {"tool": "notion.search", "input": {"query": "1"}}}',
+    '{"lookup": {"tool": "notion.search", "input": {"query": "2"}}}',
+    '{"lookup": {"tool": "notion.search", "input": {"query": "3"}}}',
+    '{"lookup": {"tool": "notion.search", "input": {"query": "4"}}}',
+    "3件見たところ、定例は金曜のようです。詳細までは追えませんでした",
   );
   const s = surface();
   const eq = fakeEquipment();
@@ -275,9 +338,41 @@ test("2回目も JSON を返したら、そのまま流さない", async () => {
   s.push("調べて");
   await drain();
 
-  expect(eq.calls).toHaveLength(1); // 1ターン1回まで
-  expect(s.sent[0]).toContain("うまく調べられませんでした");
+  expect(eq.calls).toHaveLength(3);
+  expect(m.requests.at(-1)?.user).toContain("これ以上は調べられません");
+  expect(s.sent[0]).toContain("追えませんでした");
+  await agent.destroy();
+});
+
+test("同じ道具・同じ入力を繰り返さない", async () => {
+  const m = replies(
+    '{"lookup": {"tool": "notion.search", "input": {"query": "同じ"}}}',
+    '{"lookup": {"tool": "notion.search", "input": {"query": "同じ"}}}',
+    "同じものしか出てきませんでした",
+  );
+  const s = surface();
+  const eq = fakeEquipment();
+  const agent = await run([createInMemoryMemoryPlugin(), eq.plugin, m.plugin, s.plugin]);
+  s.push("調べて");
+  await drain();
+
+  expect(eq.calls).toHaveLength(1);
+  expect(s.sent[0]).toContain("同じものしか");
+  await agent.destroy();
+});
+
+test("最後まで JSON しか返さないなら、JSON は流さない", async () => {
+  const m = replies(
+    ...Array(8).fill('{"lookup": {"tool": "notion.search", "input": {"query": "x"}}}'),
+  );
+  const s = surface();
+  const eq = fakeEquipment();
+  const agent = await run([createInMemoryMemoryPlugin(), eq.plugin, m.plugin, s.plugin]);
+  s.push("調べて");
+  await drain();
+
   expect(s.sent[0]).not.toContain("lookup");
+  expect(s.sent[0]).toContain("調べきれませんでした");
   await agent.destroy();
 });
 
