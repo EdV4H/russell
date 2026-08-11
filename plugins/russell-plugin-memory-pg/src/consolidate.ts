@@ -106,15 +106,26 @@ export async function runConsolidation(
       await assertSchemaReady(pool, [MEMORY_MIGRATIONS]);
     }
 
-    // 1. 未処理メモを集める（§4-1）
+    // 1. **その日のメモ**を集める（§4-1）。
+    //
+    // 「未処理のメモ」ではなく「その日付のメモ」で引くのが要点。未処理だけで引くと、
+    // 同じ日に2回走らせたときに**先に処理した分が日記から消える**（UPSERT で narrative ごと
+    // 置き換わるため）。日付キーで再実行可能、が設計の要求（§4）なので、
+    // **同じ日付なら何度走らせても同じ日記になる**形にする。
     const notes = await pool.query<{
       id: string;
       content: string;
       sensitive_categories: string[] | null;
     }>(
       `SELECT id, content, sensitive_categories FROM notes
-        WHERE agent_id = $1 AND consolidated = false ORDER BY created_at ASC`,
-      [agentId],
+        WHERE agent_id = $1 AND created_at::date = $2::date ORDER BY created_at ASC`,
+      [agentId, entryDate],
+    );
+    /** 印を付ける対象は「その日まで」の未処理すべて（取りこぼした日を残さない）。 */
+    const pending = await pool.query<{ n: string }>(
+      `SELECT count(*) AS n FROM notes
+        WHERE agent_id = $1 AND consolidated = false AND created_at::date <= $2::date`,
+      [agentId, entryDate],
     );
 
     // 2. 日記を書く（P1 フルはモデルで narrative。ここは決定論的要約）
@@ -141,10 +152,11 @@ export async function runConsolidation(
         [agentId, entryDate, narrative, JSON.stringify(events)],
       );
 
-      // 3. 処理済みメモに印を付ける
+      // 3. 処理済みメモに印を付ける（その日まで）
       await pool.query(
-        "UPDATE notes SET consolidated = true WHERE agent_id = $1 AND consolidated = false",
-        [agentId],
+        `UPDATE notes SET consolidated = true
+          WHERE agent_id = $1 AND consolidated = false AND created_at::date <= $2::date`,
+        [agentId, entryDate],
       );
     }
 
@@ -200,7 +212,7 @@ export async function runConsolidation(
     return {
       entryDate,
       narrative,
-      notesConsolidated: notes.rows.length,
+      notesConsolidated: Number(pending.rows[0]?.n ?? 0),
       notesWithheld: withheld,
       booksDecayed: forgetting.decayed,
       booksArchived: forgetting.archived,

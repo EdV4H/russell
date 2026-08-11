@@ -8,6 +8,9 @@
   "include": ["src"],
   "references": [
     {
+      "path": "../../packages/core"
+    },
+    {
       "path": "../../plugins/russell-plugin-audit-pg"
     },
     {

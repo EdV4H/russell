@@ -14,8 +14,10 @@ describe.skipIf(!DB)("consolidation（DATABASE_URL 必須）", () => {
     const agentId = `worker-test-${Date.now()}`;
     const pool = new pg.Pool({ connectionString: DB });
     // スキーマは global-setup のマイグレーションで用意済み（テストは DDL を流さない, §11）
+    // 日記は**その日付のメモ**から作られるので、実行日と揃えて入れる
     await pool.query(
-      "INSERT INTO notes (agent_id, context_id, content) VALUES ($1,'c1','出来事A'),($1,'c1','出来事B')",
+      `INSERT INTO notes (agent_id, context_id, content, created_at) VALUES
+         ($1,'c1','出来事A','2026-07-29T12:00:00Z'),($1,'c1','出来事B','2026-07-29T12:00:00Z')`,
       [agentId],
     );
     // 減衰しても残る本と、しきい値割れで書庫に落ちる本
@@ -148,7 +150,7 @@ describe.skipIf(!DB)("本棚の整理（§4-3, DATABASE_URL 必須）", () => {
     const agentId = `dryrun-all-${Date.now()}`;
     const pool = new pg.Pool({ connectionString: DB });
     await pool.query(
-      "INSERT INTO notes (agent_id, context_id, content) VALUES ($1,'c1','出来事A')",
+      "INSERT INTO notes (agent_id, context_id, content, created_at) VALUES ($1,'c1','出来事A','2026-07-29T12:00:00Z')",
       [agentId],
     );
     await pool.query(
@@ -352,9 +354,9 @@ describe.skipIf(!DB)("機微情報の印と公開の境界（A-1 / ADR 0007, DAT
     const agentId = `withhold-${Date.now()}`;
     const pool = new pg.Pool({ connectionString: DB });
     await pool.query(
-      `INSERT INTO notes (agent_id, context_id, content, sensitive_categories) VALUES
-         ($1,'c1','Aの仕様が決まった','{}'),
-         ($1,'c1','7月予算は¥12,345,678','{confidential_biz}')`,
+      `INSERT INTO notes (agent_id, context_id, content, sensitive_categories, created_at) VALUES
+         ($1,'c1','Aの仕様が決まった','{}','2026-07-29T12:00:00Z'),
+         ($1,'c1','7月予算は¥12,345,678','{confidential_biz}','2026-07-29T12:00:00Z')`,
       [agentId],
     );
 
@@ -443,7 +445,7 @@ describe.skipIf(!DB)("個人カルテは公開経路に出ない（ADR 0008, DAT
       [agentId],
     );
     await pool.query(
-      "INSERT INTO notes (agent_id, context_id, content) VALUES ($1,'c1','Aの仕様が決まった')",
+      "INSERT INTO notes (agent_id, context_id, content, created_at) VALUES ($1,'c1','Aの仕様が決まった','2026-07-29T12:00:00Z')",
       [agentId],
     );
 
@@ -490,6 +492,87 @@ describe.skipIf(!DB)("個人カルテは公開経路に出ない（ADR 0008, DAT
       agentId,
     ]);
     expect(person.rowCount).toBe(1); // 消えていない
+
+    await pool.end();
+  });
+});
+
+describe.skipIf(!DB)("日記は日付ごとで、再実行しても壊れない（§4）", () => {
+  test("同じ日に2回走らせても、先に書いた分が消えない", async () => {
+    const agentId = `journal-idem-${Date.now()}`;
+    const pool = new pg.Pool({ connectionString: DB });
+    const day = new Date("2026-07-29T12:00:00Z");
+    await pool.query(
+      "INSERT INTO notes (agent_id, context_id, content, created_at) VALUES ($1,'c1','出来事A',$2)",
+      [agentId, day],
+    );
+
+    const first = await runConsolidation({ connectionString: DB, agentId, now: day });
+    expect(first.narrative).toContain("出来事A");
+
+    // 同じ日に追加のメモが来て、もう一度走らせる
+    await pool.query(
+      "INSERT INTO notes (agent_id, context_id, content, created_at) VALUES ($1,'c1','出来事B',$2)",
+      [agentId, day],
+    );
+    const second = await runConsolidation({ connectionString: DB, agentId, now: day });
+
+    // **両方入っている。** 未処理だけで作ると A が消えていた
+    expect(second.narrative).toContain("出来事A");
+    expect(second.narrative).toContain("出来事B");
+
+    const rows = await pool.query("SELECT 1 FROM journal_entries WHERE agent_id=$1", [agentId]);
+    expect(rows.rowCount).toBe(1); // 日付キーで1件のまま
+
+    await pool.end();
+  });
+
+  test("メモが無い日に走らせても、その日の日記を空で上書きしない", async () => {
+    const agentId = `journal-empty-${Date.now()}`;
+    const pool = new pg.Pool({ connectionString: DB });
+    await pool.query(
+      "INSERT INTO notes (agent_id, context_id, content, created_at) VALUES ($1,'c1','出来事A',$2)",
+      [agentId, new Date("2026-07-29T12:00:00Z")],
+    );
+    await runConsolidation({
+      connectionString: DB,
+      agentId,
+      now: new Date("2026-07-29T12:00:00Z"),
+    });
+
+    // 翌日に走らせる（その日のメモは無い）
+    await runConsolidation({
+      connectionString: DB,
+      agentId,
+      now: new Date("2026-07-30T12:00:00Z"),
+    });
+
+    const kept = await pool.query<{ narrative: string }>(
+      "SELECT narrative FROM journal_entries WHERE agent_id=$1 AND entry_date='2026-07-29'",
+      [agentId],
+    );
+    expect(kept.rows[0]?.narrative).toContain("出来事A"); // 前日の日記は無事
+
+    await pool.end();
+  });
+
+  test("別の日のメモは混ざらない", async () => {
+    const agentId = `journal-days-${Date.now()}`;
+    const pool = new pg.Pool({ connectionString: DB });
+    await pool.query(
+      `INSERT INTO notes (agent_id, context_id, content, created_at) VALUES
+         ($1,'c1','29日の出来事','2026-07-29T12:00:00Z'),
+         ($1,'c1','30日の出来事','2026-07-30T12:00:00Z')`,
+      [agentId],
+    );
+
+    const d29 = await runConsolidation({
+      connectionString: DB,
+      agentId,
+      now: new Date("2026-07-29T12:00:00Z"),
+    });
+    expect(d29.narrative).toContain("29日の出来事");
+    expect(d29.narrative).not.toContain("30日の出来事");
 
     await pool.end();
   });

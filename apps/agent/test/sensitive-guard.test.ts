@@ -38,6 +38,8 @@ const RED: { text: string; category: SensitiveCategory }[] = [
   // 健康
   { text: "佐藤さんは来月から休職するそうです", category: "health" },
   { text: "山田さんが通院のため午後は不在", category: "health" },
+  { text: "健康診断の結果を提出した", category: "health" },
+  { text: "うつ病と診断されたそうです", category: "health" },
   // 人事
   { text: "鈴木さんの異動が内定した", category: "hr" },
   { text: "採用選考で3名が最終面接に進んだ", category: "hr" },
@@ -64,6 +66,11 @@ const GREEN: string[] = [
   "新しいプラグインの設計を相談した",
   "テストが3件落ちていたので直した",
   "来週のワークショップの進行を担当する",
+  // 実際に誤検知した文言。**業務語としての「診断」**は普通に出てくる
+  "構成要素は Profile / Chat / ValuesCard / Session / Canvas / 特性診断",
+  "性格診断の結果をチームで共有した",
+  "エンゲージメント診断のスコアを見た",
+  "自己診断シートのテンプレートを作った",
 ];
 
 test("レッドチーム・コーパス: 検知漏れを測る", () => {
