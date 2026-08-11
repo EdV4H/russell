@@ -18,3 +18,5 @@ export {
   validatePromotions,
 } from "./promote.js";
 export type { PromotableNote, PromotionPlan } from "./promote.js";
+export { MAX_INJECTED_TERMS, TERM_CACHE_MS, matchTerms } from "./terms.js";
+export type { StoredTerm } from "./terms.js";

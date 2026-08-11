@@ -13,10 +13,12 @@ import {
   MEMORY_SERVICE,
   type MemoryCapability,
   type RecalledContext,
+  type RecalledTerm,
   type RussellPlugin,
 } from "@edv4h/russell-shared";
 import pg from "pg";
 import { MEMORY_MIGRATIONS } from "./migrations.js";
+import { TERM_CACHE_MS, matchTerms } from "./terms.js";
 
 export interface PgMemoryOptions {
   /** 接続文字列。未指定なら env DATABASE_URL。 */
@@ -59,6 +61,10 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
         throw err;
       }
 
+      /** 用語のキャッシュ。書き込みで無効化するので、TTL は保険。 */
+      let termCache: { name: string; summary: string; aliases: string[] }[] = [];
+      let termCacheUntil = 0;
+
       const capability: MemoryCapability = {
         async recall(contextId: string): Promise<RecalledContext> {
           const notesRes = await pool.query<{ content: string }>(
@@ -79,6 +85,24 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
             books: booksRes.rows,
           };
         },
+        /**
+         * 受信テキストに出てくる既知の用語を引く（単語帳）。
+         *
+         * **モデルを使わない。** 別名は文字列なので照合で足りる。用語は数十〜数百件なので
+         * 全件をキャッシュして手元で突き合わせる方が、毎回 SQL を投げるより速い。
+         */
+        async terms(text: string): Promise<RecalledTerm[]> {
+          const now = Date.now();
+          if (now >= termCacheUntil) {
+            const res = await pool.query<{ name: string; summary: string; aliases: string[] }>(
+              "SELECT name, summary, aliases FROM entities WHERE agent_id = $1 AND type = 'term'",
+              [agentId],
+            );
+            termCache = res.rows;
+            termCacheUntil = now + TERM_CACHE_MS;
+          }
+          return matchTerms(text, termCache);
+        },
       };
       ctx.services.provide<MemoryCapability>(MEMORY_SERVICE, capability);
 
@@ -86,6 +110,7 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
       ctx.policy.declareEffect("shelf.add", "internal_write");
       ctx.policy.declareEffect("shelf.forget", "internal_write");
       ctx.policy.declareEffect("deep_recall", "read");
+      ctx.policy.declareEffect("term.define", "internal_write");
 
       const offNote = ctx.tools.register("note.write", {
         name: "note.write",
@@ -116,6 +141,37 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
             [agentId, title, input.source, input.card, input.sensitive ?? []],
           );
           return { status: "succeeded" as const, title };
+        },
+      });
+
+      // 単語帳への書き込み（索引カード, ADR 0008）。**同じ語は1件で更新**する——
+      // 本棚のように積み上げて夜に畳むのではない。定義は1つあってほしい。
+      const offTerm = ctx.tools.register("term.define", {
+        name: "term.define",
+        effect: "internal_write",
+        async run(input: {
+          name: string;
+          definition: string;
+          aliases?: string[];
+          sensitive?: string[];
+        }) {
+          const name = (input.name ?? "").trim();
+          const definition = (input.definition ?? "").trim();
+          if (name === "" || definition === "")
+            return { status: "succeeded" as const, saved: false };
+          // 別名は**和集合で足す**。減らすのは人の操作に限る（勝手に呼び名を忘れない）
+          await pool.query(
+            `INSERT INTO entities (agent_id, name, type, aliases, summary, sensitive_categories)
+             VALUES ($1, $2, 'term', $3, $4, $5)
+             ON CONFLICT (agent_id, type, lower(name)) DO UPDATE
+               SET summary = EXCLUDED.summary,
+                   aliases = ARRAY(SELECT DISTINCT unnest(entities.aliases || EXCLUDED.aliases)),
+                   sensitive_categories = EXCLUDED.sensitive_categories,
+                   updated_at = now()`,
+            [agentId, name, input.aliases ?? [], definition, input.sensitive ?? []],
+          );
+          termCacheUntil = 0; // 次の想起で読み直す
+          return { status: "succeeded" as const, saved: true };
         },
       });
 
@@ -160,6 +216,7 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
         offNote();
         offShelf();
         offForget();
+        offTerm();
         offRecall();
         await pool.end();
       };

@@ -45,8 +45,22 @@ export interface RecalledContext {
  * コアの認知ループが `ctx.services.get("memory")` で使う（記憶実装＝プラグイン、§plugin-first）。
  * 書き込みは `note.write` / `shelf.add` ツール経由（Policy Gate を通す）。
  */
+/** 単語帳の1件（索引カード, `entities` の type='term'）。 */
+export interface RecalledTerm {
+  name: string;
+  definition: string;
+}
+
 export interface MemoryCapability {
   recall(contextId: string): Promise<RecalledContext> | RecalledContext;
+  /**
+   * 受信テキストに出てくる**既知の用語**を引く（単語帳）。対応しない実装は持たなくてよい。
+   *
+   * 引き方が `recall` と違うので分けてある: recall は「このスレッドの直近」を返すが、
+   * こちらは「**この文に出てきた語**」を返す。recency ではなく一致で引く。
+   * 別名は文字列なので**モデルを使わずに照合できる**（レイテンシを増やさない）。
+   */
+  terms?(text: string): Promise<RecalledTerm[]> | RecalledTerm[];
 }
 
 /** services のキー定数。 */
