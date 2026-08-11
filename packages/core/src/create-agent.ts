@@ -49,6 +49,7 @@ import { CONVERSATION_SERVICE, MEMORY_SERVICE } from "@edv4h/russell-shared";
 import { createAuditLog } from "./audit.js";
 import { createFreezeGate } from "./freeze.js";
 import {
+  NO_MORE_LOOKUP,
   TOOL_DESCRIPTIONS,
   allowedLookup,
   lookupCatalog,
@@ -116,6 +117,14 @@ export interface CatchupConfig {
   /** 確認の間隔。既定10分。0 で起動時の1回だけ。 */
   intervalMs?: number;
 }
+
+/**
+ * 1ターンに使える調べものの回数。検索 → 中身を読む、で2手かかるので 1 では足りない。
+ * 上げるほど答えは良くなるが、**1手ごとにモデル呼び出しが増える**（P0-1: p95 ≤ 8s）。
+ */
+const MAX_LOOKUPS_PER_TURN = 3;
+/** 調べものに使ってよい時間。歩数が残っていても、これを超えたら答えに向かう。 */
+const LOOKUP_DEADLINE_MS = 45_000;
 
 /** 積み残しの確認の既定値。保守側に倒してある（起動のたびに古い話へ返信しないように）。 */
 const DEFAULT_CATCHUP_WINDOW_MS = 12 * 60 * 60 * 1000;
@@ -721,37 +730,72 @@ export async function createAgent(
       ? (await provider.complete({ system, user: msg.text, history })).text
       : "（モデル未登録のため応答できません）";
 
-    // 調べもの: 返答が JSON なら道具を使い、結果を添えてもう一度答えさせる。
-    // **1ターンに1回だけ。** 繰り返させると、失敗する道具で無限に往復しうる。
+    // 調べもの: 返答が JSON なら道具を使い、結果を足してもう一度答えさせる。
+    //
+    // **1回では足りない。** 検索して id を得てから中身を読む、という当たり前の流れが
+    // 2手かかるため。最初 1回に制限したら、検索が成功しているのに「うまく調べられません
+    // でした」と返す状態になった（実際 Slack で連発した）。
+    //
+    // 代わりに**歩数・時間・重複**の3つで頭を打つ。無限に往復しないことと、
+    // 会話のレイテンシを守ることが目的で、1回に絞ることが目的ではない。
     if (provider) {
       const catalog = lookupCatalog(equipment.getAll(), toolsMap, TOOL_DESCRIPTIONS);
-      const request = catalog.length ? parseLookup(replyText) : undefined;
-      const allowed = request ? allowedLookup(request, catalog) : undefined;
-      if (request && !allowed) {
-        // 名乗った道具を持っていない。モデルの言う名前を信用しない（§12-3）
-        events.emit("lookup:rejected", { contextId: msg.contextId, tool: request.tool });
-      }
-      if (allowed) {
-        let result: unknown;
-        try {
-          // 引き金は相手の発言なので untrusted のまま Policy Gate を通す
-          result = await invokeTool(allowed.tool, allowed.input, msg.trustLabel);
-        } catch (err) {
-          result = { status: "failed", detail: String(err) };
+      if (catalog.length > 0) {
+        const deadline = Date.now() + LOOKUP_DEADLINE_MS;
+        /** 同じ道具・同じ入力を繰り返させない（同じ結果で往復し続けるため）。 */
+        const tried = new Set<string>();
+        const gathered: string[] = [];
+        let steps = 0;
+        let stop: string | undefined;
+
+        const answerWith = async (extra: string): Promise<string> =>
+          (
+            await provider.complete({
+              system,
+              user: [msg.text, ...gathered, extra].filter(Boolean).join("\n\n---\n"),
+              history,
+            })
+          ).text;
+
+        while (true) {
+          const request = parseLookup(replyText);
+          if (!request) break; // 文章で答えた＝完了
+
+          const allowed = allowedLookup(request, catalog);
+          if (!allowed) {
+            // 名乗った道具を持っていない。モデルの言う名前を信用しない（§12-3）
+            events.emit("lookup:rejected", { contextId: msg.contextId, tool: request.tool });
+            stop = `「${request.tool}」は持っていません。`;
+            break;
+          }
+          const key = `${allowed.tool}:${JSON.stringify(allowed.input)}`;
+          if (steps >= MAX_LOOKUPS_PER_TURN || Date.now() > deadline || tried.has(key)) {
+            stop = "";
+            break;
+          }
+          tried.add(key);
+          steps++;
+
+          let result: unknown;
+          try {
+            // 引き金は相手の発言なので untrusted のまま Policy Gate を通す
+            result = await invokeTool(allowed.tool, allowed.input, msg.trustLabel);
+          } catch (err) {
+            result = { status: "failed", detail: String(err) };
+          }
+          events.emit("lookup:done", { contextId: msg.contextId, tool: allowed.tool, step: steps });
+          gathered.push(renderLookupResult(allowed.tool, result));
+          replyText = await answerWith("");
         }
-        events.emit("lookup:done", { contextId: msg.contextId, tool: allowed.tool });
-        replyText = (
-          await provider.complete({
-            system,
-            user: `${msg.text}\n\n---\n${renderLookupResult(allowed.tool, result)}`,
-            history,
-          })
-        ).text;
-        // 2回目も JSON を返してきたら、調べものは打ち切って正直に伝える。
-        // **JSON をそのまま Slack に流さない**のが目的。
+
+        // 打ち切るときも**定型文で返さない**。分かった範囲で答えさせ、
+        // 足りない部分は本人に言わせる（それが正直で、相手にも役に立つ）。
+        if (stop !== undefined) {
+          replyText = await answerWith(`${stop}\n${NO_MORE_LOOKUP}`);
+        }
+        // それでも JSON なら、さすがに Slack へ流さない
         if (parseLookup(replyText)) {
-          replyText =
-            "すみません、うまく調べられませんでした。もう少し具体的に教えてもらえますか。";
+          replyText = "すみません、調べきれませんでした。何を見に行けばよいか教えてもらえますか。";
         }
       }
     }

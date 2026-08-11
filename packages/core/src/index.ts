@@ -12,6 +12,7 @@ export type {
   SensitiveGuardConfig,
 } from "./sensitive-guard.js";
 export {
+  NO_MORE_LOOKUP,
   TOOL_DESCRIPTIONS,
   allowedLookup,
   lookupCatalog,
