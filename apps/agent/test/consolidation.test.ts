@@ -220,3 +220,129 @@ describe.skipIf(!DB)("本棚の整理（§4-3, DATABASE_URL 必須）", () => {
     await pool.end();
   });
 });
+
+describe.skipIf(!DB)("メモから本棚への昇格（§4-3, DATABASE_URL 必須）", () => {
+  async function withNotes(modelOutput: string, count = 3, opts: { dryRun?: boolean } = {}) {
+    const agentId = `promote-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const pool = new pg.Pool({ connectionString: DB });
+    for (let i = 0; i < count; i++) {
+      await pool.query("INSERT INTO notes (agent_id, context_id, content) VALUES ($1,'c1',$2)", [
+        agentId,
+        `メモ${i + 1}`,
+      ]);
+    }
+    const ids = await pool.query<{ id: string }>(
+      "SELECT id FROM notes WHERE agent_id=$1 ORDER BY id",
+      [agentId],
+    );
+    const noteIds = ids.rows.map((r) => Number(r.id));
+    const audited: { action: string; payload: Record<string, unknown> }[] = [];
+
+    const result = await runConsolidation({
+      connectionString: DB,
+      agentId,
+      now: new Date("2026-07-29T18:00:00Z"),
+      dryRun: opts.dryRun,
+      // 昇格の判定と整理の判定に同じモデルが使われる。整理側は本が1冊しか無ければ呼ばれない。
+      organize: async () => modelOutput.replaceAll("<IDS>", JSON.stringify(noteIds)),
+      audit: async (e) => {
+        audited.push(e);
+      },
+    });
+
+    const books = await pool.query<{
+      title: string;
+      card: string;
+      origin: string;
+      source_note_ids: string[];
+    }>("SELECT title, card, origin, source_note_ids FROM books WHERE agent_id=$1", [agentId]);
+    const notes = await pool.query<{ id: string; promoted_at: Date | null }>(
+      "SELECT id, promoted_at FROM notes WHERE agent_id=$1 ORDER BY id",
+      [agentId],
+    );
+    await pool.end();
+    return { result, audited, noteIds, books: books.rows, notes: notes.rows };
+  }
+
+  const PROMOTION =
+    '{"promotions":[{"note_ids":<IDS>,"title":"期待される役割","card":"複数のメモから見えてきたこと"}]}';
+
+  test("3件のメモが1冊の本になり、来歴が残る", async () => {
+    const { result, books, notes, noteIds } = await withNotes(PROMOTION);
+
+    expect(result.booksPromoted).toBe(1);
+    expect(result.notesPromoted).toBe(3);
+    expect(books[0]?.title).toBe("期待される役割");
+    // 本棚から会話へ遡れる
+    expect(books[0]?.origin).toBe("promoted");
+    expect(books[0]?.source_note_ids?.map(Number)).toEqual(noteIds);
+    // 昇格済みの印が付く（翌晩また同じ本が生まれない）
+    expect(notes.every((n) => n.promoted_at !== null)).toBe(true);
+  });
+
+  test("同じメモは二度昇格しない", async () => {
+    const agentId = `promote-once-${Date.now()}`;
+    const pool = new pg.Pool({ connectionString: DB });
+    for (let i = 0; i < 3; i++) {
+      await pool.query("INSERT INTO notes (agent_id, context_id, content) VALUES ($1,'c1',$2)", [
+        agentId,
+        `メモ${i}`,
+      ]);
+    }
+    const ids = await pool.query<{ id: string }>("SELECT id FROM notes WHERE agent_id=$1", [
+      agentId,
+    ]);
+    const noteIds = ids.rows.map((r) => Number(r.id));
+    const organize = async () =>
+      `{"promotions":[{"note_ids":${JSON.stringify(noteIds)},"title":"T","card":"C"}],"merges":[],"retitles":[]}`;
+
+    const first = await runConsolidation({ connectionString: DB, agentId, organize });
+    const second = await runConsolidation({ connectionString: DB, agentId, organize });
+
+    expect(first.booksPromoted).toBe(1);
+    expect(second.booksPromoted).toBe(0); // 候補が残っていない
+    const books = await pool.query("SELECT 1 FROM books WHERE agent_id=$1", [agentId]);
+    expect(books.rowCount).toBe(1);
+    await pool.end();
+  });
+
+  test("メモが3件未満ならモデルを呼ばずに何もしない", async () => {
+    let called = false;
+    const agentId = `promote-few-${Date.now()}`;
+    const pool = new pg.Pool({ connectionString: DB });
+    await pool.query(
+      "INSERT INTO notes (agent_id, context_id, content) VALUES ($1,'c1','ひとつ')",
+      [agentId],
+    );
+
+    const result = await runConsolidation({
+      connectionString: DB,
+      agentId,
+      organize: async () => {
+        called = true;
+        return "{}";
+      },
+    });
+
+    expect(result.booksPromoted).toBe(0);
+    expect(called).toBe(false); // 呼んでも昇格しないので呼ばない
+    await pool.end();
+  });
+
+  test("--dry-run は昇格も適用しない", async () => {
+    const { result, books, notes } = await withNotes(PROMOTION, 3, { dryRun: true });
+
+    expect(result.promotions).toHaveLength(1); // 何をするつもりかは見える
+    expect(result.booksPromoted).toBe(0);
+    expect(books).toEqual([]);
+    expect(notes.every((n) => n.promoted_at === null)).toBe(true);
+  });
+
+  test("昇格は監査に残る。本文は残さない（A1-5）", async () => {
+    const { audited, noteIds } = await withNotes(PROMOTION);
+
+    const promoted = audited.find((e) => e.action === "memory.books.promoted");
+    expect(promoted?.payload).toMatchObject({ books: 1, notes: noteIds });
+    expect(JSON.stringify(promoted?.payload)).not.toContain("複数のメモから見えてきたこと");
+  });
+});
