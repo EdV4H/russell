@@ -8,6 +8,7 @@
 
 import { assertAutoMigrateAllowed, assertSchemaReady, runMigrations } from "@edv4h/russell-migrate";
 import pg from "pg";
+import { type JournalMaterial, buildJournalRequest, usableNarrative } from "./journal.js";
 import { MEMORY_MIGRATIONS } from "./migrations.js";
 import {
   EMPTY_PLAN,
@@ -43,6 +44,22 @@ export interface ConsolidationOptions {
   organize?: (req: { system: string; user: string }) => Promise<string>;
   /** 昇格の材料にするメモの期間（日数）。既定7日（§4-3「週内に」）。 */
   promotionWindowDays?: number;
+  /**
+   * 日記の文章を書くモデル（§4-1）。**渡さなければ決定論的な連結にフォールバックする。**
+   * モデルが無くても日記は書かれる必要がある（記録の欠落を作らない）。
+   */
+  narrate?: (req: { system: string; user: string }) => Promise<string>;
+  /** 日記に載せる名前（一人称の主体）。既定は agentId。 */
+  agentName?: string;
+  /**
+   * 生成された日記を検査する（A-1 の二次フィルタ）。当たったカテゴリを返す。
+   *
+   * 呼び出し側から注入するのは、判定がコアの持ち物で、記憶プラグインが
+   * コアに依存しないようにするため（plugin-first）。
+   */
+  screen?: (text: string) => string[];
+  /** DO-NOT-WRITE の一次プロンプト。日記の生成に渡す。 */
+  doNotWrite?: string;
   /**
    * **何も書き込まない。** 日記も忘却も含めて DB は一切変えず、「やったらどうなるか」だけを返す。
    *
@@ -136,10 +153,20 @@ export async function runConsolidation(
     const publishable = notes.rows.filter((r) => (r.sensitive_categories ?? []).length === 0);
     const withheld = notes.rows.length - publishable.length;
     const events = publishable.map((r) => ({ summary: r.content }));
-    const narrative =
+    /** モデルが無い・失敗した・使えない出力だったときの落とし所。**記録は必ず残す。** */
+    const fallback =
       publishable.length === 0
         ? `${entryDate}: 記録すべき出来事はなかった。`
         : `${entryDate}: ${publishable.length}件の記録。${publishable.map((r) => r.content).join(" / ")}`;
+    const narrative = await writeNarrative(
+      {
+        entryDate,
+        agentName: options.agentName ?? agentId,
+        notes: publishable.map((r) => r.content),
+      },
+      fallback,
+      options,
+    );
 
     const dryRun = options.dryRun ?? false;
 
@@ -422,4 +449,37 @@ async function applyPromotions(
     client.release();
   }
   return { books: plans.length, notes };
+}
+
+/**
+ * 日記の文章を作る。**モデルが使えないときは決定論的な連結に落とす。**
+ *
+ * 日記が書けないより、読みにくい日記が残る方がよい——「その日の記録が無い」状態を
+ * 作らないのが日記の役目なので（§4「日付キーで再実行可能」も記録が残る前提）。
+ */
+async function writeNarrative(
+  material: JournalMaterial,
+  fallback: string,
+  options: ConsolidationOptions,
+): Promise<string> {
+  if (!options.narrate || material.notes.length === 0) return fallback;
+  let text: string;
+  try {
+    text = await options.narrate(buildJournalRequest(material, options.doNotWrite ?? ""));
+  } catch {
+    return fallback;
+  }
+  if (!usableNarrative(text)) return fallback;
+
+  // 二次フィルタ（A-1 §0）。**生成物にも決定論の検査をかける。**
+  // 材料からは機微情報を除いてあるが、プロンプトだけに頼らないのがこの設計の作法。
+  const hits = options.screen?.(text) ?? [];
+  if (hits.length > 0) {
+    await options.audit?.({
+      action: "journal.narrative_rejected",
+      payload: { entryDate: material.entryDate, categories: hits },
+    });
+    return fallback;
+  }
+  return text.trim();
 }

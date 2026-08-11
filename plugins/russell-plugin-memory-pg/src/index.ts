@@ -20,3 +20,5 @@ export {
 export type { PromotableNote, PromotionPlan } from "./promote.js";
 export { MAX_INJECTED_TERMS, TERM_CACHE_MS, matchTerms } from "./terms.js";
 export type { StoredTerm } from "./terms.js";
+export { buildJournalRequest, usableNarrative } from "./journal.js";
+export type { JournalMaterial } from "./journal.js";
