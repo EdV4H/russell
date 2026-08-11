@@ -10,11 +10,15 @@
     "consolidate": "node --env-file-if-exists=../../.env dist/main.js"
   },
   "dependencies": {
+    "@edv4h/russell-plugin-audit-pg": "workspace:*",
     "@edv4h/russell-plugin-killswitch-pg": "workspace:*",
-    "@edv4h/russell-plugin-memory-pg": "workspace:*"
+    "@edv4h/russell-plugin-memory-pg": "workspace:*",
+    "@edv4h/russell-plugin-model-claude-code": "workspace:*",
+    "pg": "^8.13.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "@types/pg": "^8.11.0"
   }
 }

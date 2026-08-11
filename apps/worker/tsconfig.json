@@ -7,7 +7,17 @@
   },
   "include": ["src"],
   "references": [
-    { "path": "../../plugins/russell-plugin-killswitch-pg" },
-    { "path": "../../plugins/russell-plugin-memory-pg" }
+    {
+      "path": "../../plugins/russell-plugin-audit-pg"
+    },
+    {
+      "path": "../../plugins/russell-plugin-killswitch-pg"
+    },
+    {
+      "path": "../../plugins/russell-plugin-memory-pg"
+    },
+    {
+      "path": "../../plugins/russell-plugin-model-claude-code"
+    }
   ]
 }

@@ -9,6 +9,15 @@
 import { assertAutoMigrateAllowed, assertSchemaReady, runMigrations } from "@edv4h/russell-migrate";
 import pg from "pg";
 import { MEMORY_MIGRATIONS } from "./migrations.js";
+import {
+  EMPTY_PLAN,
+  type OrganizePlan,
+  type ShelfBook,
+  buildOrganizePrompt,
+  isEmptyPlan,
+  parseOrganizePlan,
+  validatePlan,
+} from "./organize.js";
 
 export interface ConsolidationOptions {
   connectionString?: string;
@@ -19,6 +28,22 @@ export interface ConsolidationOptions {
   lambda?: number;
   /** dev/test 用に起動時マイグレーションを走らせる。本番（NODE_ENV=production）では拒否される（§11）。 */
   autoMigrate?: boolean;
+  /**
+   * 本棚の整理に使うモデル（§4-3）。**渡さなければ整理はしない。**
+   * 決定論的な処理（日記・忘却）はモデル無しでも動く必要があるので、任意にしてある。
+   */
+  organize?: (req: { system: string; user: string }) => Promise<string>;
+  /**
+   * **何も書き込まない。** 日記も忘却も含めて DB は一切変えず、「やったらどうなるか」だけを返す。
+   *
+   * 整理だけを除外する形にしていないのは、`--dry-run` が一部だけ書き込む挙動は罠だから。
+   */
+  dryRun?: boolean;
+  /**
+   * 整理の結果を監査へ残す。**本文は渡さない**（id と件数だけ, A1-5）。
+   * worker はコアの外にいて AuditRegistry を持たないので、注入で受ける。
+   */
+  audit?: (event: { action: string; payload: Record<string, unknown> }) => Promise<void>;
 }
 
 export interface ConsolidationResult {
@@ -27,6 +52,16 @@ export interface ConsolidationResult {
   notesConsolidated: number;
   booksDecayed: number;
   booksArchived: number;
+  /** 整理で畳んだ本の組数。 */
+  booksMerged: number;
+  /** 畳まれて書庫へ下がった本の冊数。 */
+  booksAbsorbed: number;
+  /** 見出しを付け直した冊数。 */
+  booksRetitled: number;
+  /** 実際に適用した（dryRun なら適用しなかった）計画。 */
+  plan: OrganizePlan;
+  /** 何も書き込んでいない。数字は「やったらどうなるか」の見積り。 */
+  dryRun: boolean;
 }
 
 /** 1回のコンソリデーションを実行する（worker から呼ぶ）。 */
@@ -66,38 +101,178 @@ export async function runConsolidation(
         ? `${entryDate}: 記録すべき出来事はなかった。`
         : `${entryDate}: ${notes.rows.length}件の記録。${notes.rows.map((r) => r.content).join(" / ")}`;
 
-    await pool.query(
-      `INSERT INTO journal_entries (agent_id, entry_date, narrative, events)
-       VALUES ($1, $2, $3, $4::jsonb)
-       ON CONFLICT (agent_id, entry_date)
-       DO UPDATE SET narrative = EXCLUDED.narrative, events = EXCLUDED.events`,
-      [agentId, entryDate, narrative, JSON.stringify(events)],
-    );
+    const dryRun = options.dryRun ?? false;
 
-    // 3. 処理済みメモに印を付ける
-    const consolidated = await pool.query(
-      "UPDATE notes SET consolidated = true WHERE agent_id = $1 AND consolidated = false",
-      [agentId],
-    );
+    if (!dryRun) {
+      await pool.query(
+        `INSERT INTO journal_entries (agent_id, entry_date, narrative, events)
+         VALUES ($1, $2, $3, $4::jsonb)
+         ON CONFLICT (agent_id, entry_date)
+         DO UPDATE SET narrative = EXCLUDED.narrative, events = EXCLUDED.events`,
+        [agentId, entryDate, narrative, JSON.stringify(events)],
+      );
+
+      // 3. 処理済みメモに印を付ける
+      await pool.query(
+        "UPDATE notes SET consolidated = true WHERE agent_id = $1 AND consolidated = false",
+        [agentId],
+      );
+    }
+
+    // 3. 本棚の編集（§4-3）: 重複を畳み、見出しを付け直す。モデルが無ければ何もしない。
+    const plan = options.organize
+      ? await organizeShelf(pool, agentId, options.organize)
+      : EMPTY_PLAN;
+    const applied =
+      dryRun || isEmptyPlan(plan)
+        ? { merged: 0, absorbed: 0, retitled: 0 }
+        : await applyPlan(pool, agentId, plan);
+    if (!dryRun && options.audit && !isEmptyPlan(plan)) {
+      // 本文は残さない（A1-5）。どの本がどこへ行ったかは id で辿れる。
+      await options.audit({
+        action: "memory.shelf.organized",
+        payload: {
+          merges: plan.merges.map((m) => ({ keep: m.keep, absorbed: m.absorb })),
+          retitled: plan.retitles.map((r) => r.id),
+        },
+      });
+    }
 
     // 4. 忘却の適用（§3.4）: 減衰 → strength<0.2 を書庫へ
-    const decayed = await pool.query(
-      "UPDATE books SET strength = strength * exp(-$2::double precision) WHERE agent_id = $1 AND status = 'active'",
-      [agentId, lambda],
-    );
-    const archived = await pool.query(
-      "UPDATE books SET status = 'archived' WHERE agent_id = $1 AND status = 'active' AND strength < 0.2",
-      [agentId],
-    );
+    const forgetting = dryRun
+      ? await previewForgetting(pool, agentId, lambda)
+      : await applyForgetting(pool, agentId, lambda);
 
     return {
       entryDate,
       narrative,
-      notesConsolidated: consolidated.rowCount ?? 0,
-      booksDecayed: decayed.rowCount ?? 0,
-      booksArchived: archived.rowCount ?? 0,
+      notesConsolidated: notes.rows.length,
+      booksDecayed: forgetting.decayed,
+      booksArchived: forgetting.archived,
+      booksMerged: applied.merged,
+      booksAbsorbed: applied.absorbed,
+      booksRetitled: applied.retitled,
+      plan,
+      dryRun,
     };
   } finally {
     await pool.end();
   }
+}
+
+/** いまの本棚を読んでモデルに整理させ、実在する本だけに絞った計画を返す。 */
+async function organizeShelf(
+  pool: pg.Pool,
+  agentId: string,
+  complete: (req: { system: string; user: string }) => Promise<string>,
+): Promise<OrganizePlan> {
+  const res = await pool.query<ShelfBook>(
+    `SELECT id, title, card, strength FROM books
+      WHERE agent_id = $1 AND status = 'active' ORDER BY created_at ASC`,
+    [agentId],
+  );
+  // 1冊なら畳む相手がいない。モデルを呼ぶ意味が無いので呼ばない。
+  if (res.rows.length < 2) return EMPTY_PLAN;
+
+  const books = res.rows.map((b) => ({ ...b, id: Number(b.id) }));
+  let text: string;
+  try {
+    text = await complete(buildOrganizePrompt(books));
+  } catch {
+    // 司書が不調でも夜間バッチ全体は止めない。今夜は整理しないだけ。
+    return EMPTY_PLAN;
+  }
+  return validatePlan(parseOrganizePlan(text), books);
+}
+
+/**
+ * 計画を適用する。**1つのトランザクションで行う** — 畳まれる側だけ書庫に落ちて
+ * 残す側が更新されないと、内容がどこにも無い状態になる。
+ *
+ * 畳まれた本は消さずに `archived`（可逆, privacy-and-memory-policy §3 の L1）。
+ */
+async function applyPlan(
+  pool: pg.Pool,
+  agentId: string,
+  plan: OrganizePlan,
+): Promise<{ merged: number; absorbed: number; retitled: number }> {
+  const client = await pool.connect();
+  let absorbed = 0;
+  let retitled = 0;
+  try {
+    await client.query("BEGIN");
+    for (const m of plan.merges) {
+      // **残す本の元の文章も書庫に残す。** これを入れないと、畳まれた側（archived）は
+      // 後から読めるのに、残した側の元文だけが上書きで消える——整理が部分的に
+      // 不可逆になる。本棚の操作は可逆であること（privacy-and-memory-policy §3 の L1）。
+      await client.query(
+        `INSERT INTO books (agent_id, title, source, card, shelf, strength, status, created_at)
+         SELECT agent_id, title, source, card, shelf, 0, 'archived', created_at
+           FROM books WHERE agent_id = $1 AND id = $2 AND status = 'active'`,
+        [agentId, m.keep],
+      );
+      // 残す本の strength は組の最大を引き継ぐ。まとめたことで弱くならないように。
+      await client.query(
+        `UPDATE books SET title = $3, card = $4,
+                strength = (SELECT max(strength) FROM books WHERE agent_id = $1 AND id = ANY($5))
+          WHERE agent_id = $1 AND id = $2 AND status = 'active'`,
+        [agentId, m.keep, m.title, m.card, [m.keep, ...m.absorb]],
+      );
+      const res = await client.query(
+        `UPDATE books SET status = 'archived', strength = 0
+          WHERE agent_id = $1 AND id = ANY($2) AND status = 'active'`,
+        [agentId, m.absorb],
+      );
+      absorbed += res.rowCount ?? 0;
+    }
+    for (const r of plan.retitles) {
+      const res = await client.query(
+        "UPDATE books SET title = $3 WHERE agent_id = $1 AND id = $2 AND status = 'active'",
+        [agentId, r.id, r.title],
+      );
+      retitled += res.rowCount ?? 0;
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+  return { merged: plan.merges.length, absorbed, retitled };
+}
+
+/** 忘却を適用する（§3.4）。減衰させてから、しきい値を割った本を書庫へ。 */
+async function applyForgetting(
+  pool: pg.Pool,
+  agentId: string,
+  lambda: number,
+): Promise<{ decayed: number; archived: number }> {
+  const decayed = await pool.query(
+    "UPDATE books SET strength = strength * exp(-$2::double precision) WHERE agent_id = $1 AND status = 'active'",
+    [agentId, lambda],
+  );
+  const archived = await pool.query(
+    "UPDATE books SET status = 'archived' WHERE agent_id = $1 AND status = 'active' AND strength < 0.2",
+    [agentId],
+  );
+  return { decayed: decayed.rowCount ?? 0, archived: archived.rowCount ?? 0 };
+}
+
+/** 同じ判定を書き込まずに数えるだけ（dryRun 用）。 */
+async function previewForgetting(
+  pool: pg.Pool,
+  agentId: string,
+  lambda: number,
+): Promise<{ decayed: number; archived: number }> {
+  const res = await pool.query<{ decayed: string; archived: string }>(
+    `SELECT count(*) AS decayed,
+            count(*) FILTER (WHERE strength * exp(-$2::double precision) < 0.2) AS archived
+       FROM books WHERE agent_id = $1 AND status = 'active'`,
+    [agentId, lambda],
+  );
+  return {
+    decayed: Number(res.rows[0]?.decayed ?? 0),
+    archived: Number(res.rows[0]?.archived ?? 0),
+  };
 }
