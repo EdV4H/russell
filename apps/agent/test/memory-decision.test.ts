@@ -7,11 +7,13 @@
 
 import { createAgent } from "@edv4h/russell-core";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
-import type {
-  InboundMessage,
-  ModelRequest,
-  RussellPlugin,
-  Temperament,
+import {
+  type InboundMessage,
+  MEMORY_SERVICE,
+  type MemoryCapability,
+  type ModelRequest,
+  type RussellPlugin,
+  type Temperament,
 } from "@edv4h/russell-shared";
 import { expect, test } from "vitest";
 
@@ -100,8 +102,10 @@ async function run(decision: string, text: string) {
     .recent()
     .filter((e) => e.action === "tool.invoked")
     .map((e) => e.payload.tool);
+  // 監査には本文を残さない（A1-5）ので、何が書かれたかは記憶そのものから読む。
+  const recalled = await agent.ctx.services.get<MemoryCapability>(MEMORY_SERVICE)?.recall("t1");
   await agent.destroy();
-  return { tools, sent: s.sent, reacted: s.reacted, requests: m.requests };
+  return { tools, sent: s.sent, reacted: s.reacted, requests: m.requests, recalled };
 }
 
 test("モデルが決めた内容を書き留める（明示的な依頼が無くても）", async () => {
@@ -164,4 +168,31 @@ test("判定に渡すのは直前の1往復（履歴は渡さない）", async (
   expect(decision?.user).toContain("相手: やあ");
   expect(decision?.user).toContain("同僚: わかりました");
   expect(decision?.history).toBeUndefined();
+});
+
+test("本棚の見出しはモデルが書く（本文の切り出しにしない）", async () => {
+  const { recalled } = await run(
+    '{"note":null,"shelf":"丸山さんは広く浅く答えて詳しい人へ繋ぐハブ役を期待している。","title":"丸山さんが期待する役割","forget":null}',
+    "広く浅く拾って、詳しい人に繋いでくれると助かる",
+  );
+
+  expect(recalled?.books.at(-1)?.title).toBe("丸山さんが期待する役割");
+});
+
+test("見出しが無ければ本文の頭で代用する（本が載らないよりはよい）", async () => {
+  const card = "アウトプットは内容に応じて使い分ける。軽い共有は Slack、重い内容は Notion。";
+  const { recalled } = await run(
+    `{"note":null,"shelf":${JSON.stringify(card)},"title":null,"forget":null}`,
+    "軽いのは Slack、重いのは Notion で",
+  );
+
+  expect(recalled?.books.at(-1)?.title).toBe(card.slice(0, 24));
+});
+
+test("見出しだけ来ても本棚には載せない", async () => {
+  const { tools } = await run(
+    '{"note":null,"shelf":null,"title":"何かの見出し","forget":null}',
+    "うん",
+  );
+  expect(tools).toEqual([]);
 });

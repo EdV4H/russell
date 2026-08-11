@@ -505,7 +505,7 @@ export async function createAgent(
       if (decision.shelf) {
         await invokeTool(
           "shelf.add",
-          { source: msg.contextId, card: decision.shelf },
+          { source: msg.contextId, card: decision.shelf, title: decision.shelfTitle },
           msg.trustLabel,
         );
         events.emit("memory:shelved", { contextId: msg.contextId });

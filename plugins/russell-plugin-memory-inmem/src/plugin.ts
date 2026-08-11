@@ -55,8 +55,10 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       const offShelf = ctx.tools.register("shelf.add", {
         name: "shelf.add",
         effect: "internal_write",
-        async run(input: { source: string; card: string }) {
-          const title = input.card.slice(0, 24);
+        async run(input: { source: string; card: string; title?: string }) {
+          // 見出しはモデルが書く。無ければ本文の頭を切る——索引としては読めないが、
+          // 本が載らないよりはよい（判定が壊れても記憶は残す, ADR 0003）。
+          const title = input.title?.trim() || input.card.slice(0, 24);
           books.push({ title, card: input.card });
           return { status: "succeeded" as const, title };
         },
