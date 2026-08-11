@@ -36,6 +36,9 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
             )
             .map((p) => ({ name: p.name, note: p.definition }));
         },
+        glossary() {
+          return [...termBook.values()].map((t) => ({ name: t.name, aliases: t.aliases }));
+        },
         terms(text: string) {
           const hits = [...termBook.values()].filter((t) =>
             [t.name, ...t.aliases].some(

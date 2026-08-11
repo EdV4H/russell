@@ -378,3 +378,59 @@ test("意味が確定していなくても載せる、と指示している", as
 
   await agent.destroy();
 });
+
+test("既に知っている語を判定に見せる（重複を作らせない）", async () => {
+  const m = scripted(DEFINE_MQL);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("MQL は見込み顧客のこと");
+  await drain();
+
+  // 2ターン目の判定には、1ターン目で覚えた語が渡っている
+  s.push("エムキューエルの話の続き");
+  await drain();
+
+  const decisions = m.requests.filter((r) => r.system.includes("記憶係"));
+  expect(decisions.at(-1)?.user).toContain("すでに単語帳にある語");
+  expect(decisions.at(-1)?.user).toContain("MQL（別名: エムキューエル）");
+
+  await agent.destroy();
+});
+
+test("同じものなら新しい行を作るな、と指示している", async () => {
+  const m = scripted(NOTHING);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("やあ");
+  await drain();
+
+  const decision = m.requests.find((r) => r.system.includes("記憶係"));
+  expect(decision?.system).toContain("新しい行を作らない");
+  expect(decision?.system).toContain("name を完全に一致させる");
+  // 表記ゆれは別名として足す
+  expect(decision?.system).toContain("aliases に足す");
+
+  await agent.destroy();
+});
+
+test("単語帳が空なら一覧を渡さない（無駄な行を足さない）", async () => {
+  const m = scripted(NOTHING);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("やあ");
+  await drain();
+
+  const decision = m.requests.find((r) => r.system.includes("記憶係"));
+  expect(decision?.user).not.toContain("すでに単語帳にある語");
+
+  await agent.destroy();
+});
