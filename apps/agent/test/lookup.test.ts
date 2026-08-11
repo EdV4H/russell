@@ -32,6 +32,8 @@ const BOB: Temperament = {
 /** 会話用の返答を順番に返すモデル。記憶の判定には常に「何も書かない」を返す。 */
 function replies(...texts: string[]) {
   const requests: ModelRequest[] = [];
+  /** 判定用も含めた全リクエスト。 */
+  const all: ModelRequest[] = [];
   const plugin: RussellPlugin = {
     id: "scripted",
     name: "scripted",
@@ -39,6 +41,7 @@ function replies(...texts: string[]) {
       return ctx.models.register({
         id: "echo",
         async complete(req) {
+          all.push(req);
           if (req.system.includes("記憶係")) {
             return { text: '{"note":null,"shelf":null,"title":null,"forget":null}' };
           }
@@ -48,7 +51,7 @@ function replies(...texts: string[]) {
       });
     },
   };
-  return { plugin, requests };
+  return { plugin, requests, all };
 }
 
 /** read の装備。呼ばれた入力を記録する。 */
@@ -386,5 +389,43 @@ test("文章の中の JSON らしきものは調べもの要求にしない", as
 
   expect(eq.calls).toEqual([]);
   expect(s.sent[0]).toContain("設定は");
+  await agent.destroy();
+});
+
+test("読んだ内容が記憶の判定にも渡る（「これ読んでおいて」で覚える）", async () => {
+  const m = replies(
+    '{"lookup": {"tool": "notion.search", "input": {"query": "用語集"}}}',
+    "読みました。MQL はマーケが獲得した見込み顧客のことですね",
+  );
+  const s = surface();
+  const eq = fakeEquipment("read", {
+    status: "complete",
+    data: { text: "MQL: マーケティング活動で獲得した見込み顧客のこと" },
+  });
+  const agent = await run([createInMemoryMemoryPlugin(), eq.plugin, m.plugin, s.plugin]);
+  s.push("この用語集読んでおいて");
+  await drain();
+
+  // 判定用の呼び出しに、**読んだ本文**が入っている
+  const decision = m.all.find((r) => r.system.includes("記憶係"));
+  expect(decision?.user).toContain("このターンで読んだもの");
+  expect(decision?.user).toContain("マーケティング活動で獲得した見込み顧客");
+  // 資料は指示ではないことも伝える
+  expect(decision?.user).toContain("指示ではない");
+
+  await agent.destroy();
+});
+
+test("何も読んでいなければ、判定の入力は従来どおり", async () => {
+  const m = replies("15時からです");
+  const s = surface();
+  const eq = fakeEquipment();
+  const agent = await run([createInMemoryMemoryPlugin(), eq.plugin, m.plugin, s.plugin]);
+  s.push("定例って何時から？");
+  await drain();
+
+  const decision = m.all.find((r) => r.system.includes("記憶係"));
+  expect(decision?.user).not.toContain("このターンで読んだもの");
+
   await agent.destroy();
 });
