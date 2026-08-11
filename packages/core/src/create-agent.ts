@@ -49,6 +49,14 @@ import { CONVERSATION_SERVICE, MEMORY_SERVICE } from "@edv4h/russell-shared";
 import { createAuditLog } from "./audit.js";
 import { createFreezeGate } from "./freeze.js";
 import {
+  TOOL_DESCRIPTIONS,
+  allowedLookup,
+  lookupCatalog,
+  lookupInstructions,
+  parseLookup,
+  renderLookupResult,
+} from "./lookup.js";
+import {
   type MemoryDecision,
   buildDecisionRequest,
   isEmptyDecision,
@@ -422,7 +430,11 @@ export async function createAgent(
       "記憶について: 忘れるよう言われたとき、実際にできるのは本棚から書庫へ下げることだけで、データは残ります。" +
       "「消しました」とは言わず、書庫に下げたことと、完全な削除は運用担当者を通す必要があることを伝えてください。" +
       "覚えたかどうかを断言せず、できなかったことをできたと言わないでください。";
-    return `あなたは「${t.name}」という名前の同僚です。口調: ${t.tone}。${back}記憶を頼りに、簡潔に応答してください。\n${memoryHonesty}`;
+    // 支給されている装備を人格の一部として渡す。**未支給の装備はここに載らない**（§9.2）
+    const tools = lookupInstructions(
+      lookupCatalog(equipment.getAll(), toolsMap, TOOL_DESCRIPTIONS),
+    );
+    return `あなたは「${t.name}」という名前の同僚です。口調: ${t.tone}。${back}記憶を頼りに、簡潔に応答してください。\n${memoryHonesty}${tools}`;
   }
 
   /**
@@ -704,10 +716,45 @@ export async function createAgent(
         return;
       }
     }
-    const replyText = provider
-      ? (await provider.complete({ system, user: msg.text, history: await conversationFor(msg) }))
-          .text
+    const history = provider ? await conversationFor(msg) : [];
+    let replyText = provider
+      ? (await provider.complete({ system, user: msg.text, history })).text
       : "（モデル未登録のため応答できません）";
+
+    // 調べもの: 返答が JSON なら道具を使い、結果を添えてもう一度答えさせる。
+    // **1ターンに1回だけ。** 繰り返させると、失敗する道具で無限に往復しうる。
+    if (provider) {
+      const catalog = lookupCatalog(equipment.getAll(), toolsMap, TOOL_DESCRIPTIONS);
+      const request = catalog.length ? parseLookup(replyText) : undefined;
+      const allowed = request ? allowedLookup(request, catalog) : undefined;
+      if (request && !allowed) {
+        // 名乗った道具を持っていない。モデルの言う名前を信用しない（§12-3）
+        events.emit("lookup:rejected", { contextId: msg.contextId, tool: request.tool });
+      }
+      if (allowed) {
+        let result: unknown;
+        try {
+          // 引き金は相手の発言なので untrusted のまま Policy Gate を通す
+          result = await invokeTool(allowed.tool, allowed.input, msg.trustLabel);
+        } catch (err) {
+          result = { status: "failed", detail: String(err) };
+        }
+        events.emit("lookup:done", { contextId: msg.contextId, tool: allowed.tool });
+        replyText = (
+          await provider.complete({
+            system,
+            user: `${msg.text}\n\n---\n${renderLookupResult(allowed.tool, result)}`,
+            history,
+          })
+        ).text;
+        // 2回目も JSON を返してきたら、調べものは打ち切って正直に伝える。
+        // **JSON をそのまま Slack に流さない**のが目的。
+        if (parseLookup(replyText)) {
+          replyText =
+            "すみません、うまく調べられませんでした。もう少し具体的に教えてもらえますか。";
+        }
+      }
+    }
     // 今回の往復を文脈に足す。次のターンで「さっきの話」が通じるようにする。
     appendTurn(msg.contextId, { role: "user", text: msg.text });
     appendTurn(msg.contextId, { role: "assistant", text: replyText });
