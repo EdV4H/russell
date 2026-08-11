@@ -79,6 +79,20 @@ export interface MemoryCapability {
    * **人の情報は公開経路に出さない**という扱いの差を型の上でも見せておくため。
    */
   people?(text: string): Promise<RecalledPerson[]> | RecalledPerson[];
+  /**
+   * 登録済みの見出し語と別名を返す（本文は返さない）。
+   *
+   * **記憶を決めるモデルに「もう知っている語」を見せるため**にある。これが無いと毎ターン
+   * 白紙から書くので、既に別名として登録されている語をまた新しい行として作る
+   * （実際、同じプロジェクトが4行に分かれた）。
+   */
+  glossary?(): Promise<GlossaryEntry[]> | GlossaryEntry[];
+}
+
+/** 単語帳の見出しだけ（重複を避けるためにモデルへ見せる）。 */
+export interface GlossaryEntry {
+  name: string;
+  aliases: string[];
 }
 
 /** services のキー定数。 */

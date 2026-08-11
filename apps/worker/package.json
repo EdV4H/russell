@@ -9,7 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "consolidate": "node --env-file-if-exists=../../.env dist/main.js",
     "forget-person": "node --env-file-if-exists=../../.env dist/forget-person.js",
-    "recheck-sensitive": "node --env-file-if-exists=../../.env dist/recheck-sensitive.js"
+    "recheck-sensitive": "node --env-file-if-exists=../../.env dist/recheck-sensitive.js",
+    "merge-term": "node --env-file-if-exists=../../.env dist/merge-term.js"
   },
   "dependencies": {
     "@edv4h/russell-core": "workspace:*",

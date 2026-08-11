@@ -10,6 +10,7 @@
 import { assertAutoMigrateAllowed, assertSchemaReady, runMigrations } from "@edv4h/russell-migrate";
 import {
   type AgentContext,
+  type GlossaryEntry,
   MEMORY_SERVICE,
   type MemoryCapability,
   type RecalledContext,
@@ -132,6 +133,15 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
         async people(text: string): Promise<RecalledPerson[]> {
           const rows = await loadEntities("person");
           return matchTerms(text, rows).map((m) => ({ name: m.name, note: m.definition }));
+        },
+        /** 登録済みの見出し語（本文は返さない）。更新順で、モデルに見せる分だけ。 */
+        async glossary(): Promise<GlossaryEntry[]> {
+          const res = await pool.query<GlossaryEntry>(
+            `SELECT name, aliases FROM entities
+              WHERE agent_id = $1 AND type = 'term' ORDER BY updated_at DESC LIMIT 200`,
+            [agentId],
+          );
+          return res.rows;
         },
         async terms(text: string): Promise<RecalledTerm[]> {
           return matchTerms(text, await loadEntities("term"));

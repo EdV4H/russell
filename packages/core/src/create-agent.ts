@@ -561,10 +561,12 @@ export async function createAgent(
   ): Promise<void> {
     const decider = memoryModelId ? models.get(memoryModelId) : undefined;
     if (!decider) return;
+    const mem = services.get<MemoryCapability>(MEMORY_SERVICE);
 
     let decision: MemoryDecision;
     try {
-      const req = buildDecisionRequest(msg.text, replyText, readings);
+      const known = mem?.glossary ? await mem.glossary() : [];
+      const req = buildDecisionRequest(msg.text, replyText, readings, known);
       decision = parseDecision((await decider.complete(req)).text);
     } catch (err) {
       events.emit("memory:decision-failed", { contextId: msg.contextId, error: String(err) });
