@@ -30,6 +30,7 @@ surface プラグインは `ctx.surfaces.register(def)` で自己分類する。
 - **購読** — `app_mention`, `message.im`, 参加チャンネルの `message.channels`
 - **応答は原則スレッド内**。HITL 承認は **Block Kit ボタン**（承認/却下 + 理由入力）
 - **最小スコープ** — `app_mentions:read`, `channels:history`, `im:history`, `chat:write`, `reactions:write`
+  （積み残しの確認を使うなら `channels:read` / `groups:read` / `im:read` を追加。無くても受信・返信は動く）
 - **記憶操作は通信面の仕事ではない** — 「覚えておいて」「忘れて」の解釈はコア側でモデルが行う
   （[ADR 0003](../adr/0003-model-decides-what-to-remember.md)）。通信面は本文を正規化して渡すだけ
 

@@ -41,6 +41,13 @@ oauth_config:
       - chat:write
       - reactions:write # 📝「メモしました」（§10.1）
       - commands # /russell（§12-4）
+      # ★ 積み残しの確認（返信し忘れの拾い直し, 13-surfaces.md）に要る3つ。
+      #    「どのチャンネルに入っているか」を数えるためだけの権限で、履歴の中身は
+      #    既存の *:history で読む。**無くても通常の受信・返信は動く**（拾い直しだけ止まり、
+      #    ログに missing_scope と出る）。要らなければ消してよい。
+      - channels:read
+      - groups:read
+      - im:read
 
 settings:
   event_subscriptions:

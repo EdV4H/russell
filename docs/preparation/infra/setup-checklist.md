@@ -57,6 +57,8 @@
 - [ ] Socket Mode が有効になっていること（サーバー inbound 開放不要, §10）
 - [ ] Bot Token Scopes を**最小権限**で申請（§10・§12-6）:
   - `app_mentions:read` / `channels:history` / `im:history` / `chat:write` / `reactions:write` / `commands`（`/russell` キルスイッチ用, §12-4）
+  - `channels:read` / `groups:read` / `im:read` — **積み残しの確認**（返信し忘れの拾い直し）用。
+    「どのチャンネルに入っているか」を数えるだけの権限。無くても通常の受信・返信は動く
   - スレッド追従を使うなら `groups:history` も（プライベートチャンネル用）。スコープを足したら**再インストールが必要**
   - それ以上は付けない。将来必要になったら都度追加申請
 - [ ] Event Subscriptions: `app_mention` / `message.im`。スレッド追従を使うなら `message.channels` / `message.groups` も（**拾うのは参加スレッドの続きだけ**。allowlist は `RUSSELL_SLACK_CHANNELS`, [`../../concepts/13-surfaces.md`](../../concepts/13-surfaces.md)）
