@@ -595,26 +595,19 @@ export async function createAgent(
         );
         events.emit("memory:shelved", { contextId: msg.contextId });
       }
-      if (decision.term) {
-        const marks = await markSensitive(
-          `${decision.term.name}\n${decision.term.definition}`,
-          "term.define",
-          msg,
-        );
+      for (const term of decision.terms ?? []) {
+        const marks = await markSensitive(`${term.name}\n${term.definition}`, "term.define", msg);
         await invokeTool(
           "term.define",
           {
-            name: decision.term.name,
-            definition: decision.term.definition,
-            aliases: decision.term.aliases,
+            name: term.name,
+            definition: term.definition,
+            aliases: term.aliases,
             sensitive: marks,
           },
           msg.trustLabel,
         );
-        events.emit("memory:term-defined", {
-          contextId: msg.contextId,
-          name: decision.term.name,
-        });
+        events.emit("memory:term-defined", { contextId: msg.contextId, name: term.name });
       }
       if (decision.forget) {
         const result = (await invokeTool(
@@ -628,7 +621,7 @@ export async function createAgent(
         });
       }
       // 書き留めたことを発言に見せる（§10.1）。何も書かなければ付けない。
-      if (decision.note || decision.shelf || decision.term) await reactNoted(msg);
+      if (decision.note || decision.shelf || decision.terms?.length) await reactNoted(msg);
     } catch (err) {
       // Policy Gate や監査で止まることがある（凍結中など）。それは正しい挙動なので、
       // 会話は壊さずに記録だけ残す。

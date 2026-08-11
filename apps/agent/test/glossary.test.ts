@@ -132,10 +132,10 @@ const drain = async () => {
   for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0));
 };
 
-const NOTHING = '{"note":null,"shelf":null,"title":null,"forget":null,"term":null}';
+const NOTHING = '{"note":null,"shelf":null,"title":null,"forget":null,"terms":[]}';
 const DEFINE_MQL =
   '{"note":null,"shelf":null,"title":null,"forget":null,' +
-  '"term":{"name":"MQL","definition":"マーケが獲得した見込み顧客","aliases":["エムキューエル"]}}';
+  '"terms":[{"name":"MQL","definition":"マーケが獲得した見込み顧客","aliases":["エムキューエル"]}]}';
 
 test("意味が説明されたら単語帳に載る", async () => {
   const m = scripted(DEFINE_MQL);
@@ -196,9 +196,10 @@ test("関係ない会話には注入しない", async () => {
 
 test("名前か意味が欠けていたら載せない", async () => {
   for (const broken of [
-    '{"term":{"name":"MQL"}}',
-    '{"term":{"definition":"意味だけ"}}',
-    '{"term":"文字列"}',
+    '{"terms":[{"name":"MQL"}]}',
+    '{"terms":[{"definition":"意味だけ"}]}',
+    '{"terms":["文字列"]}',
+    '{"terms":{}}',
   ]) {
     const m = scripted(broken);
     const s = surface();
@@ -231,6 +232,91 @@ test("判定の指示は「一般語は載せない」と言っている", async
   const decision = m.requests.find((r) => r.system.includes("記憶係"));
   expect(decision?.system).toContain("このチームでだけ通じる言葉");
   expect(decision?.system).toContain("辞書を引けば分かる一般語は載せない");
+
+  await agent.destroy();
+});
+
+test("1ターンに複数の用語を載せられる（資料を読むと固有名詞が並ぶ）", async () => {
+  const m = scripted(
+    '{"note":null,"shelf":null,"title":null,"forget":null,"terms":[' +
+      '{"name":"Session","definition":"企画書に登場。中身は未確認","aliases":[]},' +
+      '{"name":"World","definition":"企画書に登場。チームの上位概念らしい","aliases":[]},' +
+      '{"name":"ValuesCard","definition":"企画書の構成要素の1つ","aliases":[]}]}',
+  );
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("この企画書読んでおいて");
+  await drain();
+
+  const defined = agent.ctx.audit
+    .recent()
+    .filter((e) => e.action === "tool.invoked" && e.payload.tool === "term.define");
+  expect(defined).toHaveLength(3);
+
+  await agent.destroy();
+});
+
+test("1ターンの上限は5件（資料から際限なく拾わない）", async () => {
+  const many = Array.from({ length: 12 }, (_, i) => ({
+    name: `用語${i}`,
+    definition: "説明",
+    aliases: [],
+  }));
+  const m = scripted(`{"terms":${JSON.stringify(many)}}`);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("読んでおいて");
+  await drain();
+
+  const defined = agent.ctx.audit
+    .recent()
+    .filter((e) => e.action === "tool.invoked" && e.payload.tool === "term.define");
+  expect(defined).toHaveLength(5);
+
+  await agent.destroy();
+});
+
+test("同じ語を1ターンで2回載せない", async () => {
+  const m = scripted(
+    '{"terms":[{"name":"MQL","definition":"1つ目","aliases":[]},' +
+      '{"name":"mql","definition":"2つ目","aliases":[]}]}',
+  );
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("なにか");
+  await drain();
+
+  const defined = agent.ctx.audit
+    .recent()
+    .filter((e) => e.action === "tool.invoked" && e.payload.tool === "term.define");
+  expect(defined).toHaveLength(1);
+
+  await agent.destroy();
+});
+
+test("意味が確定していなくても載せる、と指示している", async () => {
+  const m = scripted(NOTHING);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("やあ");
+  await drain();
+
+  const decision = m.requests.find((r) => r.system.includes("記憶係"));
+  expect(decision?.system).toContain("意味が完全に分からなくても");
+  // ただし推測で埋めない、も同時に言っている
+  expect(decision?.system).toContain("推測で埋めず");
 
   await agent.destroy();
 });

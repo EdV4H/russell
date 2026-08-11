@@ -30,15 +30,20 @@ export interface MemoryDecision {
   shelfTitle?: string;
   /** 忘れる対象を指す語。本棚の検索に使う。 */
   forget?: string;
-  /** 単語帳に載せる用語（索引カード, ADR 0008）。 */
-  term?: { name: string; definition: string; aliases: string[] };
+  /**
+   * 単語帳に載せる用語（索引カード, ADR 0008）。
+   *
+   * **配列である。** 資料を1本読むと固有名詞が10個出てくることがあり、単数だと
+   * そのうち1つしか残らない（実際そうなった）。
+   */
+  terms?: { name: string; definition: string; aliases: string[] }[];
 }
 
 const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。直前のやりとりを読み、何を書き留めるべきかだけを決めます。会話への返答はしません。
 
 次の JSON だけを出力してください（前後に説明を書かない）:
 {"note": string|null, "shelf": string|null, "title": string|null, "forget": string|null,
- "term": {"name": string, "definition": string, "aliases": [string]}|null}
+ "terms": [{"name": string, "definition": string, "aliases": [string]}]}
 
 - note: このスレッドの作業メモ。数日で価値が消える具体（日時・数量・担当・決まったこと）。
 - shelf: **相手が「覚えておいて」と明示的に求めたときだけ**書く。それ以外は null。
@@ -46,9 +51,9 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
 - title: shelf の見出し。**本棚を眺めたときに何の話か分かる**ように、20文字前後で内容を言い当てる。
   文の先頭を切り出したものにしない。shelf が null なら null。
 - forget: 相手が忘れるよう求めた対象を指す語。求められていなければ null。
-- term: **このチームでだけ通じる言葉**の意味が説明されたとき、その語と意味。単語帳に載る。
-  略語（MQL・SIM）、社内の呼び名、製品や仕組みの固有名など。**辞書を引けば分かる一般語は載せない**。
-  aliases には表記ゆれ・略称を入れる（「Wevox Marketing」に対する「マーケ」など）。
+- terms: **このチームでだけ通じる言葉**の一覧（0〜5件）。単語帳に載る。
+  略語、社内の呼び名、製品・機能・プロジェクトの固有名など。**辞書を引けば分かる一般語は載せない**。
+  aliases には表記ゆれ・略称・旧称を入れる。
 
 判断の基準:
 - **迷ったら null。** 書き留めないことによる損失は小さく、雑音で埋まる損失は大きい。
@@ -58,7 +63,10 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
 - 否定（「覚えなくていい」「忘れないで」）を取り違えない。「忘れないで」は forget ではない。
 - 言語は問わない。どの言語のやりとりでも同じ基準で判断する。
 - **基本は note だけ**。shelf が埋まるのは明示的に頼まれた時に限られる。
-- term は「意味が説明された」ときだけ。語が**使われた**だけでは載せない（意味が分からないので）。
+- **意味が完全に分からなくても、そのチーム固有の言葉だと分かるなら載せる。**
+  用語集は「語を並べてから埋めていく」もので、意味が確定するまで待つと何も載らない。
+  ただし **definition には分かっている範囲だけ**を書く。推測で埋めず、分からないなら
+  「企画書に登場。中身は未確認」のように**分からないことを書く**（後で聞いて更新できる）。
 - **読んだものがあるときは、そこからも拾う。** 資料の中で説明されている用語・決まったことは、
   相手が口で言っていなくても対象になる（読んだのに覚えないのは不自然）。
   ただし基準は同じで、**資料に書いてあるという理由だけでは書き留めない**。
@@ -122,30 +130,43 @@ export function parseDecision(text: string): MemoryDecision {
   const shelf = meaningful(raw.shelf);
   const title = meaningful(raw.title);
   const forget = meaningful(raw.forget);
-  const term = parseTerm(raw.term);
+  const terms = parseTerms(raw.terms);
   if (note) decision.note = note;
   if (shelf) decision.shelf = shelf;
   // 見出しだけ来ても意味がない（載せる本が無い）。本があるときだけ拾う。
   if (shelf && title) decision.shelfTitle = title;
   if (forget) decision.forget = forget;
-  if (term) decision.term = term;
+  if (terms.length > 0) decision.terms = terms;
   return decision;
 }
 
+/** 1ターンに載せる用語の上限。資料を読むと際限なく出てくるので頭を打つ。 */
+const MAX_TERMS_PER_TURN = 5;
+
 /** 用語を読む。名前と意味の両方が揃っていなければ採らない（片方だけでは引けない）。 */
-function parseTerm(value: unknown): MemoryDecision["term"] {
-  if (typeof value !== "object" || value === null) return undefined;
-  const raw = value as Record<string, unknown>;
-  const name = meaningful(raw.name);
-  const definition = meaningful(raw.definition);
-  if (!name || !definition) return undefined;
-  const aliases = (Array.isArray(raw.aliases) ? raw.aliases : [])
-    .map((a) => meaningful(a))
-    .filter((a): a is string => a !== undefined && a !== name);
-  return { name, definition, aliases: [...new Set(aliases)] };
+function parseTerms(value: unknown): NonNullable<MemoryDecision["terms"]> {
+  const items = Array.isArray(value) ? value : [value];
+  const terms: NonNullable<MemoryDecision["terms"]> = [];
+  const seen = new Set<string>();
+
+  for (const item of items) {
+    if (terms.length >= MAX_TERMS_PER_TURN) break;
+    if (typeof item !== "object" || item === null) continue;
+    const raw = item as Record<string, unknown>;
+    const name = meaningful(raw.name);
+    const definition = meaningful(raw.definition);
+    if (!name || !definition) continue;
+    if (seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    const aliases = (Array.isArray(raw.aliases) ? raw.aliases : [])
+      .map((a) => meaningful(a))
+      .filter((a): a is string => a !== undefined && a !== name);
+    terms.push({ name, definition, aliases: [...new Set(aliases)] });
+  }
+  return terms;
 }
 
 /** 何か書き留めることがあるか。 */
 export function isEmptyDecision(decision: MemoryDecision): boolean {
-  return !decision.note && !decision.shelf && !decision.forget && !decision.term;
+  return !decision.note && !decision.shelf && !decision.forget && !decision.terms?.length;
 }
