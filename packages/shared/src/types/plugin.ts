@@ -78,6 +78,14 @@ export interface SurfaceDefinition {
    */
   react?(req: ReactionRequest): Promise<DeliveryResult>;
   requestApproval?(req: ApprovalRequest): Promise<ApprovalOutcome>;
+  /**
+   * **返信し忘れているやりとり**を探して返す（積み残しの確認）。対応しない通信面は実装しなくてよい。
+   *
+   * 「関与しているのに返していない」の判定は通信面が持つ。スレッドや DM は通信面の概念で、
+   * コアは何が「やりとり」かを知らないため（ADR 0002）。コアは返ってきたものを
+   * **通常の受信と同じように**認知ループへ流すだけ。
+   */
+  pendingMessages?(opts: { since: Date; limit: number }): Promise<InboundMessage[]>;
   priority?: number;
 }
 export interface SurfaceRegistry {
