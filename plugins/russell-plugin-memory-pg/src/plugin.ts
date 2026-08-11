@@ -107,8 +107,10 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
           // 見出しはモデルが書く。無ければ本文の頭を切る——索引としては読めないが、
           // 本が載らないよりはよい（判定が壊れても記憶は残す, ADR 0003）。
           const title = input.title?.trim() || input.card.slice(0, 24);
+          // 会話中に直接書かれた本（明示的に頼まれた場合だけ）。言われずに効く知識は
+          // 夜間バッチがメモから昇格させる（origin='promoted', ADR 0005）。
           await pool.query(
-            "INSERT INTO books (agent_id, title, source, card) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO books (agent_id, title, source, card, origin) VALUES ($1, $2, $3, $4, 'conversation')",
             [agentId, title, input.source, input.card],
           );
           return { status: "succeeded" as const, title };

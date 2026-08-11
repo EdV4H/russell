@@ -11,3 +11,10 @@ export {
   validatePlan,
 } from "./organize.js";
 export type { MergePlan, OrganizePlan, RetitlePlan, ShelfBook } from "./organize.js";
+export {
+  MIN_NOTES_FOR_PROMOTION,
+  buildPromotionPrompt,
+  parsePromotions,
+  validatePromotions,
+} from "./promote.js";
+export type { PromotableNote, PromotionPlan } from "./promote.js";

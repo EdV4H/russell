@@ -54,5 +54,30 @@ CREATE TABLE IF NOT EXISTS books (
 CREATE INDEX IF NOT EXISTS books_agent_status_idx ON books (agent_id, status);
 `,
     },
+    {
+      // 本を「昇格」で作れるようにする（§4-3 / ADR 0005）。
+      // 会話中に直接書くのをやめ、複数のメモから夜間バッチが1冊を書く形に移る。
+      id: "0002_book_promotion",
+      phase: "expand",
+      sql: `
+-- どのメモから昇格したか。冪等性（同じメモを二度昇格させない）にも使う
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS promoted_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS notes_agent_promoted_idx ON notes (agent_id, promoted_at);
+
+-- この本がどうやってできたか。'conversation'（会話中に直接）/ 'promoted'（メモからの昇格）
+ALTER TABLE books ADD COLUMN IF NOT EXISTS origin TEXT;
+-- 昇格元のメモ。本棚から会話へ遡れるようにする
+ALTER TABLE books ADD COLUMN IF NOT EXISTS source_note_ids BIGINT[];
+`,
+    },
+    {
+      // 既存の本はすべて会話中に直接書かれたもの。既定を入れて由来を辿れるようにする。
+      // expand で NULL 許容にしてあるので、旧コードが動いたままでも壊れない（§11）。
+      id: "0003_backfill_book_origin",
+      phase: "backfill",
+      sql: `
+UPDATE books SET origin = 'conversation' WHERE origin IS NULL;
+`,
+    },
   ],
 };

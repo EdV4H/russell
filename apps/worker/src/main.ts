@@ -84,6 +84,15 @@ async function main(): Promise<void> {
         `[worker] --dry-run: DB は変更していません。実行すると notes=${result.notesConsolidated} ` +
           `decayed=${result.booksDecayed} archived=${result.booksArchived}`,
       );
+      if (result.promotions.length) {
+        console.log("[worker] メモから昇格させる本:");
+        for (const p of result.promotions) {
+          console.log(`  昇格: メモ #${p.noteIds.join(" #")} → 「${p.title}」`);
+          console.log(`        ${p.card}`);
+        }
+      } else {
+        console.log("[worker] 昇格するメモはありません。");
+      }
       console.log("[worker] 本棚の整理の計画:");
       console.log(renderPlan(result.plan));
       return;
@@ -91,6 +100,7 @@ async function main(): Promise<void> {
 
     console.log(
       `[worker] consolidation ${result.entryDate}: notes=${result.notesConsolidated} ` +
+        `promoted=${result.booksPromoted}(notes=${result.notesPromoted}) ` +
         `merged=${result.booksMerged} absorbed=${result.booksAbsorbed} ` +
         `retitled=${result.booksRetitled} decayed=${result.booksDecayed} archived=${result.booksArchived}`,
     );
