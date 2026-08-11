@@ -685,6 +685,38 @@ export async function createAgent(
     }
   }
 
+  /**
+   * ターンが落ちたことを相手に伝える。**黙って落ちない**（#25）。
+   *
+   * 落ちた理由は言わない（内部エラーは相手に意味が無く、内部構造を晒す面もある）。
+   * ただし「聞こえていたが答えられなかった」ことは伝える——同僚が無言で立ち去るのが
+   * いちばん困る。実際、隔離チェックで中止されたターンが Slack 上では
+   * 「既読無視」に見えていた。
+   *
+   * ここ自体が失敗しても握り潰す。**失敗の通知の失敗**でターンを二重に壊さない。
+   */
+  async function notifyTurnFailed(msg: InboundMessage): Promise<void> {
+    try {
+      if ((await runtime.freezeLevel()) !== "none") return; // 凍結中は沈黙が正しい
+      if (!auditLog.registry.healthy()) return; // 監査が残せないなら送らない（§12-7）
+      const surface = surfaces.get(msg.surfaceId);
+      if (!surface) return;
+      const audited = await auditLog.registry.record({
+        actor: runtime.agentId,
+        action: "surface.send",
+        payload: { surfaceId: msg.surfaceId, contextId: msg.contextId, reason: "turn_failed" },
+        trustLabel: "trusted",
+      });
+      if (!audited) return;
+      await surface.send({
+        contextId: msg.contextId,
+        text: "すみません、いまうまく応答できませんでした。もう一度お願いできますか。",
+      });
+    } catch {
+      // 通知に失敗しても turn.failed は既に残っている。ここで投げると catch の外へ出る。
+    }
+  }
+
   // 起動を監査に残す（どの config_version・どのモードで動き出したか、§6.1/§6.5）。
   await auditLog.registry.record({
     actor: runtime.agentId,
@@ -713,6 +745,7 @@ export async function createAgent(
             trustLabel: msg.trustLabel,
           });
           events.emit("turn:error", err);
+          await notifyTurnFailed(msg);
         });
       turnQueues.set(msg.contextId, next);
     });

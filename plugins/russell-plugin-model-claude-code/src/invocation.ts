@@ -14,9 +14,20 @@
 
 import type { ModelTurn } from "@edv4h/russell-shared";
 
-/** 明示的に拒否するツール。`--safe-mode` と重複するが、二重に塞ぐ。 */
+/**
+ * 明示的に拒否するツール。`--safe-mode` と重複するが、二重に塞ぐ。
+ *
+ * **このリストは必ず不完全である。** CLI が持つツールは版によって増え、名前も変わる。
+ * 実際 `ToolSearch` はここに無かったせいで動き、`readResult` の `num_turns` チェックが
+ * 拾って**ターンごと中止**された（＝ Bob が黙る）。
+ *
+ * だからここは「よく踏むものを塞いで無用な中止を減らす」ための便宜であって、
+ * **隔離の保証は readResult 側の検査**にある。名前を足すのは対症療法だと理解して足すこと。
+ */
 export const DENIED_TOOLS = [
   "Bash",
+  "BashOutput",
+  "KillShell",
   "Read",
   "Write",
   "Edit",
@@ -26,7 +37,13 @@ export const DENIED_TOOLS = [
   "WebFetch",
   "WebSearch",
   "Task",
+  "Agent",
   "TodoWrite",
+  "ToolSearch",
+  "Skill",
+  "SlashCommand",
+  "AskUserQuestion",
+  "ExitPlanMode",
 ] as const;
 
 export interface BuildArgsInput {
