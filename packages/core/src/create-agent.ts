@@ -591,6 +591,27 @@ export async function createAgent(
         );
         events.emit("memory:shelved", { contextId: msg.contextId });
       }
+      if (decision.term) {
+        const marks = await markSensitive(
+          `${decision.term.name}\n${decision.term.definition}`,
+          "term.define",
+          msg,
+        );
+        await invokeTool(
+          "term.define",
+          {
+            name: decision.term.name,
+            definition: decision.term.definition,
+            aliases: decision.term.aliases,
+            sensitive: marks,
+          },
+          msg.trustLabel,
+        );
+        events.emit("memory:term-defined", {
+          contextId: msg.contextId,
+          name: decision.term.name,
+        });
+      }
       if (decision.forget) {
         const result = (await invokeTool(
           "shelf.forget",
@@ -603,7 +624,7 @@ export async function createAgent(
         });
       }
       // 書き留めたことを発言に見せる（§10.1）。何も書かなければ付けない。
-      if (decision.note || decision.shelf) await reactNoted(msg);
+      if (decision.note || decision.shelf || decision.term) await reactNoted(msg);
     } catch (err) {
       // Policy Gate や監査で止まることがある（凍結中など）。それは正しい挙動なので、
       // 会話は壊さずに記録だけ残す。
@@ -693,11 +714,19 @@ export async function createAgent(
     const mem = services.get<MemoryCapability>(MEMORY_SERVICE);
     const recalled = mem ? await mem.recall(msg.contextId) : { notes: [], books: [] };
 
+    // 単語帳（索引カード）。**この文に出てきた語**を引く（recency ではなく一致）。
+    // モデルを使わない照合なので、レイテンシは増えない。
+    const terms = mem?.terms ? await mem.terms(msg.text) : [];
+
     // 文脈構築
     const memoryBlock = [
       recalled.notes.length ? `メモ:\n- ${recalled.notes.join("\n- ")}` : "",
       recalled.books.length
         ? `本棚:\n- ${recalled.books.map((b) => `${b.title}: ${b.card}`).join("\n- ")}`
+        : "",
+      // このチームでだけ通じる言葉。**知らない前提で説明し直さない**ために先に渡す
+      terms.length
+        ? `この会話に出てくる言葉:\n- ${terms.map((t) => `${t.name}: ${t.definition}`).join("\n- ")}`
         : "",
     ]
       .filter(Boolean)

@@ -90,5 +90,30 @@ ALTER TABLE books ADD COLUMN IF NOT EXISTS sensitive_categories TEXT[];
 CREATE INDEX IF NOT EXISTS notes_sensitive_idx ON notes USING GIN (sensitive_categories);
 `,
     },
+    {
+      // 索引カード（設計書 §3.1 の entities）。単語帳＝type='term'、個人カルテ＝type='person'。
+      // **本棚とは忘却の意味が違う**ので分ける（使わなくても定義は忘れない, ADR 0008）。
+      id: "0005_entities",
+      phase: "expand",
+      sql: `
+CREATE TABLE IF NOT EXISTS entities (
+  id BIGSERIAL PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  -- 表記ゆれ・略称・呼び名。**一致で引く**ので構造で持つ（本文に書くと部分一致で誤爆する）
+  aliases TEXT[] NOT NULL DEFAULT '{}',
+  summary TEXT NOT NULL,
+  sensitive_categories TEXT[],
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  embedding vector(1024)
+);
+-- 同じ語は1件で、更新される（本棚のように積み上がって夜に畳む、ではない）
+CREATE UNIQUE INDEX IF NOT EXISTS entities_agent_type_name_idx
+  ON entities (agent_id, type, lower(name));
+CREATE INDEX IF NOT EXISTS entities_aliases_idx ON entities USING GIN (aliases);
+`,
+    },
   ],
 };

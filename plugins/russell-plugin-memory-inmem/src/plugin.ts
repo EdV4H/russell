@@ -23,8 +23,17 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       // スレッド単位のメモ帳と、個体全体の本棚（インメモリ）
       const notesByContext = new Map<string, string[]>();
       const books: (RecalledBook & { archived?: boolean })[] = [];
+      const termBook = new Map<string, { name: string; definition: string; aliases: string[] }>();
 
       const capability: MemoryCapability = {
+        terms(text: string) {
+          const hits = [...termBook.values()].filter((t) =>
+            [t.name, ...t.aliases].some(
+              (a) => a.length >= 2 && text.toLowerCase().includes(a.toLowerCase()),
+            ),
+          );
+          return hits.map((t) => ({ name: t.name, definition: t.definition }));
+        },
         recall(contextId: string): RecalledContext {
           return {
             notes: notesByContext.get(contextId) ?? [],
@@ -40,6 +49,7 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       ctx.policy.declareEffect("shelf.add", "internal_write");
       ctx.policy.declareEffect("shelf.forget", "internal_write");
       ctx.policy.declareEffect("deep_recall", "read");
+      ctx.policy.declareEffect("term.define", "internal_write");
 
       const offNote = ctx.tools.register("note.write", {
         name: "note.write",
@@ -49,6 +59,26 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
           list.push(input.content);
           notesByContext.set(input.contextId, list);
           return { status: "succeeded" as const };
+        },
+      });
+
+      // 単語帳（索引カード）。同じ語は1件で更新する。
+      const offTerm = ctx.tools.register("term.define", {
+        name: "term.define",
+        effect: "internal_write",
+        async run(input: { name: string; definition: string; aliases?: string[] }) {
+          const name = (input.name ?? "").trim();
+          if (name === "" || (input.definition ?? "").trim() === "") {
+            return { status: "succeeded" as const, saved: false };
+          }
+          const prev = termBook.get(name.toLowerCase());
+          termBook.set(name.toLowerCase(), {
+            name,
+            definition: input.definition,
+            // 別名は和集合。勝手に呼び名を忘れない
+            aliases: [...new Set([...(prev?.aliases ?? []), ...(input.aliases ?? [])])],
+          });
+          return { status: "succeeded" as const, saved: true };
         },
       });
 
@@ -90,6 +120,7 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       });
 
       return () => {
+        offTerm();
         offNote();
         offShelf();
         offForget();
