@@ -141,7 +141,7 @@ test("意味が説明されたら単語帳に載る", async () => {
   const m = scripted(DEFINE_MQL);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("MQL っていうのはマーケが獲得した見込み顧客のことね");
@@ -161,7 +161,7 @@ test("覚えた語が次のターンで文脈に入る", async () => {
   const m = scripted(DEFINE_MQL);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("MQL っていうのはマーケが獲得した見込み顧客のことね");
@@ -182,7 +182,7 @@ test("関係ない会話には注入しない", async () => {
   const m = scripted(NOTHING);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("おはようございます");
@@ -204,7 +204,7 @@ test("名前か意味が欠けていたら載せない", async () => {
     const m = scripted(broken);
     const s = surface();
     const agent = await createAgent(
-      { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+      { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
       [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
     );
     s.push("なにか");
@@ -223,7 +223,7 @@ test("判定の指示は「一般語は載せない」と言っている", async
   const m = scripted(NOTHING);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("やあ");
@@ -245,7 +245,7 @@ test("1ターンに複数の用語を載せられる（資料を読むと固有�
   );
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("この企画書読んでおいて");
@@ -268,7 +268,7 @@ test("1ターンの上限は20件（資料から際限なく拾わない）", as
   const m = scripted(`{"terms":${JSON.stringify(many)}}`);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("読んでおいて");
@@ -291,7 +291,7 @@ test("上限で落としたことを黙らない（silent truncation を作ら�
   const m = scripted(`{"terms":${JSON.stringify(many)}}`);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("読んでおいて");
@@ -309,7 +309,7 @@ test("落としていなければ何も記録しない", async () => {
   const m = scripted(DEFINE_MQL);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("MQL は見込み顧客のこと");
@@ -326,7 +326,7 @@ test("何を書き留めたかを列挙させない（返答の時点では書�
   const m = scripted(DEFINE_MQL);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("これ読んでおいて");
@@ -347,7 +347,7 @@ test("同じ語を1ターンで2回載せない", async () => {
   );
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("なにか");
@@ -365,7 +365,7 @@ test("意味が確定していなくても載せる、と指示している", as
   const m = scripted(NOTHING);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("やあ");
@@ -383,7 +383,7 @@ test("既に知っている語を判定に見せる（重複を作らせない�
   const m = scripted(DEFINE_MQL);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("MQL は見込み顧客のこと");
@@ -404,7 +404,7 @@ test("同じものなら新しい行を作るな、と指示している", async
   const m = scripted(NOTHING);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("やあ");
@@ -423,7 +423,7 @@ test("単語帳が空なら一覧を渡さない（無駄な行を足さない�
   const m = scripted(NOTHING);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("やあ");

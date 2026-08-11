@@ -93,7 +93,7 @@ async function run(decision: string, text: string) {
   const m = scriptedModel(decision);
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push(text);
@@ -214,7 +214,7 @@ test("印を付けたことは監査に残る。ただし本文は残さない�
   );
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("田中さんの処遇の話");
@@ -234,7 +234,7 @@ test("普通の業務メモには印が付かない", async () => {
   );
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("Aの仕様、金曜までにお願い");
@@ -252,7 +252,7 @@ test("本棚は見出しも検査する（見出しだけに機微情報が出�
   );
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push("覚えておいて");

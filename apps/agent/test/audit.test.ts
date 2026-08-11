@@ -134,7 +134,7 @@ test("全アクションが trust_label 付きで event_log に残る（横断�
   const s = captureSurface();
   const a = captureAuditSink();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [
       a.plugin,
       createInMemoryMemoryPlugin(),
@@ -169,7 +169,7 @@ test("untrusted 発言に起因するツール実行は untrusted のまま残�
   const s = captureSurface();
   const a = captureAuditSink();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [
       a.plugin,
       createInMemoryMemoryPlugin(),
@@ -199,7 +199,7 @@ test("監査に本文を入れない（機微情報を監査へ流さない, A1-
   const s = captureSurface();
   const a = captureAuditSink();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [
       a.plugin,
       createInMemoryMemoryPlugin(),
@@ -237,7 +237,7 @@ test("Policy Gate の拒否も理由コード付きで残る（default-deny）",
     },
   };
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     // memory プラグインを外す = declareEffect が走らないので shelf.add は未申告
     [
       a.plugin,
@@ -263,7 +263,7 @@ test("fail-closed: 監査 sink が全滅したら書き込みも送信も止ま�
   const a = captureAuditSink();
   const degraded: string[] = [];
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [
       a.plugin,
       createInMemoryMemoryPlugin(),
@@ -302,7 +302,7 @@ test("tool.invoked の記録が最初の失敗になってもツールは実行�
   const a = captureAuditSink({ failFromAction: "tool.invoked" });
   const shelf = countingShelfPlugin();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [
       a.plugin,
       shelf.plugin,
@@ -329,7 +329,7 @@ test("surface.send の記録が最初の失敗になっても送信しない（f
   const s = captureSurface();
   const a = captureAuditSink({ failFromAction: "surface.send" });
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [
       a.plugin,
       createInMemoryMemoryPlugin(),
@@ -354,7 +354,7 @@ test("turn.received の記録が失敗したらモデルを呼ばずにターン
   const a = captureAuditSink({ failFromAction: "turn.received" });
   const model = countingModelPlugin();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [a.plugin, createInMemoryMemoryPlugin(), model.plugin, s.plugin],
   );
 
@@ -374,7 +374,7 @@ test("model.requested の記録が最初の失敗になってもモデルを呼�
   const a = captureAuditSink({ failFromAction: "model.requested" });
   const model = countingModelPlugin();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [a.plugin, createInMemoryMemoryPlugin(), model.plugin, s.plugin],
   );
 
@@ -419,7 +419,7 @@ test("mode 変更は監査が残ってから反映する（残せなければ切
 test("sink 未登録でも記録は失われない（インメモリのリングバッファ）", async () => {
   const s = captureSurface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [
       createInMemoryMemoryPlugin(),
       scriptedModel('{"note":null,"shelf":"覚えておくこと","forget":null}').plugin,

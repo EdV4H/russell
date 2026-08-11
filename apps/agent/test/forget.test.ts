@@ -66,7 +66,7 @@ const drain = async () => {
 
 async function bob(surface: RussellPlugin, model: ScriptedModel) {
   return createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [createInMemoryMemoryPlugin(), model.plugin, surface],
   );
 }

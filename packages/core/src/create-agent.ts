@@ -63,6 +63,7 @@ import {
   isEmptyDecision,
   parseDecision,
 } from "./memory-decision.js";
+import { modeAllowsSend, modeAllowsTool, modeSuppressionReason } from "./mode.js";
 import {
   type SensitiveCategory,
   type SensitiveGuardConfig,
@@ -230,6 +231,11 @@ function createPolicyGate(runtime: AgentRuntime, audit: AuditRegistry) {
     if (freeze === "silent") return { allowed: false, reason: "killswitch" }; // 最優先
     const effect = effects.get(toolName);
     if (!effect) return { allowed: false, reason: "effect_undeclared" }; // default deny
+    // 実行モード（§6.5）。**dryrun は外部へ出るものだけ止める**（記憶は書く）。
+    // 凍結より後・効果分類より先に見るのは、キルスイッチが常に最優先だから（§12-4）。
+    if (!modeAllowsTool(runtime.mode(), effect)) {
+      return { allowed: false, reason: modeSuppressionReason(runtime.mode()) };
+    }
     if (effect === "read") return { allowed: true };
     // 凍結中（レベル1/2）は状態を変える行為をしない。read だけ残すのは
     // 「最低限の応答は残す」（kill-switch.md 決定 2026-07-23）を成り立たせるため。
@@ -892,6 +898,27 @@ export async function createAgent(
         trustLabel: "trusted",
       });
       events.emit("turn:frozen", { contextId: msg.contextId });
+      return;
+    }
+    // 実行モード（§6.5）。**dryrun では送らない。** 返信も外部への送信なので、
+    // ここを通すと「本番ワークスペースに繋いだが dryrun だから安全」が嘘になる。
+    if (!modeAllowsSend(runtime.mode())) {
+      await auditLog.registry.record({
+        actor: runtime.agentId,
+        action: "surface.send.suppressed",
+        payload: {
+          surfaceId: msg.surfaceId,
+          contextId: msg.contextId,
+          reason: modeSuppressionReason(runtime.mode()),
+          textLength: text.length, // 本文は残さない（A1-5）
+        },
+        trustLabel: "trusted",
+      });
+      // **送るはずだった内容は見せる。** 見えないと dryrun で何も確かめられない。
+      // 監査ではなく event / ログに出す（本文を監査へ流さない, A1-5）。
+      events.emit("surface:send-suppressed", { contextId: msg.contextId, text });
+      console.log(`[dryrun] 送信せず（${msg.contextId}）: ${text}`);
+      await decideMemory(msg, replyText, gathered);
       return;
     }
     // 送信は external_send 相当。監査が残せないなら送らない（fail-closed, §12-7）。

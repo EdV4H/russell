@@ -121,7 +121,7 @@ const drain = async () => {
 test("起動直後に積み残しを拾って返信する", async () => {
   const s = catchupSurface([inbound("t1", "これお願いできる？")]);
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), scriptedModel().plugin, s.plugin],
   );
   await drain();
@@ -141,6 +141,7 @@ test("返信したものは次の確認で対象にならない（二重返信�
       configVersion: "v0",
       temperament: BOB,
       model: "echo",
+      mode: "live",
       catchup: { intervalMs: 5 },
     },
     [createInMemoryMemoryPlugin(), scriptedModel().plugin, s.plugin],
@@ -168,6 +169,7 @@ test("上限を超えて一度に返信しない", async () => {
       configVersion: "v0",
       temperament: BOB,
       model: "echo",
+      mode: "live",
       catchup: { limit: 2, intervalMs: 0 },
     },
     [createInMemoryMemoryPlugin(), scriptedModel().plugin, s.plugin],
@@ -183,7 +185,7 @@ test("上限を超えて一度に返信しない", async () => {
 test("窓は既定12時間で、通信面に渡される", async () => {
   const s = catchupSurface([]);
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), scriptedModel().plugin, s.plugin],
   );
   await drain();
@@ -203,6 +205,7 @@ test("無効にできる", async () => {
       configVersion: "v0",
       temperament: BOB,
       model: "echo",
+      mode: "live",
       catchup: { enabled: false },
     },
     [createInMemoryMemoryPlugin(), scriptedModel().plugin, s.plugin],
@@ -220,7 +223,7 @@ test("凍結中は拾い直さない（§12-4）", async () => {
   process.env.RUSSELL_KILL = "1";
   try {
     const agent = await createAgent(
-      { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+      { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
       [createInMemoryMemoryPlugin(), scriptedModel().plugin, s.plugin],
     );
     await drain();
@@ -249,7 +252,7 @@ test("pendingMessages を持たない通信面は素通りする", async () => {
     },
   };
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), scriptedModel().plugin, plain],
   );
   await drain();

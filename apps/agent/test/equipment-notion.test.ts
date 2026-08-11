@@ -81,7 +81,7 @@ async function withNotion(
     createEchoModelPlugin(),
   ];
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     plugins,
   );
   return { agent, calls: notion.calls };
@@ -210,7 +210,7 @@ test("ネットワークが落ちても例外にせず failed で返す", async 
     },
   };
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
     [
       createInMemoryMemoryPlugin(),
       createNotionEquipmentPlugin({ token: "t", fetchImpl: notion.fetchImpl }),

@@ -84,7 +84,13 @@ describe.skipIf(!DB)("Postgres 接続の切断耐性（DATABASE_URL 必須）", 
 
     const s = captureSurface();
     const agent = await createAgent(
-      { agentId: `resil-${process.pid}`, configVersion: "v0", temperament: BOB, model: "echo" },
+      {
+        agentId: `resil-${process.pid}`,
+        configVersion: "v0",
+        temperament: BOB,
+        model: "echo",
+        mode: "live", // 応答が返ることを見るテストなので送信を止めない（§6.5）
+      },
       [
         createPgAuditPlugin({ connectionString: dsn }),
         createPgKillSwitchPlugin({ connectionString: dsn }),

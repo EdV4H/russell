@@ -64,7 +64,7 @@ describe.skipIf(!DB)("audit-pg（DATABASE_URL 必須）", () => {
     const agentId = `test-${Date.now()}`; // 実行ごとに一意にして分離
     const s = captureSurface();
     const agent = await createAgent(
-      { agentId, configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+      { agentId, configVersion: "v0", temperament: BOB, mode: "live", model: "echo" },
       [
         // autoMigrate は渡さない＝本番と同じ起動経路（スキーマは global-setup で適用済み, §11）
         createPgAuditPlugin(),

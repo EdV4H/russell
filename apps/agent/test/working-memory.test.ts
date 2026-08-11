@@ -84,7 +84,7 @@ test("2ターン目には直前のやりとりが渡る", async () => {
   const m = recordingModel();
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
 
@@ -108,7 +108,7 @@ test("文脈が違えば混ざらない（別スレッドの話は持ち込ま�
   const m = recordingModel();
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
 
@@ -130,7 +130,7 @@ test("古いやりとりは捨てる（無制限に伸びない）", async () =>
   const m = recordingModel();
   const s = surface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
 
