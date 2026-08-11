@@ -18,6 +18,7 @@
     "@edv4h/russell-plugin-killswitch-pg": "workspace:*",
     "@edv4h/russell-plugin-memory-pg": "workspace:*",
     "@edv4h/russell-plugin-model-claude-code": "workspace:*",
+    "@edv4h/russell-plugin-surface-slack": "workspace:*",
     "pg": "^8.13.0"
   },
   "devDependencies": {

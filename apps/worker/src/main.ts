@@ -12,12 +12,32 @@
  *   pnpm consolidate --backfill   # 未処理のメモが残っている日を、古い順に1日ずつ書く
  */
 
-import { DO_NOT_WRITE_PROMPT, inspectSensitive } from "@edv4h/russell-core";
+import { DO_NOT_WRITE_PROMPT, inspectSensitive, shouldPublishJournal } from "@edv4h/russell-core";
 import { appendAuditEvent } from "@edv4h/russell-plugin-audit-pg";
 import { isFrozen } from "@edv4h/russell-plugin-killswitch-pg";
-import { type OrganizePlan, runConsolidation } from "@edv4h/russell-plugin-memory-pg";
+import {
+  type ConsolidationResult,
+  type OrganizePlan,
+  runConsolidation,
+} from "@edv4h/russell-plugin-memory-pg";
 import { createClaudeCodeProvider } from "@edv4h/russell-plugin-model-claude-code";
+import { createSlackPoster } from "@edv4h/russell-plugin-surface-slack";
 import pg from "pg";
+
+/** その日の日報に載る出来事の数。0 なら投稿しない（毎朝「何もなかった」を流さない）。 */
+function events(result: ConsolidationResult): number {
+  return result.notesConsolidated - result.notesWithheld;
+}
+
+/**
+ * 実行モード（§6.5）。agent と同じ規則で読む。**既定は dryrun**。
+ * 解釈できない値は dryrun に倒す（打ち間違いが live にならないように）。
+ */
+function resolveMode(): "off" | "dryrun" | "live" {
+  const raw = process.env.RUSSELL_MODE?.trim();
+  if (raw === "live" || raw === "off") return raw;
+  return "dryrun";
+}
 
 /** 計画を人が読める形にする。dry-run はこれを見て判断してもらうためにある。 */
 function renderPlan(plan: OrganizePlan): string {
@@ -69,6 +89,54 @@ async function main(): Promise<void> {
   /** 生成後の二次フィルタ（A-1）。判定はコアが持っているので注入で渡す。 */
   const screen = (text: string) => inspectSensitive(text).categories;
   const agentName = process.env.RUSSELL_AGENT_NAME ?? "Bob";
+  /**
+   * 日報の投稿先（§10.1）。**未設定なら投稿しない。**
+   * 「どこへ出すか」は運用が決めることなので、既定でどこかへ流し始めない。
+   */
+  const journalChannel = process.env.RUSSELL_JOURNAL_CHANNEL;
+  /** worker も実行モードに従う（§6.5）。投稿は external_send なので dryrun では出さない。 */
+  const mode = resolveMode();
+
+  /** 日報を投稿する。投稿したか・しなかった理由は必ず記録する。 */
+  async function publish(result: ConsolidationResult): Promise<void> {
+    const decision = shouldPublishJournal(mode, events(result));
+    if (!decision.publish) {
+      // **黙って出さないことはしない。** 出さなかった理由が分からないと運用が詰む
+      console.log(`[worker] 日報は投稿しません（${decision.reason}）`);
+      if (decision.reason === "mode_dryrun" || decision.reason === "mode_off") {
+        console.log(`[worker] 投稿するはずだった内容:\n${result.narrative}`);
+      }
+      return;
+    }
+    if (!journalChannel) {
+      console.log("[worker] RUSSELL_JOURNAL_CHANNEL が未設定のため投稿しません。");
+      return;
+    }
+    let delivery: { status: string; detail?: string };
+    try {
+      delivery = await createSlackPoster().post(
+        journalChannel,
+        `*${result.entryDate} の日報*\n${result.narrative}`,
+      );
+    } catch (err) {
+      delivery = { status: "unknown", detail: String(err) };
+    }
+    // 投稿は外部への送信。**本文は監査へ入れない**（A1-5）
+    await appendAuditEvent(auditPool, {
+      agentId,
+      configVersion: process.env.RUSSELL_CONFIG_VERSION ?? "v0",
+      actor: agentId,
+      action: "journal.posted",
+      payload: {
+        entryDate: result.entryDate,
+        channel: journalChannel,
+        status: delivery.status,
+        length: result.narrative.length,
+      },
+      trustLabel: "trusted",
+    });
+    console.log(`[worker] 日報を投稿しました（${delivery.status}）: ${result.entryDate}`);
+  }
 
   // 監査は worker 自身のプールで残す（コアの AuditRegistry はこのプロセスに無い）。
   const auditPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -112,6 +180,7 @@ async function main(): Promise<void> {
             `promoted=${r.booksPromoted} merged=${r.booksMerged}`,
         );
         console.log(`  [日報] ${r.narrative}`);
+        await publish(r);
       }
       return;
     }
@@ -160,8 +229,8 @@ async function main(): Promise<void> {
         `merged=${result.booksMerged} absorbed=${result.booksAbsorbed} ` +
         `retitled=${result.booksRetitled} decayed=${result.booksDecayed} archived=${result.booksArchived}`,
     );
-    // この narrative を #<個体名>-日報 に投稿するのが §10.1（surface 経由）。
     console.log(`[日報] ${result.narrative}`);
+    await publish(result);
   } finally {
     await auditPool.end();
   }

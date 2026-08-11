@@ -40,3 +40,24 @@ export function modeAllowsSend(mode: Mode): boolean {
 export function modeSuppressionReason(mode: Mode): string {
   return mode === "off" ? "mode_off" : "mode_dryrun";
 }
+
+/** 日報を投稿してよいか。**mode と中身の両方**で決まる。 */
+export interface PublishDecision {
+  publish: boolean;
+  /** 投稿しない理由。運用が読むのでそのままログと監査に出す。 */
+  reason?: "mode_off" | "mode_dryrun" | "empty";
+}
+
+/**
+ * その日の日報を投稿するか。
+ *
+ * **出来事が無い日は投稿しない。** 「今日は記録すべき出来事はなかった」を毎朝流すのは、
+ * 透明性ではなく雑音になる。日記そのものは（記録として）書かれている。
+ */
+export function shouldPublishJournal(mode: Mode, events: number): PublishDecision {
+  if (events <= 0) return { publish: false, reason: "empty" };
+  if (!modeAllowsSend(mode)) {
+    return { publish: false, reason: mode === "off" ? "mode_off" : "mode_dryrun" };
+  }
+  return { publish: true };
+}

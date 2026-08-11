@@ -8,7 +8,12 @@
  * ここで固めたいのは「何が止まって、何が止まらないか」。運用が読む仕様そのものなので。
  */
 
-import { createAgent, modeAllowsSend, modeAllowsTool } from "@edv4h/russell-core";
+import {
+  createAgent,
+  modeAllowsSend,
+  modeAllowsTool,
+  shouldPublishJournal,
+} from "@edv4h/russell-core";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import type { InboundMessage, Mode, RussellPlugin, Temperament } from "@edv4h/russell-shared";
 import { expect, test } from "vitest";
@@ -152,4 +157,24 @@ test("送るはずだった内容は event で見える（dryrun の目的）", 
 
   expect(seen[0]?.text).toBe("本当は送りたい");
   await agent.destroy();
+});
+
+// --- 日報の投稿判定（§10.1 / #32） ---
+
+test("出来事が無い日は投稿しない（毎朝「何もなかった」を流さない）", () => {
+  expect(shouldPublishJournal("live", 0)).toEqual({ publish: false, reason: "empty" });
+});
+
+test("dryrun では投稿しない。理由が分かる形で返す", () => {
+  expect(shouldPublishJournal("dryrun", 3)).toEqual({ publish: false, reason: "mode_dryrun" });
+  expect(shouldPublishJournal("off", 3)).toEqual({ publish: false, reason: "mode_off" });
+});
+
+test("live で出来事があれば投稿する", () => {
+  expect(shouldPublishJournal("live", 1)).toEqual({ publish: true });
+});
+
+test("空の判定はモードより先に効く（live でも空なら出さない）", () => {
+  // 順序が逆だと「live なので投稿→中身が空」という日報が毎朝流れる
+  expect(shouldPublishJournal("live", 0).reason).toBe("empty");
 });
