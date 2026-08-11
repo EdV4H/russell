@@ -24,8 +24,18 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       const notesByContext = new Map<string, string[]>();
       const books: (RecalledBook & { archived?: boolean })[] = [];
       const termBook = new Map<string, { name: string; definition: string; aliases: string[] }>();
+      const personBook = new Map<string, { name: string; definition: string; aliases: string[] }>();
 
       const capability: MemoryCapability = {
+        people(text: string) {
+          return [...personBook.values()]
+            .filter((p) =>
+              [p.name, ...p.aliases].some(
+                (a) => a.length >= 2 && text.toLowerCase().includes(a.toLowerCase()),
+              ),
+            )
+            .map((p) => ({ name: p.name, note: p.definition }));
+        },
         terms(text: string) {
           const hits = [...termBook.values()].filter((t) =>
             [t.name, ...t.aliases].some(
@@ -50,6 +60,7 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       ctx.policy.declareEffect("shelf.forget", "internal_write");
       ctx.policy.declareEffect("deep_recall", "read");
       ctx.policy.declareEffect("term.define", "internal_write");
+      ctx.policy.declareEffect("person.remember", "internal_write");
 
       const offNote = ctx.tools.register("note.write", {
         name: "note.write",
@@ -76,6 +87,24 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
             name,
             definition: input.definition,
             // 別名は和集合。勝手に呼び名を忘れない
+            aliases: [...new Set([...(prev?.aliases ?? []), ...(input.aliases ?? [])])],
+          });
+          return { status: "succeeded" as const, saved: true };
+        },
+      });
+
+      const offPerson = ctx.tools.register("person.remember", {
+        name: "person.remember",
+        effect: "internal_write",
+        async run(input: { name: string; note: string; aliases?: string[] }) {
+          const name = (input.name ?? "").trim();
+          if (name === "" || (input.note ?? "").trim() === "") {
+            return { status: "succeeded" as const, saved: false };
+          }
+          const prev = personBook.get(name.toLowerCase());
+          personBook.set(name.toLowerCase(), {
+            name,
+            definition: input.note,
             aliases: [...new Set([...(prev?.aliases ?? []), ...(input.aliases ?? [])])],
           });
           return { status: "succeeded" as const, saved: true };
@@ -121,6 +150,7 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
 
       return () => {
         offTerm();
+        offPerson();
         offNote();
         offShelf();
         offForget();

@@ -13,12 +13,13 @@ import {
   MEMORY_SERVICE,
   type MemoryCapability,
   type RecalledContext,
+  type RecalledPerson,
   type RecalledTerm,
   type RussellPlugin,
 } from "@edv4h/russell-shared";
 import pg from "pg";
 import { MEMORY_MIGRATIONS } from "./migrations.js";
-import { TERM_CACHE_MS, matchTerms } from "./terms.js";
+import { type StoredTerm, TERM_CACHE_MS, matchTerms } from "./terms.js";
 
 export interface PgMemoryOptions {
   /** 接続文字列。未指定なら env DATABASE_URL。 */
@@ -61,9 +62,45 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
         throw err;
       }
 
-      /** 用語のキャッシュ。書き込みで無効化するので、TTL は保険。 */
-      let termCache: { name: string; summary: string; aliases: string[] }[] = [];
-      let termCacheUntil = 0;
+      /** 索引カードのキャッシュ（type ごと）。書き込みで無効化するので、TTL は保険。 */
+      const cards = new Map<string, { rows: StoredTerm[]; until: number }>();
+
+      async function loadEntities(type: string): Promise<StoredTerm[]> {
+        const hit = cards.get(type);
+        if (hit && Date.now() < hit.until) return hit.rows;
+        const res = await pool.query<StoredTerm>(
+          "SELECT name, summary, aliases FROM entities WHERE agent_id = $1 AND type = $2",
+          [agentId, type],
+        );
+        cards.set(type, { rows: res.rows, until: Date.now() + TERM_CACHE_MS });
+        return res.rows;
+      }
+
+      /** 索引カードを1件書く（同じ名前は更新）。用語も人も同じ形。 */
+      async function upsertEntity(input: {
+        type: string;
+        name: string;
+        summary: string;
+        aliases?: string[];
+        sensitive?: string[];
+      }): Promise<boolean> {
+        const name = input.name.trim();
+        const summary = input.summary.trim();
+        if (name === "" || summary === "") return false;
+        // 別名は**和集合で足す**。減らすのは人の操作に限る（勝手に呼び名を忘れない）
+        await pool.query(
+          `INSERT INTO entities (agent_id, name, type, aliases, summary, sensitive_categories)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (agent_id, type, lower(name)) DO UPDATE
+             SET summary = EXCLUDED.summary,
+                 aliases = ARRAY(SELECT DISTINCT unnest(entities.aliases || EXCLUDED.aliases)),
+                 sensitive_categories = EXCLUDED.sensitive_categories,
+                 updated_at = now()`,
+          [agentId, name, input.type, input.aliases ?? [], summary, input.sensitive ?? []],
+        );
+        cards.delete(input.type); // 次の想起で読み直す
+        return true;
+      }
 
       const capability: MemoryCapability = {
         async recall(contextId: string): Promise<RecalledContext> {
@@ -91,17 +128,13 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
          * **モデルを使わない。** 別名は文字列なので照合で足りる。用語は数十〜数百件なので
          * 全件をキャッシュして手元で突き合わせる方が、毎回 SQL を投げるより速い。
          */
+        /** 受信テキストに出てくる人を引く（個人カルテ）。用語と同じく照合だけ。 */
+        async people(text: string): Promise<RecalledPerson[]> {
+          const rows = await loadEntities("person");
+          return matchTerms(text, rows).map((m) => ({ name: m.name, note: m.definition }));
+        },
         async terms(text: string): Promise<RecalledTerm[]> {
-          const now = Date.now();
-          if (now >= termCacheUntil) {
-            const res = await pool.query<{ name: string; summary: string; aliases: string[] }>(
-              "SELECT name, summary, aliases FROM entities WHERE agent_id = $1 AND type = 'term'",
-              [agentId],
-            );
-            termCache = res.rows;
-            termCacheUntil = now + TERM_CACHE_MS;
-          }
-          return matchTerms(text, termCache);
+          return matchTerms(text, await loadEntities("term"));
         },
       };
       ctx.services.provide<MemoryCapability>(MEMORY_SERVICE, capability);
@@ -111,6 +144,9 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
       ctx.policy.declareEffect("shelf.forget", "internal_write");
       ctx.policy.declareEffect("deep_recall", "read");
       ctx.policy.declareEffect("term.define", "internal_write");
+      ctx.policy.declareEffect("person.remember", "internal_write");
+      // 物理削除。効果分類として最も重い（danger は効果から導出, guides/22）
+      ctx.policy.declareEffect("person.forget", "irreversible_write");
 
       const offNote = ctx.tools.register("note.write", {
         name: "note.write",
@@ -155,23 +191,54 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
           aliases?: string[];
           sensitive?: string[];
         }) {
+          const saved = await upsertEntity({
+            type: "term",
+            name: input.name ?? "",
+            summary: input.definition ?? "",
+            aliases: input.aliases,
+            sensitive: input.sensitive,
+          });
+          return { status: "succeeded" as const, saved };
+        },
+      });
+
+      // 個人カルテ（ADR 0008）。**何を書くかの制約は判定プロンプト側**にあり、
+      // ここは器。器の側で守るのは「同じ人は1件で更新」と「別名を失わない」だけ。
+      const offPerson = ctx.tools.register("person.remember", {
+        name: "person.remember",
+        effect: "internal_write",
+        async run(input: {
+          name: string;
+          note: string;
+          aliases?: string[];
+          sensitive?: string[];
+        }) {
+          const saved = await upsertEntity({
+            type: "person",
+            name: input.name ?? "",
+            summary: input.note ?? "",
+            aliases: input.aliases,
+            sensitive: input.sensitive,
+          });
+          return { status: "succeeded" as const, saved };
+        },
+      });
+
+      // 人の記憶を消す（退職者対応 / 削除依頼）。**記憶で唯一の物理削除**——
+      // privacy-and-memory-policy が人物データを明示的に例外にしているため（§2 offboard_days）。
+      // 個体の判断では呼ばせない: 運用者が CLI から invokeTool で叩く経路だけを想定している。
+      const offForgetPerson = ctx.tools.register("person.forget", {
+        name: "person.forget",
+        effect: "irreversible_write",
+        async run(input: { name: string }) {
           const name = (input.name ?? "").trim();
-          const definition = (input.definition ?? "").trim();
-          if (name === "" || definition === "")
-            return { status: "succeeded" as const, saved: false };
-          // 別名は**和集合で足す**。減らすのは人の操作に限る（勝手に呼び名を忘れない）
-          await pool.query(
-            `INSERT INTO entities (agent_id, name, type, aliases, summary, sensitive_categories)
-             VALUES ($1, $2, 'term', $3, $4, $5)
-             ON CONFLICT (agent_id, type, lower(name)) DO UPDATE
-               SET summary = EXCLUDED.summary,
-                   aliases = ARRAY(SELECT DISTINCT unnest(entities.aliases || EXCLUDED.aliases)),
-                   sensitive_categories = EXCLUDED.sensitive_categories,
-                   updated_at = now()`,
-            [agentId, name, input.aliases ?? [], definition, input.sensitive ?? []],
+          if (name === "") return { status: "succeeded" as const, deleted: 0 };
+          const res = await pool.query(
+            "DELETE FROM entities WHERE agent_id = $1 AND type = 'person' AND lower(name) = lower($2)",
+            [agentId, name],
           );
-          termCacheUntil = 0; // 次の想起で読み直す
-          return { status: "succeeded" as const, saved: true };
+          cards.delete("person");
+          return { status: "succeeded" as const, deleted: res.rowCount ?? 0 };
         },
       });
 
@@ -217,6 +284,8 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
         offShelf();
         offForget();
         offTerm();
+        offPerson();
+        offForgetPerson();
         offRecall();
         await pool.end();
       };

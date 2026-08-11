@@ -45,6 +45,17 @@ export interface RecalledContext {
  * コアの認知ループが `ctx.services.get("memory")` で使う（記憶実装＝プラグイン、§plugin-first）。
  * 書き込みは `note.write` / `shelf.add` ツール経由（Policy Gate を通す）。
  */
+/**
+ * 個人カルテの1件（索引カード, `entities` の type='person'）。
+ *
+ * **書いてよいのは事実だけ**（呼び名・所属・担当・詳しい領域・連絡の好み）。
+ * 評価・人物評は書かない（privacy-and-memory-policy §1 / ADR 0008）。
+ */
+export interface RecalledPerson {
+  name: string;
+  note: string;
+}
+
 /** 単語帳の1件（索引カード, `entities` の type='term'）。 */
 export interface RecalledTerm {
   name: string;
@@ -61,6 +72,13 @@ export interface MemoryCapability {
    * 別名は文字列なので**モデルを使わずに照合できる**（レイテンシを増やさない）。
    */
   terms?(text: string): Promise<RecalledTerm[]> | RecalledTerm[];
+  /**
+   * 受信テキストに出てくる**人**を引く（個人カルテ, ADR 0008）。
+   *
+   * `terms` と分けてあるのは、文脈へ入れるときの見出しが違うのと、
+   * **人の情報は公開経路に出さない**という扱いの差を型の上でも見せておくため。
+   */
+  people?(text: string): Promise<RecalledPerson[]> | RecalledPerson[];
 }
 
 /** services のキー定数。 */

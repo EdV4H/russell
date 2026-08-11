@@ -21,6 +21,11 @@ export const BOXES: Box[] = [
     description: "このチームでだけ通じる言葉。忘却しない・別名で引く（ADR 0008）",
   },
   {
+    path: "/people",
+    title: "個人カルテ",
+    description: "一緒に働いて分かった事実だけ。評価は書かない・日報に出さない（ADR 0008）",
+  },
+  {
     path: "/archive",
     title: "書庫",
     description: "忘却曲線と「忘れて」で沈んだ本。削除はしない（§3.4）",
