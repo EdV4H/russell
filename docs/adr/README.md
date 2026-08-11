@@ -38,3 +38,4 @@ ADR より前に下した決定は各ドキュメント内の決定ブロック�
 | [0003](./0003-model-decides-what-to-remember.md) | 何を記憶するかはモデルが決める（正規表現をやめる） | 採用 |
 | [0004](./0004-shelf-organizing-is-reversible.md) | 本棚の整理は夜間バッチで行い、可逆にする | 採用 |
 | [0005](./0005-books-are-promoted-from-notes.md) | 本はメモから昇格して作る（会話中に直接書かない） | 採用 |
+| [0006](./0006-equipment-may-connect-without-mcp.md) | 装備は MCP 以外の接続も許す（最初の装備は HTTP） | 採用 |

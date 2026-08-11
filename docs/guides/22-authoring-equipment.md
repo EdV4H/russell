@@ -7,6 +7,13 @@
 > [!NOTE] 提案仕様
 > コードは docs-only 段階の提案。型は実装時に `@edv4h/russell-shared` で確定する。
 
+> [!IMPORTANT] **決定（2026-08-11）**
+> **接続は MCP に限らない。** 実装済みの `equipment-notion` は HTTP API を直接叩いている。
+> 装備の要件は「MCP で繋ぐこと」ではなく、効果分類の申告・スコープ・danger_level を伴って
+> Policy Gate の管理下に入ること。→ [ADR 0006](../adr/0006-equipment-may-connect-without-mcp.md)
+>
+> 実行は `AgentHandle.invokeTool` を通す。`ctx.tools.get(name)?.run()` は Policy Gate も監査も通らない。
+
 ## EquipmentDefinition
 
 装備プラグインは `ctx.equipment.register(def)` で登録し、あわせて各ツールの効果分類を `ctx.policy.declareEffect(...)` へ**申告**する。

@@ -82,6 +82,18 @@ export interface AgentConfig {
 
 export interface AgentHandle {
   ctx: AgentContext;
+  /**
+   * ツールを **Policy Gate と監査を通して**実行する（§9.2 / §12-7）。
+   *
+   * コアの外（組み立てホスト・運用コマンド・テスト）から装備を動かすための唯一の入口。
+   * これが無いと、装備は登録されているのに誰も呼べない——`deep_recall` がそうなっていた。
+   *
+   * `ctx.tools.get(name)?.run()` は**使わないこと**。定義を覗くための取得口であって、
+   * そこから直接実行すると Policy Gate も監査も通らない。
+   *
+   * @param trustLabel この実行を引き起こした入力の来歴。他者の発言起因なら `untrusted` のまま渡す（§12-3）。
+   */
+  invokeTool(name: string, input: unknown, trustLabel?: TrustLabel): Promise<unknown>;
   destroy(): Promise<void>;
 }
 
@@ -708,6 +720,9 @@ export async function createAgent(
 
   return {
     ctx,
+    async invokeTool(name: string, input: unknown, trustLabel: TrustLabel = "untrusted") {
+      return await invokeTool(name, input, trustLabel);
+    },
     async destroy() {
       // 実行中のターンを待ってから片付ける。待たずに teardown するとプールも surface も
       // 閉じてしまい、**終了直前のターンだけが黙って消える**（`echo ... | pnpm dev` のように

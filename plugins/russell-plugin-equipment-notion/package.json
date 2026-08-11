@@ -1,0 +1,27 @@
+{
+  "name": "@edv4h/russell-plugin-equipment-notion",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "装備（§9）: Notion を読む。検索とページ読み出しだけの read 専用。",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@edv4h/russell-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

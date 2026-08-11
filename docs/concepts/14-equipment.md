@@ -24,6 +24,27 @@ Slack・GitHub・Notion・サンドボックスターミナル — 個体が使�
 
 新しい装備の追加＝プラグインを1つ書いて配列に足すだけ。コアのコード変更は不要（MCP の疎結合思想そのまま）。
 
+> [!IMPORTANT] **決定（2026-08-11）**
+> **接続方式は MCP に限らない。** 装備の本質は「MCP で繋ぐこと」ではなく、scope・danger_level・
+> 効果分類を伴って Policy Gate の管理下に入ること。最初の装備 `equipment-notion` は HTTP API を
+> 直接叩いている——公式 MCP サーバーは**書き込みツールも一緒に生えてくる**ので、
+> 「read だけ支給する」（§9.3 の段階的解放）ができないため。
+> **管理下から外すのは緩めない**（装備台帳に載らない能力は棚卸しできない権限になる）。
+> → [ADR 0006](../adr/0006-equipment-may-connect-without-mcp.md)
+
+## 実装済みの装備
+
+| 装備 | 接続 | ツール | 効果分類 | danger |
+|---|---|---|---|---|
+| `equipment-notion` | HTTP（Notion API） | `notion.search` / `notion.read_page` | `read` | 0 |
+
+支給は env（`NOTION_TOKEN`）で決まる。トークンが無ければプラグインは**何も register しない**
+——未支給の装備はツール定義自体がコンテキストに載らない（§9.2）。
+
+> [!WARNING]
+> **ツールを実行する口は `AgentHandle.invokeTool` だけ。** `ctx.tools.get(name)?.run()` は
+> 定義を覗くための取得口で、そこから直接実行すると Policy Gate も監査も通らない。
+
 ## 効果分類（§9.2）
 
 全ツールに効果分類を付ける（Frank v2 から採用）。危険度 `danger_level` はここから導出する。
