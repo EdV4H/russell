@@ -222,3 +222,66 @@ test("echo モデルは決定論的（質問と平叙で応答が変わる）", 
   expect(q?.text).toContain("確認して");
   expect(a?.text).toContain("了解");
 });
+
+test("ターンが落ちたら黙らずに伝える（#25）", async () => {
+  const s = captureSurface();
+  const broken: RussellPlugin = {
+    id: "broken-model",
+    name: "落ちるモデル",
+    setup(ctx) {
+      return ctx.models.register({
+        id: "echo",
+        async complete() {
+          // 隔離チェックの中止と同じ形。ターンの途中で throw する
+          throw new Error("model-claude-code: 隔離が破れています");
+        },
+      });
+    },
+  };
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    [createInMemoryMemoryPlugin(), broken, s.plugin],
+  );
+
+  s.push("Notionで定例のページを見てもらえる？");
+  await drain();
+
+  // 既読無視にしない
+  expect(s.sent).toHaveLength(1);
+  expect(s.sent[0]).toContain("うまく応答できませんでした");
+  // 落ちた理由そのものは相手に言わない（内部構造を晒さない）
+  expect(s.sent[0]).not.toContain("隔離");
+  const failed = agent.ctx.audit.recent().find((e) => e.action === "turn.failed");
+  expect(failed?.payload.error).toContain("隔離が破れています"); // 監査には残る
+
+  await agent.destroy();
+});
+
+test("凍結中はターンが落ちても沈黙する", async () => {
+  const s = captureSurface();
+  const broken: RussellPlugin = {
+    id: "broken-model-2",
+    name: "落ちるモデル",
+    setup(ctx) {
+      return ctx.models.register({
+        id: "echo",
+        async complete() {
+          throw new Error("boom");
+        },
+      });
+    },
+  };
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, mode: "dryrun", model: "echo" },
+    [createInMemoryMemoryPlugin(), broken, s.plugin],
+  );
+  process.env.RUSSELL_KILL = "1";
+  try {
+    s.push("こんにちは");
+    await drain();
+    expect(s.sent).toEqual([]);
+  } finally {
+    process.env.RUSSELL_KILL = "0";
+  }
+  await agent.destroy();
+});
