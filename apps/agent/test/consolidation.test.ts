@@ -346,3 +346,88 @@ describe.skipIf(!DB)("メモから本棚への昇格（§4-3, DATABASE_URL 必�
     expect(JSON.stringify(promoted?.payload)).not.toContain("複数のメモから見えてきたこと");
   });
 });
+
+describe.skipIf(!DB)("機微情報の印と公開の境界（A-1 / ADR 0007, DATABASE_URL 必須）", () => {
+  test("印の付いたメモは日記に載らない。記憶には残る", async () => {
+    const agentId = `withhold-${Date.now()}`;
+    const pool = new pg.Pool({ connectionString: DB });
+    await pool.query(
+      `INSERT INTO notes (agent_id, context_id, content, sensitive_categories) VALUES
+         ($1,'c1','Aの仕様が決まった','{}'),
+         ($1,'c1','7月予算は¥12,345,678','{confidential_biz}')`,
+      [agentId],
+    );
+
+    const audited: { action: string; payload: Record<string, unknown> }[] = [];
+    const result = await runConsolidation({
+      connectionString: DB,
+      agentId,
+      now: new Date("2026-07-29T18:00:00Z"),
+      audit: async (e) => {
+        audited.push(e);
+      },
+    });
+
+    // 日記＝公開の境界。ここには出さない
+    expect(result.narrative).toContain("Aの仕様が決まった");
+    expect(result.narrative).not.toContain("12,345,678");
+    expect(result.notesWithheld).toBe(1);
+
+    // **記憶からは消えていない。** 会話の中では引き続き使える
+    const notes = await pool.query("SELECT 1 FROM notes WHERE agent_id=$1", [agentId]);
+    expect(notes.rowCount).toBe(2);
+
+    // 保留したことは監査に残る。カテゴリだけで本文は残さない
+    const withheld = audited.find((e) => e.action === "journal.withheld");
+    expect(withheld?.payload).toMatchObject({ notes: 1, categories: ["confidential_biz"] });
+    expect(JSON.stringify(withheld?.payload)).not.toContain("12,345,678");
+
+    await pool.end();
+  });
+
+  test("昇格した本は材料のメモの印を引き継ぐ（昇格を抜け道にしない）", async () => {
+    const agentId = `withhold-promote-${Date.now()}`;
+    const pool = new pg.Pool({ connectionString: DB });
+    await pool.query(
+      `INSERT INTO notes (agent_id, context_id, content, sensitive_categories) VALUES
+         ($1,'c1','予算の話1','{}'),
+         ($1,'c1','予算の話2','{confidential_biz}'),
+         ($1,'c1','予算の話3','{salary}')`,
+      [agentId],
+    );
+    const ids = await pool.query<{ id: string }>("SELECT id FROM notes WHERE agent_id=$1", [
+      agentId,
+    ]);
+    const noteIds = ids.rows.map((r) => Number(r.id));
+
+    await runConsolidation({
+      connectionString: DB,
+      agentId,
+      organize: async () =>
+        `{"promotions":[{"note_ids":${JSON.stringify(noteIds)},"title":"予算","card":"まとめ"}]}`,
+    });
+
+    const book = await pool.query<{ sensitive_categories: string[] }>(
+      "SELECT sensitive_categories FROM books WHERE agent_id=$1",
+      [agentId],
+    );
+    expect(book.rows[0]?.sensitive_categories?.sort()).toEqual(["confidential_biz", "salary"]);
+
+    await pool.end();
+  });
+
+  test("印の無いメモだけなら従来どおり", async () => {
+    const agentId = `withhold-none-${Date.now()}`;
+    const pool = new pg.Pool({ connectionString: DB });
+    await pool.query(
+      "INSERT INTO notes (agent_id, context_id, content) VALUES ($1,'c1','出来事A')",
+      [agentId],
+    );
+
+    const result = await runConsolidation({ connectionString: DB, agentId });
+    expect(result.notesWithheld).toBe(0);
+    expect(result.narrative).toContain("出来事A");
+
+    await pool.end();
+  });
+});

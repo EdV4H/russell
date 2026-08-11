@@ -44,7 +44,7 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       const offNote = ctx.tools.register("note.write", {
         name: "note.write",
         effect: "internal_write",
-        async run(input: { contextId: string; content: string }) {
+        async run(input: { contextId: string; content: string; sensitive?: string[] }) {
           const list = notesByContext.get(input.contextId) ?? [];
           list.push(input.content);
           notesByContext.set(input.contextId, list);
@@ -55,7 +55,7 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       const offShelf = ctx.tools.register("shelf.add", {
         name: "shelf.add",
         effect: "internal_write",
-        async run(input: { source: string; card: string; title?: string }) {
+        async run(input: { source: string; card: string; title?: string; sensitive?: string[] }) {
           // 見出しはモデルが書く。無ければ本文の頭を切る——索引としては読めないが、
           // 本が載らないよりはよい（判定が壊れても記憶は残す, ADR 0003）。
           const title = input.title?.trim() || input.card.slice(0, 24);

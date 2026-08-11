@@ -196,3 +196,78 @@ test("見出しだけ来ても本棚には載せない", async () => {
   );
   expect(tools).toEqual([]);
 });
+
+test("機微情報を含む記憶には印が付く。記憶からは落とさない（A-1 / ADR 0007）", async () => {
+  const { tools, recalled } = await run(
+    '{"note":"7月予算は¥12,345,678、着地見込みは900万","shelf":null,"title":null,"forget":null}',
+    "7月の予算どうなってる？",
+  );
+
+  // **書かれている。** 落とすと仕事に使えなくなるので、落とさずに印を付ける
+  expect(tools).toContain("note.write");
+  expect(recalled?.notes.at(-1)).toContain("12,345,678");
+});
+
+test("印を付けたことは監査に残る。ただし本文は残さない（A1-5）", async () => {
+  const m = scriptedModel(
+    '{"note":"田中さんの年収は900万円","shelf":null,"title":null,"forget":null}',
+  );
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("田中さんの処遇の話");
+  await drain();
+
+  const marked = agent.ctx.audit.recent().find((e) => e.action === "memory.sensitive_marked");
+  expect(marked?.payload).toMatchObject({ tool: "note.write", categories: ["salary"] });
+  expect(JSON.stringify(marked?.payload)).not.toContain("900");
+  expect(JSON.stringify(marked?.payload)).not.toContain("田中");
+
+  await agent.destroy();
+});
+
+test("普通の業務メモには印が付かない", async () => {
+  const m = scriptedModel(
+    '{"note":"Aの仕様が決まった。金曜までに実装する","shelf":null,"title":null,"forget":null}',
+  );
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("Aの仕様、金曜までにお願い");
+  await drain();
+
+  expect(
+    agent.ctx.audit.recent().find((e) => e.action === "memory.sensitive_marked"),
+  ).toBeUndefined();
+  await agent.destroy();
+});
+
+test("本棚は見出しも検査する（見出しだけに機微情報が出ることがある）", async () => {
+  const m = scriptedModel(
+    '{"note":null,"shelf":"来月から体制が変わる","title":"佐藤さんの休職に伴う体制変更","forget":null}',
+  );
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("覚えておいて");
+  await drain();
+
+  const marked = agent.ctx.audit.recent().find((e) => e.action === "memory.sensitive_marked");
+  expect(marked?.payload).toMatchObject({ tool: "shelf.add", categories: ["health"] });
+
+  await agent.destroy();
+});
+
+test("判定の指示に DO-NOT-WRITE が入っている（二層の一次側）", async () => {
+  const { requests } = await run('{"note":null,"shelf":null,"title":null,"forget":null}', "やあ");
+  const decision = requests.find((r) => r.system.includes("記憶係"));
+
+  expect(decision?.system).toContain("個人の能力評価・人物評");
+  expect(decision?.system).toContain("公開される前提で書くこと");
+});
