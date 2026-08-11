@@ -68,6 +68,14 @@ export interface SlackSurfaceOptions {
   allowedChannels?: ReadonlySet<string>;
 }
 
+/**
+ * 積み残しの確認に追加で要るスコープ。
+ *
+ * 「どのチャンネルに入っているか」を数えるための権限で、**通常の受信・返信には要らない**。
+ * 足さなくても Bob は普通に働く（拾い直しだけが動かない）。
+ */
+export const CATCHUP_SCOPES = ["channels:read", "groups:read", "im:read"] as const;
+
 export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): RussellPlugin {
   return {
     id: "russell-plugin-surface-slack",
@@ -294,9 +302,14 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
               }
             }
           } catch (err) {
-            // 拾い直しに失敗しても通常の受信は動く。黙らないようにログだけ残す
+            // 拾い直しに失敗しても通常の受信は動く。黙らないようにログだけ残す。
+            // **何をすれば直るかまで書く。** 権限不足は設定で直せるのに、
+            // メッセージが「missing_scope」だけだと運用者が何を足すか分からない。
+            const detail = err instanceof Error ? err.message : String(err);
             console.warn(
-              `[slack] 積み残しの確認に失敗: ${err instanceof Error ? err.message : String(err)}`,
+              detail.includes("missing_scope")
+                ? `[slack] 積み残しの確認には ${CATCHUP_SCOPES.join(" / ")} が要ります（Slack アプリに追加して再インストール）。通常の受信・返信には影響しません。`
+                : `[slack] 積み残しの確認に失敗: ${detail}`,
             );
           }
           if (debug) console.log(`[slack] 積み残し ${found.length}件`);
