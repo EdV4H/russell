@@ -111,7 +111,9 @@ test("スレッド追従: 参加しているスレッドの続きだけを拾う
     author: "U1",
     text: "で、どうする？",
     trustLabel: "untrusted",
-    isMention: true,
+    // **拾うことと、自分宛であることは別**。名指しされていないので false。
+    // 返すかどうかはコア側が決める（グループのスレッドで人同士の会話に割り込まないため）
+    isMention: false,
     messageId: "100.5",
   });
 

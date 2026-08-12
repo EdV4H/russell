@@ -228,7 +228,10 @@ export function inspectChannelMessage(
       people: toPeople(ctx.names ?? new Map()),
       text: renderMentions(m.text, ctx.names ?? new Map()),
       trustLabel: "untrusted",
-      isMention: true, // 自分が参加しているスレッドの続き＝自分への発話として扱う
+      // **正直に付ける。** 以前は参加スレッドの続きを全部「自分への発話」にしていたので、
+      // グループのスレッドで人同士が話しているだけでも全部に返信していた。
+      // 拾うかどうか（追従）と、返すかどうか（宛先）は別の判断（コア側が決める）。
+      isMention: Boolean(ctx.botUserId) && m.text.includes(`<@${ctx.botUserId}>`),
       messageId: m.ts,
     },
   };
