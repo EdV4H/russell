@@ -41,18 +41,19 @@ export function createPgSettingsPlugin(options: PgSettingsOptions = {}): Russell
         throw err;
       }
 
-      const agentId = ctx.runtime.agentId;
+      const selfId = ctx.runtime.agentId;
       const capability: SettingsCapability = {
-        get: (key) => readSetting(pool, agentId, key),
-        async set(key, value, updatedBy) {
-          const before = await readSetting(pool, agentId, key);
-          await writeSetting(pool, agentId, key, value, updatedBy);
+        get: (key, agentId) => readSetting(pool, agentId ?? selfId, key),
+        async set(key, value, updatedBy, agentId) {
+          const target = agentId ?? selfId;
+          const before = await readSetting(pool, target, key);
+          await writeSetting(pool, target, key, value, updatedBy);
           // 設定の変更は監査に残す（§6.1）。**値も残す**——チャンネル ID は本文ではないし、
           // 「どこへ出す設定になっていたか」を後から追えないと事故の調査ができない。
           await ctx.audit.record({
             actor: updatedBy,
             action: "settings.changed",
-            payload: { key, from: before ?? null, to: value },
+            payload: { key, target, from: before ?? null, to: value },
             trustLabel: "trusted",
           });
           return { before };

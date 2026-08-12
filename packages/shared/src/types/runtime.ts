@@ -102,9 +102,15 @@ export const MEMORY_SERVICE = "memory";
  * 運用設定（日報の投稿先など）。**env ではなく DB に置く**——変更履歴が要るため（§6.1）。
  */
 export interface SettingsCapability {
-  get(key: string): Promise<string | undefined>;
+  /** `agentId` 省略時は自分の設定。`"*"` は全個体の既定（キルスイッチの target と同じ形）。 */
+  get(key: string, agentId?: string): Promise<string | undefined>;
   /** 変更は監査に残る。`updatedBy` は変更した人（Slack user id 等）。 */
-  set(key: string, value: string | null, updatedBy: string): Promise<{ before?: string }>;
+  set(
+    key: string,
+    value: string | null,
+    updatedBy: string,
+    agentId?: string,
+  ): Promise<{ before?: string }>;
 }
 
 export const SETTINGS_SERVICE = "settings";

@@ -26,8 +26,14 @@ export type RussellCommand =
   | { kind: "stop"; scope: StopScope; agentId: string; reason?: string }
   | { kind: "start"; scope: StopScope; agentId: string }
   | { kind: "status" }
-  /** 日報の投稿先。**打ったチャンネルだけ**が対象（任意の宛先を渡せない）。 */
-  | { kind: "journal"; action: "here" | "off" }
+  /**
+   * 日報の投稿先。**打ったチャンネルだけ**が対象（任意の宛先を渡せない）。
+   *
+   * 個体の指定は stop/start と同じ（`--agent=<個体>` / `--all`）。Slack の
+   * スラッシュコマンドは**1ワークスペースに1アプリ**しか持てないので、個体ごとに
+   * 別アプリだと2体目は `/russell` を持てない。**受信した1体が他の個体の設定を書く**。
+   */
+  | { kind: "journal"; action: "here" | "off"; scope: StopScope; agentId: string }
   | { kind: "help"; message: string };
 
 const USAGE =
@@ -82,8 +88,10 @@ export function parseRussellCommand(text: string, selfAgentId: string): RussellC
   // Bob が居ない場所や、より広い場所へ黙って向けられる（#37 と同じ「opt-in の実体は Slack の操作」）。
   if (verb === "journal") {
     const target = (rest[0] ?? "").toLowerCase();
-    if (target === "here") return { kind: "journal", action: "here" };
-    if (target === "off") return { kind: "journal", action: "off" };
+    const scope: StopScope = all ? "all" : "agent";
+    const agentId = all ? selfAgentId : (agent ?? selfAgentId);
+    if (target === "here") return { kind: "journal", action: "here", scope, agentId };
+    if (target === "off") return { kind: "journal", action: "off", scope, agentId };
     return {
       kind: "help",
       message:

@@ -19,18 +19,21 @@ function fakeSettings(initial?: string) {
   const store = new Map<string, string | null>();
   if (initial) store.set(JOURNAL_CHANNEL_SETTING, initial);
   const changes: { key: string; value: string | null; by: string }[] = [];
+  /** どの個体に対して書いたか。 */
+  const targets: string[] = [];
   const capability: SettingsCapability = {
     async get(key) {
       return store.get(key) ?? undefined;
     },
-    async set(key, value, updatedBy) {
+    async set(key, value, updatedBy, agentId) {
       const before = store.get(key) ?? undefined;
       store.set(key, value);
       changes.push({ key, value, by: updatedBy });
+      targets.push(agentId ?? "(自分)");
       return { before };
     },
   };
-  return { capability, changes, store };
+  return { capability, changes, store, targets };
 }
 
 const deps = (settings?: SettingsCapability, channelId = "C_HERE") => ({
@@ -41,10 +44,48 @@ const deps = (settings?: SettingsCapability, channelId = "C_HERE") => ({
 });
 
 test("打ったチャンネルだけを指定できる（任意の宛先を渡せない）", () => {
-  expect(parseRussellCommand("journal here", "bob")).toEqual({ kind: "journal", action: "here" });
-  expect(parseRussellCommand("journal off", "bob")).toEqual({ kind: "journal", action: "off" });
+  expect(parseRussellCommand("journal here", "bob")).toMatchObject({
+    kind: "journal",
+    action: "here",
+  });
+  expect(parseRussellCommand("journal off", "bob")).toMatchObject({
+    kind: "journal",
+    action: "off",
+  });
   // チャンネル ID を渡そうとしても使い方が返るだけ
   expect(parseRussellCommand("journal C_OTHER", "bob").kind).toBe("help");
+});
+
+test("個体を指定できる（stop/start と同じ形）", () => {
+  // Slack のスラッシュコマンドは1ワークスペースに1アプリ。2体目は自分の /russell を
+  // 持てないので、**受信した1体が他の個体の設定を書ける**必要がある
+  expect(parseRussellCommand("journal here --agent=alice", "bob")).toMatchObject({
+    kind: "journal",
+    scope: "agent",
+    agentId: "alice",
+  });
+  expect(parseRussellCommand("journal here --all", "bob")).toMatchObject({
+    kind: "journal",
+    scope: "all",
+  });
+  // 省略時は自分
+  expect(parseRussellCommand("journal here", "bob")).toMatchObject({ agentId: "bob" });
+});
+
+test("--all は全個体の既定として書く（キルスイッチの target='*' と同じ）", async () => {
+  const s = fakeSettings();
+  const result = await runRussellCommand("journal here --all", "U1", deps(s.capability));
+
+  expect(s.targets).toEqual(["*"]);
+  expect(result.reply).toContain("全個体");
+  expect(result.announce).toContain("全個体");
+});
+
+test("他の個体を指定して設定できる", async () => {
+  const s = fakeSettings();
+  await runRussellCommand("journal here --agent=alice", "U1", deps(s.capability));
+
+  expect(s.targets).toEqual(["alice"]);
 });
 
 test("設定でき、権限者でなくても通る", async () => {
@@ -93,4 +134,29 @@ test("同じチャンネルで2回打っても宣言を繰り返さない", asyn
 test("設定を持たない構成では、その旨を返す", async () => {
   const result = await runRussellCommand("journal here", "U1", deps(undefined));
   expect(result.reply).toContain("運用設定");
+});
+
+test("DM に設定できるが、公開されないことを必ず伝える", async () => {
+  const s = fakeSettings();
+  const result = await runRussellCommand("journal here", "U1", deps(s.capability, "D_DM"));
+
+  // 禁止はしない（「まず自分だけで数日読む」は正当な使い方）
+  expect(s.store.get(JOURNAL_CHANNEL_SETTING)).toBe("D_DM");
+  // **建前から外れていることは必ず言う**
+  expect(result.reply).toContain("あなたにしか見えません");
+  expect(result.reply).toContain("チームに公開する前提");
+  // 管理チャンネルにも「DM である」と分かる形で流れる
+  expect(result.announce).toContain("DM");
+  expect(result.announce).toContain("公開されません");
+});
+
+test("通常のチャンネルでは DM の注意書きは出ない", async () => {
+  const result = await runRussellCommand(
+    "journal here",
+    "U1",
+    deps(fakeSettings().capability, "C_TEAM"),
+  );
+
+  expect(result.reply).not.toContain("あなたにしか見えません");
+  expect(result.announce).toContain("<#C_TEAM>");
 });

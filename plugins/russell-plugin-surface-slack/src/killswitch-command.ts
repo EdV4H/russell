@@ -9,7 +9,12 @@
  *   （fail-closed。設定漏れが「誰でも解除できる」に倒れてはいけない）。
  */
 
-import type { KillSwitchCapability, SettingsCapability, StopState } from "@edv4h/russell-shared";
+import type {
+  KillSwitchCapability,
+  SettingsCapability,
+  StopScope,
+  StopState,
+} from "@edv4h/russell-shared";
 import { type RussellCommand, parseRussellCommand } from "./command.js";
 import { JOURNAL_CHANNEL_SETTING } from "./journal-setting.js";
 
@@ -51,7 +56,7 @@ export async function runRussellCommand(
   // 日報の投稿先。**キルスイッチとは別の権限**で、誰でも変えられる。
   // 代わりに「黙って変えられない」形にしてある——変更は監査に残り、
   // 新しい投稿先に宣言が出て、管理チャンネルにも流れる。
-  if (cmd.kind === "journal") return await runJournalCommand(cmd.action, userId, deps);
+  if (cmd.kind === "journal") return await runJournalCommand(cmd, userId, deps);
 
   const cap = deps.capability;
   if (!cap) {
@@ -121,7 +126,7 @@ export function operatorCheckFromEnv(
  * 監査に残り、新しい投稿先に宣言が出て、管理チャンネルにも流れる。
  */
 async function runJournalCommand(
-  action: "here" | "off",
+  cmd: { action: "here" | "off"; scope: StopScope; agentId: string },
   userId: string,
   deps: KillSwitchCommandDeps,
 ): Promise<CommandResult> {
@@ -129,26 +134,43 @@ async function runJournalCommand(
   if (!settings) {
     return { reply: "この個体は運用設定（DB）を持っていないため、日報の投稿先を変えられません。" };
   }
+  // `--all` は全個体の既定として書く（キルスイッチの `target='*'` と同じ形）。
+  // Slack のスラッシュコマンドは1ワークスペースに1アプリなので、2体目は自分の
+  // `/russell` を持てない。**受信した1体が他の個体の設定を書ける**必要がある。
+  const target = cmd.scope === "all" ? "*" : cmd.agentId;
+  const who = cmd.scope === "all" ? "全個体" : cmd.agentId;
 
-  if (action === "off") {
-    const { before } = await settings.set(JOURNAL_CHANNEL_SETTING, null, userId);
-    if (!before) return { reply: "日報の投稿先はもともと設定されていません。" };
+  if (cmd.action === "off") {
+    const { before } = await settings.set(JOURNAL_CHANNEL_SETTING, null, userId, target);
+    if (!before) return { reply: `日報の投稿先はもともと設定されていません（${who}）。` };
     return {
-      reply: "日報の投稿を止めました。日記そのものは今までどおり書かれます。",
-      announce: `:newspaper: 日報の投稿を停止: <#${before}> / 実行者: <@${userId}>`,
+      reply: `日報の投稿を止めました（${who}）。日記そのものは今までどおり書かれます。`,
+      announce: `:newspaper: 日報の投稿を停止: <#${before}> / 対象: ${who} / 実行者: <@${userId}>`,
     };
   }
 
   const channel = deps.channelId;
   if (!channel) return { reply: "チャンネルが分からないため設定できません。" };
-  const { before } = await settings.set(JOURNAL_CHANNEL_SETTING, channel, userId);
-  if (before === channel) return { reply: "すでにこのチャンネルへ出す設定になっています。" };
+  const { before } = await settings.set(JOURNAL_CHANNEL_SETTING, channel, userId, target);
+  if (before === channel) {
+    return { reply: `すでにこのチャンネルへ出す設定になっています（${who}）。` };
+  }
+
+  // **DM は公開ではない。** 日報は「記憶の全公開」（§10.1）が前提の仕組みなので、
+  // DM に向けるのは建前から外れる。禁止はしない——「まず自分だけで数日読む」は正当な
+  // 使い方で、実際そこから始めたくなる。ただし**外れていることは必ず言う**。
+  // 黙って許すと、公開しているつもりで誰も読んでいない状態が続く。
+  const isDm = channel.startsWith("D");
   return {
-    reply: "日報の投稿先をこのチャンネルにしました。",
+    reply: isDm
+      ? `日報の投稿先をこの DM にしました（${who}）。**この日報はあなたにしか見えません**。日報はチームに公開する前提の仕組みなので、確認が済んだらチャンネルで \`/russell journal here\` を打ち直してください。`
+      : `日報の投稿先をこのチャンネルにしました（${who}）。`,
     // **新しい投稿先に宣言する。** 静かに移らない
     declare: `:newspaper: これから毎日の日報はこのチャンネルに出します（設定: <@${userId}>）。`,
-    announce: before
-      ? `:newspaper: 日報の投稿先を変更: <#${before}> → <#${channel}> / 実行者: <@${userId}>`
-      : `:newspaper: 日報の投稿先を設定: <#${channel}> / 実行者: <@${userId}>`,
+    announce: isDm
+      ? `:newspaper: 日報の投稿先を **DM** に設定: 対象 ${who} / <@${userId}>（公開されません）`
+      : before
+        ? `:newspaper: 日報の投稿先を変更: <#${before}> → <#${channel}> / 対象: ${who} / 実行者: <@${userId}>`
+        : `:newspaper: 日報の投稿先を設定: <#${channel}> / 対象: ${who} / 実行者: <@${userId}>`,
   };
 }
