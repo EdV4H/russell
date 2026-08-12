@@ -54,25 +54,55 @@ test("名指しされたら返す", () => {
   });
 });
 
-test("本文に名前が出てきたら返す（@ を付けない人は多い）", () => {
-  expect(decideReply(ctx({ text: "Bob どう思う？", history: group })).reply).toBe(true);
+const oneOnOne: ModelTurn[] = [
+  { role: "user", text: "お願い", speaker: "丸山" },
+  { role: "assistant", text: "承知しました" },
+];
+
+test("1対1で本文に名前が出てきたら返す（@ を付けない人は多い）", () => {
+  expect(decideReply(ctx({ text: "Bob どう思う？", speaker: "丸山", history: oneOnOne }))).toEqual({
+    reply: true,
+    reason: "named",
+  });
+});
+
+test("3人以上では、名前が出てきても即決しない（自分について話しているだけかもしれない）", () => {
+  // 「Bob に聞いてみたら？」は Bob **について**の発言で、Bob 宛ではない
+  expect(
+    decideReply(ctx({ text: "Bob に聞いてみたら？", speaker: "A-san", history: group })),
+  ).toEqual({ reply: false, reason: "ask_model" });
 });
 
 test("相手が1人だけのスレッドなら返す（宛先が自明）", () => {
-  const oneOnOne: ModelTurn[] = [
-    { role: "user", text: "お願い", speaker: "丸山" },
-    { role: "assistant", text: "承知しました" },
-  ];
-  expect(decideReply(ctx({ history: oneOnOne }))).toEqual({ reply: true, reason: "one_on_one" });
+  expect(decideReply(ctx({ speaker: "丸山", history: oneOnOne }))).toEqual({
+    reply: true,
+    reason: "one_on_one",
+  });
 });
 
 test("履歴が無いときも返す（判断材料が無いのに黙らない）", () => {
-  expect(decideReply(ctx()).reply).toBe(true);
+  expect(decideReply(ctx({ speaker: "丸山" })).reply).toBe(true);
 });
 
 test("3人以上で名指しでなければ、決定論では決めない", () => {
   // **ここが今回の本体**。以前は無条件に返していた
-  expect(decideReply(ctx({ history: group }))).toEqual({ reply: false, reason: "ask_model" });
+  expect(decideReply(ctx({ speaker: "A-san", history: group }))).toEqual({
+    reply: false,
+    reason: "ask_model",
+  });
+});
+
+test("3人目の初回発言を「1対1」と数えない", () => {
+  // 履歴の発言者は丸山だけ。**いまの発言者を数えないと素通りする**——
+  // 3人目が入ってきた最初の1回を必ず拾ってしまい、それがいちばん鬱陶しい
+  expect(decideReply(ctx({ speaker: "B-san", history: oneOnOne }))).toEqual({
+    reply: false,
+    reason: "ask_model",
+  });
+});
+
+test("同じ人の続けての発言は、2人に数えない", () => {
+  expect(decideReply(ctx({ speaker: "丸山", history: oneOnOne })).reply).toBe(true);
 });
 
 test("判定は迷ったら no と指示している", () => {
@@ -85,11 +115,13 @@ test("判定は迷ったら no と指示している", () => {
 });
 
 test("判定には誰の発言かが渡る（複数人の会話が1人に見えない）", () => {
-  const req = buildReplyJudgeRequest(ctx({ history: group }));
+  const req = buildReplyJudgeRequest(ctx({ speaker: "A-san", history: group }));
 
   expect(req.user).toContain("丸山: これどう思う？");
   expect(req.user).toContain("A-san: なるほどね");
   expect(req.user).toContain("Bob: こう思います");
+  // 判定対象そのものにも発言者を付ける（誰が言ったかで宛先の見え方が変わる）
+  expect(req.user).toContain("A-san: で、どうする？");
 });
 
 test("読み取りは yes だけを true にする。**読めなければ黙る**", () => {
