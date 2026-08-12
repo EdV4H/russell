@@ -688,19 +688,30 @@ export async function createAgent(
         events.emit("todo:closed", { contextId: msg.contextId, id });
       }
       for (const person of decision.people ?? []) {
+        // **自分自身はカルテに書かない。** 実際に、他人のカルテへ自分の名前が呼び名として入り、
+        // 紐付けの規則（名前が一致する人を発言から拾う）が自分の Slack id まで結びつけていた。
+        // 個体が自分を「一緒に働く人」として持つと、退職者対応も想起も狂う。
+        const self = config.temperament.name.trim().toLowerCase();
+        if (person.name.trim().toLowerCase() === self) {
+          events.emit("memory:self-skipped", { contextId: msg.contextId, name: person.name });
+          continue;
+        }
+        const aliases = (person.aliases ?? []).filter((a) => a.trim().toLowerCase() !== self);
         const marks = await markSensitive(`${person.name}\n${person.note}`, "person.remember", msg);
         // **カルテと Slack ユーザーを紐づける。** 表示名は覚えない（取り直せる, ADR 0008）が、
         // 「このカルテはこの人のこと」という対応は Slack 側からは取れないので、こちらで持つ。
         // これがあると、表示名が変わっても同じ人だと分かり、退職者対応も id で指定できる。
+        // 自分は除く。名前で照合しているので、**自分の名前が混じると自分の id が付く**
         const linked = (msg.people ?? [])
-          .filter((p) => matchesPerson(p.name, person))
+          .filter((p) => p.name.trim().toLowerCase() !== self)
+          .filter((p) => matchesPerson(p.name, { name: person.name, aliases }))
           .map((p) => `slack:${p.id}`);
         await invokeTool(
           "person.remember",
           {
             name: person.name,
             note: person.note,
-            aliases: person.aliases,
+            aliases,
             sensitive: marks,
             externalIds: linked,
           },

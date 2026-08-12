@@ -239,6 +239,55 @@ test("同じ人を新しい行にするな、と指示している", async () =>
   await agent.destroy();
 });
 
+test("**自分自身はカルテに書かない**", async () => {
+  const SELF = JSON.stringify({
+    note: null,
+    shelf: null,
+    title: null,
+    forget: null,
+    terms: [],
+    people: [{ name: "Bob", note: "議事録を担当している", aliases: [] }],
+  });
+  const { agent, requests, push } = await run(SELF, "Bob は議事録担当ね");
+
+  // 書かれていれば、次に名前が出たときに文脈へ入ってくる
+  push("Bob の担当の件");
+  await drain();
+
+  const conversation = requests.filter((r) => !r.system.includes("記憶係"));
+  expect(conversation.at(-1)?.system).not.toContain("この会話に出てくる人");
+
+  await agent.destroy();
+});
+
+test("**他人のカルテに自分を呼び名として入れない**（自分の id が付く経路）", async () => {
+  // 実際に起きた: 他人のカルテの呼び名に個体の名前が入り、
+  // 「名前が一致する人を発言から拾う」紐付けが**自分の Slack id まで結びつけていた**
+  const WITH_SELF = JSON.stringify({
+    note: null,
+    shelf: null,
+    title: null,
+    forget: null,
+    terms: [],
+    people: [{ name: "松本さん", note: "開発を担当している", aliases: ["Bob", "マツタク"] }],
+  });
+  const { agent, requests, push } = await run(WITH_SELF, "松本さんは開発担当です");
+
+  // 自分の名前では引けない（呼び名に入っていない）
+  push("Bob の件だけど");
+  await drain();
+  const bySelf = requests.filter((r) => !r.system.includes("記憶係")).at(-1)?.system ?? "";
+  expect(bySelf).not.toContain("開発を担当している");
+
+  // 他の呼び名は残っている
+  push("マツタク の件だけど");
+  await drain();
+  const byAlias = requests.filter((r) => !r.system.includes("記憶係")).at(-1)?.system ?? "";
+  expect(byAlias).toContain("開発を担当している");
+
+  await agent.destroy();
+});
+
 test("何を書かないかが判定の指示に入っている（ここが本体）", async () => {
   const { agent, requests } = await run(NOTHING, "やあ");
   const decision = requests.find((r) => r.system.includes("記憶係"))?.system ?? "";
