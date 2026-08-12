@@ -95,6 +95,14 @@ export interface MemoryCapability {
    */
   glossary?(): Promise<GlossaryEntry[]> | GlossaryEntry[];
   /**
+   * カルテにいる人の名前と呼び名を返す（本文は返さない）。
+   *
+   * `glossary` と同じ理由で要る。**これが無いと、別の呼び名で出てきた同じ人を
+   * 新しい行として作る**（実際、同じ人がカルテに二重に載った）。
+   * 用語と分けてあるのは、公開経路の扱いが違うため（ADR 0008）。
+   */
+  roster?(): Promise<GlossaryEntry[]> | GlossaryEntry[];
+  /**
    * 引き受けたまま終わっていない作業（ADR 0009）。
    *
    * `contextId` を渡すとそのスレッドの分だけ。省略すると全部（日報と判定に使う）。

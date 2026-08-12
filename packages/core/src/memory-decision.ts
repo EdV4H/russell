@@ -114,6 +114,9 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
 - **Slack を見れば分かることは書かない**（表示名・アイコン・タイムゾーン）。
   書くのは**一緒に働いて分かったこと**だけ。
 - **推測を事実として書かない。** 役割が推測なら書かないか、推測だと分かるように書く。
+- **すでにカルテにある人は、新しい行を作らない。** 「すでにカルテにある人」の一覧には
+  呼び名も書いてあるので、**先に見ること**。「マルさん」が「丸山」の呼び名として載っていれば、
+  それは同じ人である。**name は一覧にある表記に揃え**、新しく知った呼び名は aliases に足す。
 - **書いてある内容は丸ごと置き換わる**（用語と同じ）。同じ人を出すときは、
   「いま書いてある内容」を踏まえて全文を書き直すこと。今日分かったことだけを書くと、
   それまでに分かっていたことが消える。
@@ -146,6 +149,7 @@ export function buildDecisionRequest(
   known: { name: string; aliases: string[] }[] = [],
   todos: { id: number; content: string; waitingFor?: string }[] = [],
   current: { name: string; content: string }[] = [],
+  roster: { name: string; aliases: string[] }[] = [],
 ): ModelRequest {
   const material = readings.join("\n\n").slice(0, MAX_READINGS_CHARS);
   const read = material
@@ -158,6 +162,13 @@ export function buildDecisionRequest(
     .map((k) => (k.aliases.length ? `${k.name}（別名: ${k.aliases.join(", ")}）` : k.name))
     .join("\n");
   const glossary = list ? `\n\n--- すでに単語帳にある語 ---\n${list}` : "";
+  // **もう知っている人も見せる。** 語と同じで、これが無いと別の呼び名で出てきた
+  // 同じ人を新しい行として作る（実際に二重に載った）
+  const roll = roster
+    .slice(0, MAX_KNOWN_TERMS)
+    .map((k) => (k.aliases.length ? `${k.name}（呼び名: ${k.aliases.join(", ")}）` : k.name))
+    .join("\n");
+  const dossiers = roll ? `\n\n--- すでにカルテにある人 ---\n${roll}` : "";
   // **抱えている作業を見せる。** 見せないと同じ作業を作り直すし、終わったことに気づけない
   const open = todos
     .map((t) => `#${t.id} ${t.content}${t.waitingFor ? `（${t.waitingFor} の返事待ち）` : ""}`)
@@ -174,7 +185,7 @@ export function buildDecisionRequest(
     : "";
   return {
     system: INSTRUCTIONS,
-    user: `相手: ${userText}\n同僚: ${assistantText}${read}${glossary}${already}${carrying}`,
+    user: `相手: ${userText}\n同僚: ${assistantText}${read}${glossary}${dossiers}${already}${carrying}`,
   };
 }
 
