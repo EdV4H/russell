@@ -751,6 +751,9 @@ export async function createAgent(
     const ctx = {
       isMention: msg.isMention,
       text: msg.text,
+      // 履歴の発言者と突き合わせる。名前が引けないときは id で数える
+      // （履歴側も引けなければ id なので、同じ人が2人に見えることはない）
+      speaker: msg.authorName ?? msg.author,
       selfName: config.temperament.name,
       history: await conversationFor(msg),
     };
