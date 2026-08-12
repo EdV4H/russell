@@ -158,11 +158,32 @@ export async function runConsolidation(
       publishable.length === 0
         ? `${entryDate}: 記録すべき出来事はなかった。`
         : `${entryDate}: ${publishable.length}件の記録。${publishable.map((r) => r.content).join(" / ")}`;
+    // 未完了は**日報に必ず出す**（ADR 0009）。溜まっていることが見えないと、
+    // 引き受けたまま止まっている作業に誰も気づけない。
+    const carrying = await pool.query<{
+      content: string;
+      waiting_for: string | null;
+      stale_days: string;
+    }>(
+      `SELECT content, waiting_for,
+              floor(extract(epoch from now() - updated_at) / 86400) AS stale_days
+         FROM todos
+        WHERE agent_id = $1 AND state IN ('open', 'waiting')
+          AND coalesce(array_length(sensitive_categories, 1), 0) = 0
+        ORDER BY updated_at ASC LIMIT 20`,
+      [agentId],
+    );
+
     const narrative = await writeNarrative(
       {
         entryDate,
         agentName: options.agentName ?? agentId,
         notes: publishable.map((r) => r.content),
+        todos: carrying.rows.map((t) => ({
+          content: t.content,
+          waitingFor: t.waiting_for ?? undefined,
+          staleDays: Number(t.stale_days),
+        })),
       },
       fallback,
       options,

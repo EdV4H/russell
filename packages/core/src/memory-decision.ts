@@ -46,6 +46,10 @@ export interface MemoryDecision {
    * 何を書かないかを判定プロンプトで強く縛っている。
    */
   people?: { name: string; note: string; aliases: string[] }[];
+  /** 引き受けた作業（ADR 0009）。 */
+  todos?: { content: string; waitingFor?: string }[];
+  /** 終わった作業の id。 */
+  done?: number[];
 }
 
 const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。直前のやりとりを読み、何を書き留めるべきかだけを決めます。会話への返答はしません。
@@ -53,7 +57,9 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
 次の JSON だけを出力してください（前後に説明を書かない）:
 {"note": string|null, "shelf": string|null, "title": string|null, "forget": string|null,
  "terms": [{"name": string, "definition": string, "aliases": [string]}],
- "people": [{"name": string, "note": string, "aliases": [string]}]}
+ "people": [{"name": string, "note": string, "aliases": [string]}],
+ "todos": [{"content": string, "waiting_for": string|null}],
+ "done": [number]}
 
 - note: このスレッドの作業メモ。数日で価値が消える具体（日時・数量・担当・決まったこと）。
 - shelf: **相手が「覚えておいて」と明示的に求めたときだけ**書く。それ以外は null。
@@ -62,6 +68,10 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
   文の先頭を切り出したものにしない。shelf が null なら null。
 - people: 一緒に働く人について**新しく分かった事実**（0〜5件）。個人カルテに載る。
   aliases には呼び名・略称を入れる（「丸山さん」に対する「マルさん」など）。
+- todos: **あなたが引き受けた作業**（0〜5件）。「〜しておきます」と言った、頼まれて受けた、
+  資料を読んで「やる」と決めた、など。waiting_for は**相手の返事待ちのとき**その相手（それ以外は null）。
+- done: **終わった作業の id**。「すでに抱えている作業」の一覧を渡してあるので、
+  会話から終わったと分かるものがあればその id を返す。やらないと決まったものも含める。
 - forget: 相手が忘れるよう求めた対象を指す語。求められていなければ null。
 - terms: **このチームでだけ通じる言葉**の一覧（0〜5件）。単語帳に載る。
   略語、社内の呼び名、製品・機能・プロジェクトの固有名など。**辞書を引けば分かる一般語は載せない**。
@@ -86,6 +96,12 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
 - **読んだものがあるときは、そこからも拾う。** 資料の中で説明されている用語・決まったことは、
   相手が口で言っていなくても対象になる（読んだのに覚えないのは不自然）。
   ただし基準は同じで、**資料に書いてあるという理由だけでは書き留めない**。
+
+作業について:
+- **自分が動くこと**だけを書く。相手がやることは書かない（それは相手の作業）。
+- 「〜しておきます」「確認します」「読んでおきます」は引き受けたということ。**必ず拾う**。
+- 相手の回答待ちなら waiting_for にその人を入れる。**待っていること自体を忘れない**ため。
+- すでに抱えている作業と同じものは**作らない**。終わったなら done に id を返す。
 
 人について書くときの決まり（これは特に厳しく守ること）:
 - **書いてよいのは事実だけ。** 呼び名、所属、担当、何に詳しいか、連絡や進め方の好み。
@@ -116,6 +132,7 @@ export function buildDecisionRequest(
   assistantText: string,
   readings: string[] = [],
   known: { name: string; aliases: string[] }[] = [],
+  todos: { id: number; content: string; waitingFor?: string }[] = [],
 ): ModelRequest {
   const material = readings.join("\n\n").slice(0, MAX_READINGS_CHARS);
   const read = material
@@ -128,9 +145,14 @@ export function buildDecisionRequest(
     .map((k) => (k.aliases.length ? `${k.name}（別名: ${k.aliases.join(", ")}）` : k.name))
     .join("\n");
   const glossary = list ? `\n\n--- すでに単語帳にある語 ---\n${list}` : "";
+  // **抱えている作業を見せる。** 見せないと同じ作業を作り直すし、終わったことに気づけない
+  const open = todos
+    .map((t) => `#${t.id} ${t.content}${t.waitingFor ? `（${t.waitingFor} の返事待ち）` : ""}`)
+    .join("\n");
+  const carrying = open ? `\n\n--- すでに抱えている作業 ---\n${open}` : "";
   return {
     system: INSTRUCTIONS,
-    user: `相手: ${userText}\n同僚: ${assistantText}${read}${glossary}`,
+    user: `相手: ${userText}\n同僚: ${assistantText}${read}${glossary}${carrying}`,
   };
 }
 
@@ -169,6 +191,10 @@ export function parseDecision(text: string): MemoryDecision {
   const terms = parseTerms(raw.terms);
   const requested = Array.isArray(raw.terms) ? raw.terms.length : raw.terms ? 1 : 0;
   const people = parsePeople(raw.people);
+  const todos = parseTodos(raw.todos);
+  const done = (Array.isArray(raw.done) ? raw.done : [])
+    .map((d) => (typeof d === "number" ? d : Number(d)))
+    .filter((d) => Number.isInteger(d) && d > 0);
   if (note) decision.note = note;
   if (shelf) decision.shelf = shelf;
   // 見出しだけ来ても意味がない（載せる本が無い）。本があるときだけ拾う。
@@ -178,6 +204,8 @@ export function parseDecision(text: string): MemoryDecision {
   // 上限で落とした分を記録する。**silent truncation を作らない**（この設計が繰り返し踏んだ罠）
   if (requested > terms.length) decision.termOverflow = { requested, saved: terms.length };
   if (people.length > 0) decision.people = people;
+  if (todos.length > 0) decision.todos = todos;
+  if (done.length > 0) decision.done = [...new Set(done)];
   return decision;
 }
 
@@ -229,7 +257,9 @@ export function isEmptyDecision(decision: MemoryDecision): boolean {
     !decision.shelf &&
     !decision.forget &&
     !decision.terms?.length &&
-    !decision.people?.length
+    !decision.people?.length &&
+    !decision.todos?.length &&
+    !decision.done?.length
   );
 }
 
@@ -254,4 +284,23 @@ function parsePeople(value: unknown): NonNullable<MemoryDecision["people"]> {
     people.push({ name, note, aliases: [...new Set(aliases)] });
   }
   return people;
+}
+
+/** 1ターンに引き受ける作業の上限。会話1回で作業が5個増えるのは、たいてい拾いすぎ。 */
+const MAX_TODOS_PER_TURN = 5;
+
+/** 作業を読む。中身が無いものは採らない。 */
+function parseTodos(value: unknown): NonNullable<MemoryDecision["todos"]> {
+  const items = Array.isArray(value) ? value : [value];
+  const todos: NonNullable<MemoryDecision["todos"]> = [];
+  for (const item of items) {
+    if (todos.length >= MAX_TODOS_PER_TURN) break;
+    if (typeof item !== "object" || item === null) continue;
+    const raw = item as Record<string, unknown>;
+    const content = meaningful(raw.content);
+    if (!content) continue;
+    const waitingFor = meaningful(raw.waiting_for);
+    todos.push(waitingFor ? { content, waitingFor } : { content });
+  }
+  return todos;
 }
