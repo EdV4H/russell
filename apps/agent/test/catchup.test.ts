@@ -11,7 +11,12 @@
 
 import { createAgent } from "@edv4h/russell-core";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
-import { pendingReply, withinWindow } from "@edv4h/russell-plugin-surface-slack";
+import {
+  type PendingSearchDeps,
+  findPendingMessages,
+  pendingReply,
+  withinWindow,
+} from "@edv4h/russell-plugin-surface-slack";
 import type { InboundMessage, RussellPlugin, Temperament } from "@edv4h/russell-shared";
 import { expect, test } from "vitest";
 import { scriptedModel } from "./memory-model.js";
@@ -259,4 +264,120 @@ test("pendingMessages を持たない通信面は素通りする", async () => {
 
   expect(sent).toEqual([]);
   await agent.destroy();
+});
+
+// --- 探し方（実クライアント無しで検証する） ---
+
+const now = () => new Date();
+const ts = (minutesAgo: number) => String((Date.now() - minutesAgo * 60_000) / 1000);
+
+/** 読める会話と、読めない会話を混ぜた偽の Slack。 */
+function fakeSlack(over: Partial<PendingSearchDeps> = {}): PendingSearchDeps {
+  return {
+    since: new Date(Date.now() - 12 * 60 * 60 * 1000),
+    limit: 3,
+    botUserId: "UBOB",
+    async listConversations() {
+      return [{ id: "C1", isDm: false }];
+    },
+    async history() {
+      return [{ user: "U1", text: "やあ", ts: ts(5), thread_ts: "100.1" } as never];
+    },
+    async messages() {
+      return [
+        { user: "UBOB", text: "確認します", ts: ts(10) },
+        { user: "U1", text: "ありがとう、あと1つ", ts: ts(5) },
+      ];
+    },
+    async names() {
+      return new Map([["U1", "丸山"]]);
+    },
+    ...over,
+  };
+}
+
+test("読めない会話があっても止まらず、読めなかった数を返す", async () => {
+  const result = await findPendingMessages(
+    fakeSlack({
+      async listConversations() {
+        return [
+          { id: "C_BROKEN", isDm: false },
+          { id: "C1", isDm: false },
+        ];
+      },
+      async history(channel) {
+        // 実データでは必ず混ざる（アーカイブ、消えたチャンネル、削除済みユーザーとの DM）
+        if (channel === "C_BROKEN") throw new Error("channel_not_found");
+        return [{ user: "U1", text: "やあ", ts: ts(5), thread_ts: "100.1" } as never];
+      },
+    }),
+  );
+
+  // **1つ読めないだけで全部止めない**——実際 channel_not_found で確認が丸ごと止まっていた
+  expect(result.found).toHaveLength(1);
+  // 0件が「無い」なのか「見られなかった」なのかは別物なので、必ず数える
+  expect(result.skipped).toBe(1);
+});
+
+test("スレッドが1つ読めなくても、他のスレッドは見る", async () => {
+  const result = await findPendingMessages(
+    fakeSlack({
+      async history() {
+        return [
+          { user: "U1", text: "a", ts: ts(5), thread_ts: "100.1" } as never,
+          { user: "U1", text: "b", ts: ts(5), thread_ts: "200.1" } as never,
+        ];
+      },
+      async messages(contextId) {
+        if (contextId === "C1:100.1") throw new Error("thread_not_found");
+        return [
+          { user: "UBOB", text: "確認します", ts: ts(10) },
+          { user: "U1", text: "その後どう？", ts: ts(5) },
+        ];
+      },
+    }),
+  );
+
+  expect(result.found).toHaveLength(1);
+  expect(result.skipped).toBe(1);
+});
+
+test("拾った発言には名前が付く（誰の発言か分かる）", async () => {
+  const { found } = await findPendingMessages(fakeSlack());
+
+  expect(found[0]?.author).toBe("U1"); // 監査は id
+  expect(found[0]?.authorName).toBe("丸山"); // 会話は名前
+});
+
+test("名前が引けなくても拾う（名前は諦めるが、返信は諦めない）", async () => {
+  const { found } = await findPendingMessages(
+    fakeSlack({
+      async names() {
+        throw new Error("missing_scope");
+      },
+    }),
+  );
+
+  expect(found).toHaveLength(1);
+  expect(found[0]?.authorName).toBeUndefined();
+});
+
+test("除外チャンネルは見ない", async () => {
+  const { found } = await findPendingMessages(fakeSlack({ excludedChannels: new Set(["C1"]) }));
+  expect(found).toEqual([]);
+});
+
+test("上限で打ち切る", async () => {
+  const { found } = await findPendingMessages(
+    fakeSlack({
+      limit: 1,
+      async listConversations() {
+        return [
+          { id: "C1", isDm: false },
+          { id: "C2", isDm: false },
+        ];
+      },
+    }),
+  );
+  expect(found).toHaveLength(1);
 });
