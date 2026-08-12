@@ -18,6 +18,9 @@ import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import {
   CONVERSATION_SERVICE,
   type InboundMessage,
+  KILL_SWITCH_SERVICE,
+  type KillSwitchCapability,
+  type Mode,
   type ModelTurn,
   type RussellPlugin,
   type Temperament,
@@ -134,13 +137,15 @@ test("判定には誰の発言かが渡る（複数人の会話が1人に見え�
   expect(req.user).toContain("A-san: で、どうする？");
 });
 
-test("読み取りは yes だけを true にする。**読めなければ黙る**", () => {
-  expect(parseReplyJudgement("yes")).toBe(true);
-  expect(parseReplyJudgement("Yes, あなた宛です")).toBe(true);
-  expect(parseReplyJudgement("no")).toBe(false);
-  expect(parseReplyJudgement("")).toBe(false);
-  // 説明を返してきた場合も、yes で始まらなければ黙る
-  expect(parseReplyJudgement("これは丸山さんとA-sanの会話です")).toBe(false);
+test("読み取りは3択。**読めなければ黙る**", () => {
+  expect(parseReplyJudgement("yes")).toBe("reply");
+  expect(parseReplyJudgement("Yes, あなた宛です")).toBe("reply");
+  expect(parseReplyJudgement("stamp")).toBe("react");
+  expect(parseReplyJudgement("no")).toBe("silent");
+  expect(parseReplyJudgement("")).toBe("silent");
+  // 説明を返してきた場合も、頭が読めなければ黙る。
+  // **印だけ付ける側へ落とさない**——意味を取り違えたまま何か出す方が、何も出さないより悪い
+  expect(parseReplyJudgement("これは丸山さんとA-sanの会話です")).toBe("silent");
 });
 
 // --- 認知ループを通した挙動 ---
@@ -167,6 +172,7 @@ function judgeModel(answer: string, reply = "はい") {
 
 function threadSurface() {
   const sent: string[] = [];
+  const reacted: string[] = [];
   let sink: ((m: InboundMessage) => void) | undefined;
   const plugin: RussellPlugin = {
     id: "fake",
@@ -191,6 +197,10 @@ function threadSurface() {
           sent.push(o.text);
           return { status: "succeeded" };
         },
+        async react(r) {
+          reacted.push(r.kind);
+          return { status: "succeeded" };
+        },
       });
     },
   };
@@ -204,18 +214,18 @@ function threadSurface() {
       isMention,
       messageId: "m1",
     });
-  return { plugin, sent, push };
+  return { plugin, sent, reacted, push };
 }
 
 const drain2 = async () => {
   for (let i = 0; i < 25; i++) await new Promise((r) => setTimeout(r, 0));
 };
 
-async function runThread(answer: string, text: string, isMention = false) {
+async function runThread(answer: string, text: string, isMention = false, mode: Mode = "live") {
   const m = judgeModel(answer);
   const s = threadSurface();
   const agent = await createAgent(
-    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode },
     [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
   );
   s.push(text, isMention);
@@ -225,7 +235,7 @@ async function runThread(answer: string, text: string, isMention = false) {
     .filter((e) => e.action === "tool.invoked")
     .map((e) => e.payload.tool);
   await agent.destroy();
-  return { sent: s.sent, requests: m.requests, tools };
+  return { sent: s.sent, reacted: s.reacted, requests: m.requests, tools };
 }
 
 test("人同士の会話には割り込まない", async () => {
@@ -238,9 +248,62 @@ test("黙ったときは記憶も書かない（会話に参加していない�
   expect(tools).toEqual([]);
 });
 
+test("印だけ付ける（stamp）と判断したら、返信せずにリアクションを付ける", async () => {
+  // **黙るだけだと、落ちているのか読んで黙っているのかを人が区別できない。**
+  // かといって全部に付けると「全部読んでいます」の表明になるので、
+  // 自分に関係があるが言葉は要らないときだけ
+  const { sent, reacted } = await runThread("stamp", "よろしくね");
+
+  expect(sent).toEqual([]);
+  expect(reacted).toEqual(["acknowledged"]);
+});
+
+test("黙るときはリアクションも付けない（既読を付けて回らない）", async () => {
+  const { reacted } = await runThread("no", "B-san の方が詳しいと思う");
+  expect(reacted).toEqual([]);
+});
+
+test("dryrun ではリアクションも付けない（外から見える行為なので）", async () => {
+  const { reacted } = await runThread("stamp", "よろしくね", false, "dryrun");
+  expect(reacted).toEqual([]);
+});
+
 test("自分宛と判断したら返す", async () => {
   const { sent } = await runThread("yes", "これ調べてもらえる？");
   expect(sent).toHaveLength(1);
+});
+
+test("止まっているときは判定モデルを呼ばない（凍結の判定が先）", async () => {
+  // 止めているのに判定モデルだけ動くのは意図と違う。
+  // 名指しは決定論で即決するので、凍結中の「止まっています」は従来どおり返せる
+  const m = judgeModel("no");
+  const s = threadSurface();
+  const kill: RussellPlugin = {
+    id: "fake-killswitch",
+    name: "fake kill switch",
+    setup(ctx) {
+      ctx.services.provide<KillSwitchCapability>(KILL_SWITCH_SERVICE, {
+        async current() {
+          return { stopped: true, scope: "agent", by: "owner", at: null, reason: null };
+        },
+        async stop() {
+          throw new Error("未使用");
+        },
+        async resume() {
+          throw new Error("未使用");
+        },
+      });
+    },
+  };
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), m.plugin, kill, s.plugin],
+  );
+  s.push("で、どうする？");
+  await drain2();
+  await agent.destroy();
+
+  expect(m.requests.some((r) => r.system.includes("口を開くべきか"))).toBe(false);
 });
 
 test("名指しなら判定そのものを飛ばす（無駄に呼ばない）", async () => {

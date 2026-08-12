@@ -93,8 +93,12 @@ export interface InboundMessage {
 /**
  * リアクションの意味（§10.1 の透明性）。**絵文字ではなく意味を渡す**——
  * 何で表すかは通信面の裁量（Slack なら 📝、CLI なら1行出す）。
+ *
+ * - `noted` — 書き留めた（自分が何をしたかの表明）
+ * - `acknowledged` — **読んだ。ただし返すほどではない**（そこに居ることの表明）。
+ *   黙るだけだと、落ちているのか読んで黙っているのかが人から区別できない
  */
-export type ReactionKind = "noted";
+export type ReactionKind = "noted" | "acknowledged";
 
 /** リアクション要求（コア → surface）。 */
 export interface ReactionRequest {

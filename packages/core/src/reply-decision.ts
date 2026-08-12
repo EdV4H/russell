@@ -35,6 +35,15 @@ export type ReplyVerdict =
   | { reply: false; reason: "ask_model" };
 
 /**
+ * 判定の答え。**「返す」と「何もしない」の間に「読んだ印だけ付ける」を置く。**
+ *
+ * 黙るだけだと、人からは**落ちているのか、読んで黙っているのか区別できない**。
+ * かといって全部に印を付けると「全部読んでいます」の表明になり、それはそれで鬱陶しい。
+ * だから**自分に関係はあるが言葉は要らない**ときにだけ付ける。
+ */
+export type Judgement = "reply" | "react" | "silent";
+
+/**
  * 決定論で決まる分だけ決める。**決まらなければモデルに聞く**（`ask_model`）。
  *
  * - 名指し（mention / DM）→ 返す。**ここは聞かない**——直接聞かれたのに黙るのは、
@@ -81,7 +90,7 @@ export function decideReply(ctx: ReplyContext): ReplyVerdict {
  */
 const JUDGE = `あなたは会話の同席者です。**直前の発言に、あなたが口を開くべきか**を判断します。
 
-"yes" か "no" だけを出力してください。説明は書かないこと。
+"yes" か "stamp" か "no" だけを出力してください。説明は書かないこと。
 
 見るのは1点だけ: **その発言に「あなた」が出てくるか。**
 
@@ -91,12 +100,17 @@ const JUDGE = `あなたは会話の同席者です。**直前の発言に、あ
 - yes: **あなたのことを話している。** 三人称（「この子」「新しく入った人」）でも、
   名前が出ていなくても、流れで自分のことだと分かるなら yes。
   あなたをネタにした冗談も yes——自分の話で笑っているのに黙っている方が不自然です
+- stamp: あなたへの**短い挨拶・ねぎらいだけ**（「よろしく」「ありがとう」「お疲れさま」）。
+  **迷ったら stamp ではなく yes。** 中身のある話・事実が違うかもしれない話・
+  笑いどころのある話は、頷くのではなく言葉で返してください
 - no: **あなたが出てこない**、人同士のやりとり。相づち・雑談・他の人への依頼や質問
 
 **人同士の会話であっても、あなたの話をしているなら yes です。**
 判断は「誰が話しているか」ではなく「**あなたが出てくるか**」で決めてください。
 
-**自分が出てこないなら no。** 人同士の話に呼ばれてもいないのに入るのは、鬱陶しいだけです。`;
+**自分が出てこないなら no。** stamp も付けません——人同士の会話に既読を付けて回るのは、
+返信するのと同じくらい鬱陶しく、しかも「全部読んでいます」という表明になります。
+迷ったときに選ぶのは stamp ではなく no です。`;
 
 /** 曖昧なときにモデルへ渡す要求。**短く保つ**——これは会話ではなく判定なので。 */
 export function buildReplyJudgeRequest(ctx: ReplyContext): { system: string; user: string } {
@@ -110,7 +124,15 @@ export function buildReplyJudgeRequest(ctx: ReplyContext): { system: string; use
   };
 }
 
-/** 判定の読み取り。**読めなければ黙る**（割り込むより黙る方が害が小さい）。 */
-export function parseReplyJudgement(text: string): boolean {
-  return /^\s*(yes|はい)\b/i.test(text.trim());
+/**
+ * 判定の読み取り。**読めなければ黙る**（割り込むより黙る方が害が小さい）。
+ *
+ * 印だけ付ける（`react`）は「言葉は要らないが、読んだことは示す」——読めなかったときに
+ * ここへ落とさないのは、**意味を取り違えたまま何か出す方が、何も出さないより悪い**から。
+ */
+export function parseReplyJudgement(text: string): Judgement {
+  const t = text.trim();
+  if (/^\s*(yes|はい)\b/i.test(t)) return "reply";
+  if (/^\s*(stamp|スタンプ)\b/i.test(t)) return "react";
+  return "silent";
 }

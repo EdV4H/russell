@@ -48,6 +48,7 @@ const MAX_HISTORY = 20;
 
 const REACTION_EMOJI: Record<ReactionRequest["kind"], string> = {
   noted: "memo", // 📝「メモしました」
+  acknowledged: "eyes", // 👀「読みました」。返すほどではないが、居ることは示す
 };
 
 export interface SlackSurfaceOptions {
