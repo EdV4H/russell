@@ -32,6 +32,7 @@ import type {
   ModelRegistry,
   ModelTurn,
   PolicyRegistry,
+  ReactionKind,
   RoutineDefinition,
   RoutineRegistry,
   RussellPlugin,
@@ -64,7 +65,12 @@ import {
   parseDecision,
 } from "./memory-decision.js";
 import { modeAllowsSend, modeAllowsTool, modeSuppressionReason } from "./mode.js";
-import { buildReplyJudgeRequest, decideReply, parseReplyJudgement } from "./reply-decision.js";
+import {
+  type Judgement,
+  buildReplyJudgeRequest,
+  decideReply,
+  parseReplyJudgement,
+} from "./reply-decision.js";
 import {
   type SensitiveCategory,
   type SensitiveGuardConfig,
@@ -522,14 +528,30 @@ export async function createAgent(
    * 失敗してもターンは続ける。記憶はもう取れていて、これは見え方の問題だから——
    * ただし黙って捨てはせず、結果を監査に残す。
    */
-  async function reactNoted(msg: InboundMessage): Promise<void> {
+  async function react(msg: InboundMessage, kind: ReactionKind): Promise<void> {
     const surface = surfaces.get(msg.surfaceId);
     if (!surface?.react || !msg.messageId) return;
+    // ワークスペースから見える行為なので、送信と同じくモードに従う
+    // （dryrun で印だけ付くと、止めているつもりの相手に既読が付く）。
+    if (!modeAllowsSend(runtime.mode())) {
+      await auditLog.registry.record({
+        actor: runtime.agentId,
+        action: "surface.react.suppressed",
+        payload: {
+          surfaceId: msg.surfaceId,
+          contextId: msg.contextId,
+          kind,
+          reason: modeSuppressionReason(runtime.mode()),
+        },
+        trustLabel: "trusted",
+      });
+      return;
+    }
     // ワークスペースから見える行為なので、他の送信と同じく**記録してから**行う。
     const audited = await auditLog.registry.record({
       actor: runtime.agentId,
       action: "surface.react",
-      payload: { surfaceId: msg.surfaceId, contextId: msg.contextId, kind: "noted" },
+      payload: { surfaceId: msg.surfaceId, contextId: msg.contextId, kind },
       trustLabel: "trusted",
     });
     if (!audited) return;
@@ -537,7 +559,7 @@ export async function createAgent(
       const result = await surface.react({
         contextId: msg.contextId,
         messageId: msg.messageId,
-        kind: "noted",
+        kind,
       });
       if (result.status !== "succeeded") {
         await auditLog.registry.record({
@@ -703,7 +725,7 @@ export async function createAgent(
         decision.people?.length ||
         decision.todos?.length
       ) {
-        await reactNoted(msg);
+        await react(msg, "noted");
       }
     } catch (err) {
       // Policy Gate や監査で止まることがある（凍結中など）。それは正しい挙動なので、
@@ -747,7 +769,7 @@ export async function createAgent(
    * 曖昧なときだけモデルに聞く。**判定できないときは黙る**——割り込むより黙る方が
    * 害が小さく、用があれば相手は名前を呼ぶ。
    */
-  async function shouldReply(msg: InboundMessage): Promise<boolean> {
+  async function judgeInbound(msg: InboundMessage): Promise<Judgement> {
     const ctx = {
       isMention: msg.isMention,
       text: msg.text,
@@ -758,19 +780,19 @@ export async function createAgent(
       history: await conversationFor(msg),
     };
     const verdict = decideReply(ctx);
-    if (verdict.reply) return true;
+    if (verdict.reply) return "reply";
 
     const judge = memoryModelId ? models.get(memoryModelId) : undefined;
     // 判定役がいない構成では、従来どおり返す（黙る側に倒すと会話が成立しない）
-    if (!judge) return true;
+    if (!judge) return "reply";
     try {
       const answer = await judge.complete(buildReplyJudgeRequest(ctx));
-      const reply = parseReplyJudgement(answer.text);
-      events.emit("reply:judged", { contextId: msg.contextId, reply });
-      return reply;
+      const judgement = parseReplyJudgement(answer.text);
+      events.emit("reply:judged", { contextId: msg.contextId, judgement });
+      return judgement;
     } catch (err) {
       events.emit("reply:judge-failed", { contextId: msg.contextId, error: String(err) });
-      return false; // 読めないときは黙る
+      return "silent"; // 読めないときは黙る
     }
   }
 
@@ -816,10 +838,16 @@ export async function createAgent(
     // 凍結の再検査（§5.1）。silent = 完全沈黙で、監査も外部 I/O も走らせない。
     const freeze = await runtime.freezeLevel();
     if (freeze === "silent") return;
-    // P0 は mention のみ応答（自発性なし）
+
     // 返すかどうかは、拾うかどうかとは別（グループのスレッド対策）。
     // 大半は決定論で即決し、本当に曖昧なときだけモデルに聞く。
-    if (!(await shouldReply(msg))) return;
+    //
+    // **凍結の判定より後に置かない。** 止めているのに判定モデルだけ動くのは意図と違う
+    // （mention は決定論で即決するので、凍結中の応答は従来どおり返せる）。
+    const judgement = freeze === "stopped" ? "reply" : await judgeInbound(msg);
+    if (judgement === "silent") return;
+    // 読んだ印だけ付けて終わる。**落ちているのか黙っているのかを人が区別できる**ように
+    if (judgement === "react") return await react(msg, "acknowledged");
     // stopped = 自発行動は凍結、mention には「止まっている」ことだけ返す（§12-4 レベル1/2）。
     if (freeze === "stopped") return await replyFrozen(msg);
 

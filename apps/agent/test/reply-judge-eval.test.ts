@@ -18,7 +18,7 @@
  * > 直したい挙動があるときは、**同じ形の作り話に置き換えてから**ここへ足すこと。
  */
 
-import { buildReplyJudgeRequest, parseReplyJudgement } from "@edv4h/russell-core";
+import { type Judgement, buildReplyJudgeRequest, parseReplyJudgement } from "@edv4h/russell-core";
 import { createClaudeProvider } from "@edv4h/russell-plugin-model-claude";
 import { createClaudeCodeProvider } from "@edv4h/russell-plugin-model-claude-code";
 import type { ModelProvider, ModelTurn } from "@edv4h/russell-shared";
@@ -52,6 +52,8 @@ interface Case {
   speaker: string;
   history: ModelTurn[];
   why: string;
+  /** 返してほしい側のみ。`reply` = 言葉で / `any` = 印だけでもよい（黙るのは駄目）。 */
+  want?: "reply" | "any";
 }
 
 /** 返してほしいもの。**名前も `@` も出てこない**が、話題が自分。 */
@@ -61,18 +63,22 @@ const SHOULD_REPLY: Case[] = [
     speaker: "丸山",
     history: INTRO,
     why: "自分の働き方をネタにされている。同席していて黙るのは不自然",
+    want: "reply",
   },
   {
     text: "この子、夜のうちに議事録まとめておいてくれるらしいよ",
     speaker: "丸山",
     history: INTRO,
     why: "自分の担当の話。しかも事実確認が要る",
+    want: "reply",
   },
   {
     text: "分からないことがあったら遠慮なく聞いてね",
     speaker: "A-san",
     history: INTRO,
     why: "宛先が自分（名前は出ていない）",
+    // 「困ったら聞いてね」は頷けば済む。**印でも言葉でもよいが、無反応は駄目**
+    want: "any",
   },
 ];
 
@@ -104,7 +110,7 @@ const SHOULD_STAY_SILENT: Case[] = [
   },
 ];
 
-async function judge(provider: ModelProvider, c: Case): Promise<boolean> {
+async function judge(provider: ModelProvider, c: Case): Promise<Judgement> {
   const answer = await provider.complete(
     buildReplyJudgeRequest({
       isMention: false,
@@ -122,7 +128,10 @@ describe.skipIf(!ENABLED)("判定モデルの実測（RUSSELL_JUDGE_EVAL=1 必�
     const provider = judgeProvider();
     const silent: Case[] = [];
     for (const c of SHOULD_REPLY) {
-      if (!(await judge(provider, c))) silent.push(c);
+      const j = await judge(provider, c);
+      console.log(`  ${j}: ${c.text.slice(0, 24)}…`);
+      // 言葉が要る case で印だけ返したのも「黙った」に数える
+      if (j === "silent" || (c.want === "reply" && j !== "reply")) silent.push(c);
     }
 
     console.log(`[判定] 黙りすぎ ${silent.length}/${SHOULD_REPLY.length}`);
@@ -135,7 +144,10 @@ describe.skipIf(!ENABLED)("判定モデルの実測（RUSSELL_JUDGE_EVAL=1 必�
     const provider = judgeProvider();
     const barged: Case[] = [];
     for (const c of SHOULD_STAY_SILENT) {
-      if (await judge(provider, c)) barged.push(c);
+      const j = await judge(provider, c);
+      console.log(`  ${j}: ${c.text.slice(0, 24)}…`);
+      // **印を付けるのも「反応した」。** 人同士の会話に既読を付けて回るのは鬱陶しい
+      if (j !== "silent") barged.push(c);
     }
 
     console.log(`[判定] 返しすぎ ${barged.length}/${SHOULD_STAY_SILENT.length}`);
