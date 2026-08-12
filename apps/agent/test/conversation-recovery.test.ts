@@ -190,10 +190,25 @@ test("Slack の発言列の解釈: 自分の発言は assistant、他は user", 
     { user: "U3", text: "", ts: "4" }, // 空文字は落とす
     { user: "U4", text: "入室しました", subtype: "channel_join", ts: "5" }, // subtype も落とす
   ];
+  // **誰の発言かを残す**（潰すと複数人の会話が「1人が喋り続けている」ように見える）。
+  // 名前が引けていなければ id のまま入る
   expect(toTurns(messages, "UBOB")).toEqual([
-    { role: "user", text: "金曜の定例どうする？" }, // mention 記法は落とす
-    { role: "assistant", text: "資料を用意します" },
-    { role: "user", text: "参加します" },
+    { role: "user", text: "金曜の定例どうする？", speaker: "U1" }, // mention 記法は落とす
+    { role: "assistant", text: "資料を用意します" }, // 自分の発言に speaker は要らない
+    { role: "user", text: "参加します", speaker: "U2" },
+  ]);
+});
+
+test("名前が引けていれば、発言者は名前で入る", () => {
+  const messages = [
+    { user: "U1", text: "どう思う？", ts: "1" },
+    { user: "UBOB", text: "こう思います", ts: "2" },
+  ];
+  const names = new Map([["U1", "丸山"]]);
+
+  expect(toTurns(messages, "UBOB", names)).toEqual([
+    { role: "user", text: "どう思う？", speaker: "丸山" },
+    { role: "assistant", text: "こう思います" },
   ]);
 });
 

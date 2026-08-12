@@ -64,6 +64,7 @@ import {
   parseDecision,
 } from "./memory-decision.js";
 import { modeAllowsSend, modeAllowsTool, modeSuppressionReason } from "./mode.js";
+import { buildReplyJudgeRequest, decideReply, parseReplyJudgement } from "./reply-decision.js";
 import {
   type SensitiveCategory,
   type SensitiveGuardConfig,
@@ -737,6 +738,39 @@ export async function createAgent(
     return result.categories;
   }
 
+  /**
+   * この発言に返すか。**呼ばれていないのに割り込まない**ための判断。
+   *
+   * 以前は「参加しているスレッドの続き＝自分への発話」としていたので、3人以上の
+   * スレッドで人同士が話しているだけでも全部に返信していた。
+   *
+   * 曖昧なときだけモデルに聞く。**判定できないときは黙る**——割り込むより黙る方が
+   * 害が小さく、用があれば相手は名前を呼ぶ。
+   */
+  async function shouldReply(msg: InboundMessage): Promise<boolean> {
+    const ctx = {
+      isMention: msg.isMention,
+      text: msg.text,
+      selfName: config.temperament.name,
+      history: await conversationFor(msg),
+    };
+    const verdict = decideReply(ctx);
+    if (verdict.reply) return true;
+
+    const judge = memoryModelId ? models.get(memoryModelId) : undefined;
+    // 判定役がいない構成では、従来どおり返す（黙る側に倒すと会話が成立しない）
+    if (!judge) return true;
+    try {
+      const answer = await judge.complete(buildReplyJudgeRequest(ctx));
+      const reply = parseReplyJudgement(answer.text);
+      events.emit("reply:judged", { contextId: msg.contextId, reply });
+      return reply;
+    } catch (err) {
+      events.emit("reply:judge-failed", { contextId: msg.contextId, error: String(err) });
+      return false; // 読めないときは黙る
+    }
+  }
+
   const catchup = config.catchup ?? {};
   /** 拾い直しを試した回数（contextId ごと）。失敗が続くループを防ぐ。 */
   const catchupAttempts = new Map<string, number>();
@@ -780,7 +814,9 @@ export async function createAgent(
     const freeze = await runtime.freezeLevel();
     if (freeze === "silent") return;
     // P0 は mention のみ応答（自発性なし）
-    if (!msg.isMention) return;
+    // 返すかどうかは、拾うかどうかとは別（グループのスレッド対策）。
+    // 大半は決定論で即決し、本当に曖昧なときだけモデルに聞く。
+    if (!(await shouldReply(msg))) return;
     // stopped = 自発行動は凍結、mention には「止まっている」ことだけ返す（§12-4 レベル1/2）。
     if (freeze === "stopped") return await replyFrozen(msg);
 
@@ -865,7 +901,13 @@ export async function createAgent(
         return;
       }
     }
-    const history = provider ? await conversationFor(msg) : [];
+    // **誰の発言かを本文に残す。** provider は role しか見ないので、ここで載せないと
+    // 複数人の会話が「1人が喋り続けている」ように見える。
+    const history = provider
+      ? (await conversationFor(msg)).map((t) =>
+          t.speaker ? { ...t, text: `${t.speaker}: ${t.text}` } : t,
+        )
+      : [];
     /**
      * このターンで読んだもの。返答の材料であり、**記憶の材料でもある**。
      * ここに溜めておかないと「これ読んでおいて」で読んだ内容が記憶に残らない。

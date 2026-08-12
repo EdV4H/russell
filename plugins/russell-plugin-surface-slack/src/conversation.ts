@@ -31,7 +31,11 @@ export const MAX_RECOVERED_TURNS = 20;
  * - mention 記法は落とす（`app_mention` の扱いと揃える）
  * - 直近 `MAX_RECOVERED_TURNS` 件だけ使う
  */
-export function toTurns(messages: SlackHistoryMessage[], botUserId?: string): ModelTurn[] {
+export function toTurns(
+  messages: SlackHistoryMessage[],
+  botUserId?: string,
+  names?: ReadonlyMap<string, string>,
+): ModelTurn[] {
   const turns: ModelTurn[] = [];
   for (const m of messages) {
     if (m.subtype) continue;
@@ -39,7 +43,9 @@ export function toTurns(messages: SlackHistoryMessage[], botUserId?: string): Mo
     if (text === "") continue;
     // bot_id だけでは他の bot と区別できない。自分の user id で判定する。
     const mine = Boolean(botUserId) && m.user === botUserId;
-    turns.push({ role: mine ? "assistant" : "user", text });
+    // **誰の発言かを残す。** 潰すと複数人の会話が「1人が喋り続けている」ように見える
+    const speaker = mine ? undefined : m.user ? (names?.get(m.user) ?? m.user) : undefined;
+    turns.push({ role: mine ? "assistant" : "user", text, ...(speaker ? { speaker } : {}) });
   }
   return turns.slice(-MAX_RECOVERED_TURNS);
 }

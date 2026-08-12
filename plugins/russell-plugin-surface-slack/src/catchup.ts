@@ -21,6 +21,8 @@ export interface PendingReply {
   text: string;
   author: string;
   messageId?: string;
+  /** その発言が自分を名指ししていたか。**返すかどうかの判断に使う**（拾うかとは別）。 */
+  mentionsBot: boolean;
 }
 
 /** 発言として数えるもの（参加通知・編集などを除く）。 */
@@ -62,6 +64,7 @@ export function pendingReply(
     text: stripMention(last.text ?? ""),
     author: last.user ?? "unknown",
     messageId: last.ts,
+    mentionsBot: addressed,
   };
 }
 
@@ -156,7 +159,8 @@ export async function findPendingMessages(
         people: [...names].map(([id, name]) => ({ id, name })),
         text: pending.text,
         trustLabel: "untrusted",
-        isMention: true, // 自分が関与しているやりとりなので、呼ばれた扱い
+        // ここも正直に付ける。**黙ると決めた発言に、後から返信し直さない**ため
+        isMention: pending.mentionsBot,
         messageId: pending.messageId,
       });
       if (!convo.isDm) deps.onJoined?.(contextId);

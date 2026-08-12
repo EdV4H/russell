@@ -7,6 +7,13 @@
 export interface ModelTurn {
   role: "user" | "assistant";
   text: string;
+  /**
+   * 誰の発言か（表示名）。**グループのスレッドでは必須級**。
+   *
+   * これが無いと、複数人の会話が「1人が喋り続けている」ように見える。実際そうなっていて、
+   * 個体は A さんと B さんの区別が付かないまま返答していた。
+   */
+  speaker?: string;
 }
 
 export interface ModelRequest {
