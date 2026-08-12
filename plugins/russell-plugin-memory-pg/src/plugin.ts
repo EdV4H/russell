@@ -85,20 +85,31 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
         summary: string;
         aliases?: string[];
         sensitive?: string[];
+        externalIds?: string[];
       }): Promise<boolean> {
         const name = input.name.trim();
         const summary = input.summary.trim();
         if (name === "" || summary === "") return false;
         // 別名は**和集合で足す**。減らすのは人の操作に限る（勝手に呼び名を忘れない）
         await pool.query(
-          `INSERT INTO entities (agent_id, name, type, aliases, summary, sensitive_categories)
-           VALUES ($1, $2, $3, $4, $5, $6)
+          `INSERT INTO entities (agent_id, name, type, aliases, summary, sensitive_categories, external_ids)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (agent_id, type, lower(name)) DO UPDATE
              SET summary = EXCLUDED.summary,
                  aliases = ARRAY(SELECT DISTINCT unnest(entities.aliases || EXCLUDED.aliases)),
                  sensitive_categories = EXCLUDED.sensitive_categories,
+                 -- 紐付けも和集合。**一度ついた対応を外さない**（外すのは人の操作）
+                 external_ids = ARRAY(SELECT DISTINCT unnest(entities.external_ids || EXCLUDED.external_ids)),
                  updated_at = now()`,
-          [agentId, name, input.type, input.aliases ?? [], summary, input.sensitive ?? []],
+          [
+            agentId,
+            name,
+            input.type,
+            input.aliases ?? [],
+            summary,
+            input.sensitive ?? [],
+            input.externalIds ?? [],
+          ],
         );
         cards.delete(input.type); // 次の想起で読み直す
         return true;
@@ -250,6 +261,7 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
           note: string;
           aliases?: string[];
           sensitive?: string[];
+          externalIds?: string[];
         }) {
           const saved = await upsertEntity({
             type: "person",
@@ -257,6 +269,7 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
             summary: input.note ?? "",
             aliases: input.aliases,
             sensitive: input.sensitive,
+            externalIds: input.externalIds,
           });
           return { status: "succeeded" as const, saved };
         },
