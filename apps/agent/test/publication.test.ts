@@ -135,3 +135,21 @@ test("段には日報の中身が渡る", async () => {
 
   expect(seen[0]).toBe("2026-08-11|今日はこういう一日だった。");
 });
+
+test("段の構築で落ちるのと、送信で落ちるのは別（前者は再送できる）", async () => {
+  // 構築時の失敗は「送る前に落ちた」＝確実に届いていない。unknown にすると
+  // blind retry 禁止に引っかかって**二度と配信できなくなる**（実際そうなった）
+  const built: PublishStep = {
+    id: "slack",
+    async deliver() {
+      return { status: "rejected", detail: "設定が足りない" };
+    },
+  };
+  const reports = await runPublication([built], base);
+
+  expect(reports[0]).toMatchObject({ status: "rejected" });
+  // rejected なら次回は投げ直せる
+  const retried = step("slack");
+  await runPublication([retried], base, { prior: async () => "rejected" });
+  expect(retried.calls).toHaveLength(1);
+});
