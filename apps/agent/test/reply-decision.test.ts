@@ -105,12 +105,22 @@ test("同じ人の続けての発言は、2人に数えない", () => {
   expect(decideReply(ctx({ speaker: "丸山", history: oneOnOne })).reply).toBe(true);
 });
 
-test("判定は迷ったら no と指示している", () => {
+test("判定の軸は「宛先か」ではなく「自分が出てくるか」", () => {
+  // 宛先だけを聞いていたら、**自分の話をされているのに黙った**（実測 3/3）。
+  // 名前も @ も出さずに本人のことを話す発言に反応しない
   const req = buildReplyJudgeRequest(ctx({ history: group }));
 
-  expect(req.system).toContain("迷ったら no");
-  // 呼ばれてから答える、という方向づけ
-  expect(req.system).toContain("呼ばれてから答える");
+  expect(req.system).toContain("あなたのことを話している");
+  // 三人称でも自分のことなら拾う
+  expect(req.system).toContain("三人称");
+  // 「人同士の会話だから no」と読まれないように、明示で打ち消してある
+  expect(req.system).toContain("人同士の会話であっても、あなたの話をしているなら yes");
+});
+
+test("自分が出てこなければ黙る、と指示している", () => {
+  const req = buildReplyJudgeRequest(ctx({ history: group }));
+
+  expect(req.system).toContain("自分が出てこないなら no");
   expect(req.system).toContain("あなたの名前: Bob");
 });
 
@@ -145,7 +155,7 @@ function judgeModel(answer: string, reply = "はい") {
         id: "echo",
         async complete(req) {
           requests.push(req);
-          if (req.system.includes("直前の発言があなたに向けられているか")) return { text: answer };
+          if (req.system.includes("口を開くべきか")) return { text: answer };
           if (req.system.includes("記憶係")) return { text: "{}" };
           return { text: reply };
         },
@@ -237,15 +247,13 @@ test("名指しなら判定そのものを飛ばす（無駄に呼ばない）",
   const { sent, requests } = await runThread("no", "お願い", true);
 
   expect(sent).toHaveLength(1);
-  expect(requests.some((r) => r.system.includes("直前の発言があなたに向けられているか"))).toBe(
-    false,
-  );
+  expect(requests.some((r) => r.system.includes("口を開くべきか"))).toBe(false);
 });
 
 test("複数人の履歴は、誰の発言かを付けてモデルへ渡す", async () => {
   const { requests } = await runThread("yes", "これお願い");
   const conversation = requests.find(
-    (r) => !r.system.includes("記憶係") && !r.system.includes("向けられているか"),
+    (r) => !r.system.includes("記憶係") && !r.system.includes("口を開くべきか"),
   );
   expect(JSON.stringify(conversation)).toContain("丸山: これどう？");
 });
