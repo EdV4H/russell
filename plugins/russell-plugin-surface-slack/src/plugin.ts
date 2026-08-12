@@ -159,7 +159,16 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
       ctx.services.provide<ConversationCapability>(CONVERSATION_SERVICE, {
         async history(contextId: string) {
           try {
-            return toTurns(await fetchMessages(contextId), botUserIdRef.value);
+            const messages = await fetchMessages(contextId);
+            // **発言者の名前を引いてから渡す。**
+            // id のまま渡すと、いま届いた発言（表示名）と履歴（id）で**同じ人が2人に見え**、
+            // 「相手が1人かどうか」の判断が狂う。実際、1対1のスレッドが3人扱いになって
+            // 判定モデルへ回り、直接聞かれた質問に黙った。
+            // モデルにとっても、履歴の発言者が id のままなのは見え方が悪い（存在しない名前を作る）。
+            const names = await nameResolver.resolve(
+              messages.map((m) => m.user).filter((u): u is string => Boolean(u)),
+            );
+            return toTurns(messages, botUserIdRef.value, names);
           } catch {
             return [];
           }

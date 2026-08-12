@@ -24,6 +24,13 @@ export interface ReplyContext {
    * ここを数えないと、**3人目が入ってきた最初の1回**が「相手は1人」に見えて素通りする。
    */
   speaker?: string;
+  /**
+   * いま届いた発言の発言者の**識別子**（Slack の user id など）。
+   *
+   * 表示名と別に受け取るのは、**通信面が履歴にどちらを入れているか分からない**ため。
+   * 片方しか見ないと、同じ人が「id」と「表示名」で2人に数えられる（実際そうなった）。
+   */
+  speakerId?: string;
   /** 自分の名前（本文に出てきたら呼ばれたとみなす）。 */
   selfName: string;
   /** 直近のやりとり。**発言者が入っている**ことが効く。 */
@@ -55,14 +62,27 @@ export type Judgement = "reply" | "react" | "silent";
  * 本文の名前で即決するのは**1対1のときだけ**。3人以上では「Bob に聞いてみたら？」のように
  * **自分について話しているだけ**の発言が普通に出るので、名前が出た＝自分宛にはならない。
  */
+/** 発言者の集合に入れる、いまの発言者の代表。表記が違っても1人として数えるための印。 */
+const CURRENT_SPEAKER = "\u0000current";
+
 export function decideReply(ctx: ReplyContext): ReplyVerdict {
   if (ctx.isMention) return { reply: true, reason: "mentioned" };
 
+  // いまの発言者を指すもの。**表示名でも id でも同じ人として数える**——
+  // 通信面が履歴にどちらを入れているかに、判断が左右されないように
+  const current = new Set(
+    [ctx.speaker, ctx.speakerId].filter((v): v is string => Boolean(v)).map((v) => v.toLowerCase()),
+  );
   const speakers = new Set(
-    ctx.history.filter((t) => t.role === "user").map((t) => t.speaker ?? "?"),
+    ctx.history
+      .filter((t) => t.role === "user")
+      .map((t) => {
+        const name = (t.speaker ?? "?").toLowerCase();
+        return current.has(name) ? CURRENT_SPEAKER : name;
+      }),
   );
   // **いまの発言者も数える。** 履歴だけで数えると、3人目の初回発言が「1対1」に見える
-  if (ctx.speaker) speakers.add(ctx.speaker);
+  if (current.size > 0) speakers.add(CURRENT_SPEAKER);
 
   // 相手が1人（または誰も分からない）なら、宛先は自分しかいない
   if (speakers.size <= 1) {

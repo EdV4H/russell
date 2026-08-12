@@ -82,6 +82,34 @@ const SHOULD_REPLY: Case[] = [
   },
 ];
 
+/** 自分が投げた確認への答え。**名前は出ないが、明らかに自分に言っている**。 */
+const ASKED_BACK: ModelTurn[] = [
+  {
+    role: "user",
+    text: "手が空いてたら、共有ドライブの資料を探してまとめてくれる？",
+    speaker: "丸山",
+  },
+  { role: "user", text: "私も見たいです", speaker: "A-san" },
+  { role: "assistant", text: "できます。まとめの粒度と、出力先だけ先に確認させてください" },
+];
+
+SHOULD_REPLY.push(
+  {
+    text: "とにかく見られる資料を列挙してくれればいいよ。あとそれ自体を読んでおくのが大事",
+    speaker: "丸山",
+    history: ASKED_BACK,
+    why: "自分が投げた確認への答え。ここで黙ると相手は同じことをもう一度言う羽目になる",
+    want: "reply",
+  },
+  {
+    text: "粒度はざっくりでいいです",
+    speaker: "丸山",
+    history: ASKED_BACK,
+    why: "同上。短くても、自分の質問への回答",
+    want: "reply",
+  },
+);
+
 /** 返してほしくないもの。**人同士のやりとり**。 */
 const SHOULD_STAY_SILENT: Case[] = [
   {

@@ -108,6 +108,32 @@ test("同じ人の続けての発言は、2人に数えない", () => {
   expect(decideReply(ctx({ speaker: "丸山", history: oneOnOne })).reply).toBe(true);
 });
 
+test("履歴が id、いまの発言が表示名でも、同じ人として数える", () => {
+  // **実際に踏んだ。** 通信面が履歴に id を入れていたので、1対1のスレッドが2人に見え、
+  // 判定モデルへ回り、直接聞かれた質問に黙った
+  const byId: ModelTurn[] = [
+    { role: "user", text: "お願い", speaker: "U0BNJ3R4BFD" },
+    { role: "assistant", text: "承知しました" },
+  ];
+
+  expect(decideReply(ctx({ speaker: "丸山", speakerId: "U0BNJ3R4BFD", history: byId }))).toEqual({
+    reply: true,
+    reason: "one_on_one",
+  });
+});
+
+test("別人なら、id と表示名が混ざっていても2人に数える", () => {
+  const byId: ModelTurn[] = [
+    { role: "user", text: "お願い", speaker: "U_OTHER" },
+    { role: "assistant", text: "承知しました" },
+  ];
+
+  expect(decideReply(ctx({ speaker: "丸山", speakerId: "U_ME", history: byId }))).toEqual({
+    reply: false,
+    reason: "ask_model",
+  });
+});
+
 test("判定の軸は「宛先か」ではなく「自分が出てくるか」", () => {
   // 宛先だけを聞いていたら、**自分の話をされているのに黙った**（実測 3/3）。
   // 名前も @ も出さずに本人のことを話す発言に反応しない
