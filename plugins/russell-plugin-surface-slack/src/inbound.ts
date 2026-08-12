@@ -29,6 +29,29 @@ export function stripMention(text: string): string {
   return text.replace(/<@[^>]+>\s*/g, "").trim();
 }
 
+/** id → 表示名。引けなかった id は含まれない。 */
+export type NameBook = ReadonlyMap<string, string>;
+
+/**
+ * mention を**人が見ているのと同じ形**に直す。
+ *
+ * 以前は `<@U…>` を無条件に落としていた。その結果:
+ * - **文が壊れた**——「今日からチームに入ってもらう\<@U_BOB\>くんです」→「…もらうくんです」
+ * - **同席者が消えた**——`@A-san @B-san` に紹介されたのに、1対1と区別がつかない
+ *
+ * Slack の画面では `@丸山` と表示されている。**個体にも同じものを見せる**のが素直で、
+ * 文の構造も壊れない。
+ *
+ * 引けなかった id は `@U123` のまま残す。**消すと文が壊れ、名前を当てると嘘になる**ので、
+ * 「誰か分からない人がいる」と分かる形にしておく（人格プロンプト側で「知らない名前を
+ * 作らない」と縛ってある）。
+ */
+export function renderMentions(text: string, names: NameBook): string {
+  return text
+    .replace(/<@([^>|\s]+)(?:\|[^>]*)?>/g, (_m, id: string) => `@${names.get(id) ?? id}`)
+    .trim();
+}
+
 export interface SlackMentionEvent {
   channel: string;
   ts: string;
@@ -41,12 +64,14 @@ export interface SlackMentionEvent {
  * `app_mention`。**mention には必ずスレッドで返す**ので、スレッド外で呼ばれたら
  * その発言自身（ts）をスレッドの根にする。
  */
-export function fromAppMention(e: SlackMentionEvent): InboundMessage {
+export function fromAppMention(e: SlackMentionEvent, names: NameBook = new Map()): InboundMessage {
   return {
     surfaceId: "slack",
     contextId: toContextId(e.channel, e.thread_ts ?? e.ts),
     author: e.user ?? "unknown",
-    text: stripMention(e.text ?? ""),
+    // **記録は id、会話には名前**。id は安定した識別子なので監査はそちらを使う
+    authorName: e.user ? names.get(e.user) : undefined,
+    text: renderMentions(e.text ?? "", names),
     trustLabel: "untrusted", // 他者の Slack 発言は untrusted（§12-3）
     isMention: true,
     messageId: e.ts,
@@ -73,7 +98,10 @@ export interface SlackMessageEvent {
  * - contextId は**スレッドが無ければチャンネル単位**。ここを ts にすると発言ごとに
  *   別文脈になり、DM ではメモが1件ずつ孤立して想起が効かなくなる
  */
-export function fromDirectMessage(m: SlackMessageEvent): InboundMessage | undefined {
+export function fromDirectMessage(
+  m: SlackMessageEvent,
+  names: NameBook = new Map(),
+): InboundMessage | undefined {
   if (m.channel_type !== "im") return undefined;
   if (m.bot_id || m.subtype) return undefined;
   if (typeof m.text !== "string" || m.text.trim() === "") return undefined;
@@ -82,7 +110,8 @@ export function fromDirectMessage(m: SlackMessageEvent): InboundMessage | undefi
     surfaceId: "slack",
     contextId: toContextId(m.channel, m.thread_ts),
     author: m.user ?? "unknown",
-    text: m.text,
+    authorName: m.user ? names.get(m.user) : undefined,
+    text: renderMentions(m.text, names),
     trustLabel: "untrusted",
     isMention: true, // DM は宛先が自分しかいない＝常に自分への発話
     messageId: m.ts,
@@ -115,6 +144,8 @@ export interface ChannelFollowContext {
   activeThreads: ReadonlySet<string>;
   /** 自分の bot user id。mention は app_mention 側が拾うので、ここでは二重に処理しない。 */
   botUserId?: string;
+  /** id → 表示名。**人が見ているのと同じ形**を個体にも見せるために使う。 */
+  names?: NameBook;
 }
 
 /**

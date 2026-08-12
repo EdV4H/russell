@@ -61,7 +61,16 @@ export interface Finding {
 export interface InboundMessage {
   surfaceId: string;
   contextId: string; // slack thread_ts / task id 等
+  /** 発言者の識別子（Slack の user id 等）。**監査はこちらを使う**（安定した識別子）。 */
   author: string;
+  /**
+   * 発言者の表示名。**会話にはこちらを使う**。
+   *
+   * id のまま会話へ渡すと、モデルは相手が誰か分からないまま丁寧に振る舞おうとして
+   * **名前を作る**（実際に起きた）。引けないときは undefined のままにして、
+   * 人格プロンプト側で「知らない名前を作らない」と縛る。
+   */
+  authorName?: string;
   text: string;
   trustLabel: TrustLabel;
   isMention: boolean;

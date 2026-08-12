@@ -2,6 +2,8 @@ export { MAX_RECOVERED_TURNS, hasOwnMessage, toTurns } from "./conversation.js";
 export type { SlackHistoryMessage } from "./conversation.js";
 export { parseRussellCommand } from "./command.js";
 export type { RussellCommand } from "./command.js";
+export { renderMentions } from "./inbound.js";
+export type { NameBook } from "./inbound.js";
 export {
   allowedChannelsFromEnv,
   excludedChannelsFromEnv,
@@ -30,3 +32,5 @@ export type { PendingReply } from "./catchup.js";
 export { createSlackPoster } from "./poster.js";
 export type { SlackPoster, SlackPosterOptions } from "./poster.js";
 export { JOURNAL_CHANNEL_SETTING } from "./journal-setting.js";
+export { createNameResolver, mentionedIds } from "./names.js";
+export type { NameResolver } from "./names.js";

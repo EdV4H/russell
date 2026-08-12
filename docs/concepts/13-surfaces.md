@@ -29,7 +29,7 @@ surface プラグインは `ctx.surfaces.register(def)` で自己分類する。
 - **Bolt for JavaScript / Socket Mode** — サーバーの inbound 開放不要。スケール要件が出たら HTTP Events API へ移行
 - **購読** — `app_mention`, `message.im`, 参加チャンネルの `message.channels`
 - **応答は原則スレッド内**。HITL 承認は **Block Kit ボタン**（承認/却下 + 理由入力）
-- **最小スコープ** — `app_mentions:read`, `channels:history`, `im:history`, `chat:write`, `reactions:write`
+- **最小スコープ** — `app_mentions:read`, `channels:history`, `im:history`, `chat:write`, `reactions:write`, `users:read`
   （積み残しの確認を使うなら `channels:read` / `groups:read` / `im:read` を追加。無くても受信・返信は動く）
 - **記憶操作は通信面の仕事ではない** — 「覚えておいて」「忘れて」の解釈はコア側でモデルが行う
   （[ADR 0003](../adr/0003-model-decides-what-to-remember.md)）。通信面は本文を正規化して渡すだけ
@@ -41,6 +41,18 @@ surface プラグインは `ctx.surfaces.register(def)` で自己分類する。
 > 「関与しているのに返していない」の判定は通信面が持つ（スレッド・DM は通信面の概念, ADR 0002）。
 > べき等性は「最後の発言が自分か」で決まる——返信した時点で対象から外れるので、
 > 返信済みの台帳を持たない。既定は12時間・3件・10分間隔で、いずれも保守側に倒してある。
+
+> [!IMPORTANT] **決定（2026-08-12）**
+> **mention は消さず、人が見ているのと同じ形（`@名前`）に直して個体へ渡す。**
+> 無条件に落としていたら、「今日からチームに入ってもらう`@Bob`くんです」が
+> 「…もらうくんです」になって**文が壊れ**、同席者も消えた。さらに発言者が user id のままなので、
+> 個体は相手が誰か分からないまま丁寧に振る舞おうとして**存在しない名前を作った**（実測）。
+>
+> 名前は `users.info` で取り直す（`users:read` が要る）。**記憶には持たない**——
+> 覚えるのは「一緒に働いて分かったこと」だけ（ADR 0008）。
+> 引けなかった id は `@U123` のまま残す。**消すと文が壊れ、当てると嘘になる**ので、
+> 「分からない人がいる」と分かる形にしておく。あわせて人格プロンプトで
+> 「**知らない名前を作らない**」と縛った。
 
 透明性のための出力先も Slack surface が担う: 日記の `#<個体名>-日報` 投稿、メモ取得時の「📝 メモしました」リアクション（§10.1）。
 
