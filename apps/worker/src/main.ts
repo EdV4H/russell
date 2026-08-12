@@ -27,7 +27,7 @@ import {
   runConsolidation,
 } from "@edv4h/russell-plugin-memory-pg";
 import { createClaudeCodeProvider } from "@edv4h/russell-plugin-model-claude-code";
-import { JOURNAL_CHANNEL_KEY, readSetting } from "@edv4h/russell-plugin-settings-pg";
+import { JOURNAL_CHANNEL_KEY, readSettingWithDefault } from "@edv4h/russell-plugin-settings-pg";
 import { createSlackPoster } from "@edv4h/russell-plugin-surface-slack";
 import pg from "pg";
 
@@ -202,7 +202,7 @@ async function main(): Promise<void> {
   // **設定（DB）が先、env はフォールバック。** どこへ出すかは Slack から変えられる
   // （`/russell journal here`）ので、env で固定するものではない。
   const journalChannel =
-    (await readSetting(auditPool, agentId, JOURNAL_CHANNEL_KEY)) ??
+    (await readSettingWithDefault(auditPool, agentId, JOURNAL_CHANNEL_KEY)) ??
     process.env.RUSSELL_JOURNAL_CHANNEL;
 
   try {

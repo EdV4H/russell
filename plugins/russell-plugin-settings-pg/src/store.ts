@@ -10,6 +10,23 @@ import type pg from "pg";
 /** 日報の投稿先チャンネル。**未設定なら投稿しない**（既定でどこかへ流し始めない）。 */
 export const JOURNAL_CHANNEL_KEY = "journal.channel";
 
+/** 全個体の既定を表す agent_id（キルスイッチの `target='*'` と同じ形）。 */
+export const ALL_AGENTS = "*";
+
+/**
+ * その個体の設定を読む。**自分の設定が無ければ全個体の既定へ落ちる。**
+ *
+ * 個体ごとに別アプリだと2体目は `/russell` を持てない（Slack のスラッシュコマンドは
+ * 1ワークスペースに1アプリ）。`--all` で書いた既定を全員が読めるようにしておく必要がある。
+ */
+export async function readSettingWithDefault(
+  pool: pg.Pool,
+  agentId: string,
+  key: string,
+): Promise<string | undefined> {
+  return (await readSetting(pool, agentId, key)) ?? (await readSetting(pool, ALL_AGENTS, key));
+}
+
 export async function readSetting(
   pool: pg.Pool,
   agentId: string,
