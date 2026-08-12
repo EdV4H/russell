@@ -16,7 +16,11 @@ import { appendAuditEvent } from "@edv4h/russell-plugin-audit-pg";
 import pg from "pg";
 
 async function main(): Promise<void> {
-  const name = process.argv[2]?.trim();
+  // `--` そのものが引数として渡ってくる（pnpm 経由）。それを名前として受け取らない
+  const name = process.argv
+    .slice(2)
+    .map((a) => a.trim())
+    .find((a) => a && a !== "--");
   if (!process.env.DATABASE_URL) {
     console.error("[forget-person] DATABASE_URL が未設定です。");
     process.exit(1);

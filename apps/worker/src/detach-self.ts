@@ -24,7 +24,9 @@ interface Row {
 }
 
 async function main(): Promise<void> {
-  const args = process.argv.slice(2).filter(Boolean);
+  // **`--` そのものが引数として渡ってくる。** pnpm 経由だと `-- "Bob" …` の `--` が残り、
+  // それを名前として受け取っていた（黙って「`--` という個体」を掃除しようとする）。
+  const args = process.argv.slice(2).filter((a) => a && a !== "--");
   const apply = args.includes("--apply");
   const [selfName, ...ids] = args.filter((a) => a !== "--apply");
 

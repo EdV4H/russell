@@ -16,10 +16,11 @@ import { appendAuditEvent } from "@edv4h/russell-plugin-audit-pg";
 import pg from "pg";
 
 async function main(): Promise<void> {
+  // `--` そのものが引数として渡ってくる（pnpm 経由）。残すと「畳む語」に混ざる
   const args = process.argv
     .slice(2)
     .map((a) => a.trim())
-    .filter(Boolean);
+    .filter((a) => a && a !== "--");
   // 既定は単語帳。人のカルテも同じ形なので、型だけ切り替える
   const type = args[0] === "--person" ? "person" : "term";
   const label = type === "person" ? "カルテ" : "単語帳";
