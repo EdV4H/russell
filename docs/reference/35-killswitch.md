@@ -12,8 +12,21 @@
 | レベル | 発動 | 経路 | 振る舞い |
 |---|---|---|---|
 | `silent` | `RUSSELL_KILL=1` を立てて再起動 | env（**DB を読まない**） | **完全沈黙**。応答も監査も外部 I/O も走らせない |
-| `stopped` | `/russell stop [--all]` | DB（`agent_stops`） | 自発行動を凍結。mention には**固定文だけ**返す |
+| `stopped` | `/russell stop [--all]` **または CLI** | DB（`agent_stops`） | 自発行動を凍結。mention には**固定文だけ**返す |
 | `none` | — | — | 通常運転 |
+
+> [!IMPORTANT] **決定（2026-08-12）: Slack を経由しない発動手段（#28）。**
+> ```
+> node apps/agent/dist/kill.js status
+> node apps/agent/dist/kill.js stop [--all|--agent=<個体>] [--reason "理由"]
+> node apps/agent/dist/kill.js start [--all|--agent=<個体>] --by <名前>
+> ```
+> 運用手順は「**迷ったら発動する**」と書いてあるのに、実際に使える手段が Slack か再起動しか
+> 無かった。サーバーではその差がもっと効く（手元の psql が無い）。
+>
+> **発動は名前が無くても通る**（`--by` 省略で `cli`）。名前の有無で発動を妨げない。
+> **解除には名前が要る**——誰が戻したか分からない解除を作らない。
+> これはレベル1/2 なので、**DB が死んでいるときは効かない**。そのときはレベル3を使う。
 
 ```
 $ # 凍結中に mention すると（レベル1/2）
