@@ -41,3 +41,4 @@ ADR より前に下した決定は各ドキュメント内の決定ブロック�
 | [0006](./0006-equipment-may-connect-without-mcp.md) | 装備は MCP 以外の接続も許す（最初の装備は HTTP） | 採用 |
 | [0007](./0007-sensitive-guard-marks-not-blocks.md) | 機微情報は記憶から落とさず、印を付けて公開経路で止める | 採用 |
 | [0008](./0008-glossary-and-dossiers-are-index-cards.md) | 単語帳と個人カルテは索引カード（`entities`）に置く | 採用 |
+| [0009](./0009-todos-are-commitments-not-tasks.md) | 引き受けた作業は記憶に持つ（タスク管理ツールにしない） | 採用 |

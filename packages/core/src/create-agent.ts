@@ -572,7 +572,8 @@ export async function createAgent(
     let decision: MemoryDecision;
     try {
       const known = mem?.glossary ? await mem.glossary() : [];
-      const req = buildDecisionRequest(msg.text, replyText, readings, known);
+      const carrying = mem?.openTodos ? await mem.openTodos() : [];
+      const req = buildDecisionRequest(msg.text, replyText, readings, known, carrying);
       decision = parseDecision((await decider.complete(req)).text);
     } catch (err) {
       events.emit("memory:decision-failed", { contextId: msg.contextId, error: String(err) });
@@ -619,6 +620,24 @@ export async function createAgent(
         });
         events.emit("memory:terms-truncated", decision.termOverflow);
       }
+      for (const todo of decision.todos ?? []) {
+        const marks = await markSensitive(todo.content, "todo.add", msg);
+        await invokeTool(
+          "todo.add",
+          {
+            content: todo.content,
+            contextId: msg.contextId,
+            waitingFor: todo.waitingFor,
+            sensitive: marks,
+          },
+          msg.trustLabel,
+        );
+        events.emit("todo:added", { contextId: msg.contextId, content: todo.content });
+      }
+      for (const id of decision.done ?? []) {
+        await invokeTool("todo.close", { id, state: "done" }, msg.trustLabel);
+        events.emit("todo:closed", { contextId: msg.contextId, id });
+      }
       for (const person of decision.people ?? []) {
         const marks = await markSensitive(`${person.name}\n${person.note}`, "person.remember", msg);
         await invokeTool(
@@ -659,7 +678,13 @@ export async function createAgent(
         });
       }
       // 書き留めたことを発言に見せる（§10.1）。何も書かなければ付けない。
-      if (decision.note || decision.shelf || decision.terms?.length || decision.people?.length) {
+      if (
+        decision.note ||
+        decision.shelf ||
+        decision.terms?.length ||
+        decision.people?.length ||
+        decision.todos?.length
+      ) {
         await reactNoted(msg);
       }
     } catch (err) {
@@ -756,6 +781,9 @@ export async function createAgent(
     const terms = mem?.terms ? await mem.terms(msg.text) : [];
     // 個人カルテ。**会話に入れるだけで、公開経路には出さない**（ADR 0008）
     const people = mem?.people ? await mem.people(msg.text) : [];
+    // このスレッドで引き受けたまま終わっていない作業（ADR 0009）。
+    // 全部ではなくスレッド分だけ入れる——「さっきの件どうなった」に答えられれば足りる。
+    const todos = mem?.openTodos ? await mem.openTodos(msg.contextId) : [];
 
     // 文脈構築
     const memoryBlock = [
@@ -769,6 +797,15 @@ export async function createAgent(
         : "",
       people.length
         ? `この会話に出てくる人:\n- ${people.map((p) => `${p.name}: ${p.note}`).join("\n- ")}`
+        : "",
+      todos.length
+        ? `このスレッドで抱えている作業:\n- ${todos
+            .map(
+              (t) =>
+                `${t.content}${t.waitingFor ? `（${t.waitingFor} の返事待ち）` : ""}` +
+                `${t.staleDays >= 1 ? ` — ${t.staleDays}日動いていない` : ""}`,
+            )
+            .join("\n- ")}`
         : "",
     ]
       .filter(Boolean)

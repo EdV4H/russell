@@ -115,5 +115,38 @@ CREATE UNIQUE INDEX IF NOT EXISTS entities_agent_type_name_idx
 CREATE INDEX IF NOT EXISTS entities_aliases_idx ON entities USING GIN (aliases);
 `,
     },
+    {
+      /*
+       * 引き受けた作業（ADR 0009）。
+       *
+       * **メモ帳にも索引カードにも乗らない。** メモは TTL 7日で消えるので「来週やる」が
+       * 消える。索引カードは状態を持たない構造で、作業は状態と持ち主を持つ。
+       *
+       * 忘却曲線は適用しない。**引き受けたことを時間で忘れてはいけない**。代わりに
+       * 「何日動いていないか」が見えるようにする（`updated_at`）。
+       */
+      id: "0006_todos",
+      phase: "expand",
+      sql: `
+CREATE TABLE IF NOT EXISTS todos (
+  id BIGSERIAL PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  content TEXT NOT NULL,
+  -- open=自分が動く / waiting=相手の返事待ち / done=終わった / dropped=やらないと決めた
+  -- **dropped を消さずに残す**のは、やらないと決めた判断も記録だから（記憶の扱いと同じ）
+  state TEXT NOT NULL DEFAULT 'open',
+  -- どの会話で引き受けたか。想起の絞り込みと、後から経緯を辿るために持つ
+  context_id TEXT,
+  -- 誰の返事を待っているか（waiting のとき）。人物カルテとは別に、素の表記で持つ
+  waiting_for TEXT,
+  sensitive_categories TEXT[],
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  closed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS todos_agent_state_idx ON todos (agent_id, state, updated_at DESC);
+CREATE INDEX IF NOT EXISTS todos_agent_context_idx ON todos (agent_id, context_id);
+`,
+    },
   ],
 };

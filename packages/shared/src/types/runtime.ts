@@ -87,6 +87,22 @@ export interface MemoryCapability {
    * （実際、同じプロジェクトが4行に分かれた）。
    */
   glossary?(): Promise<GlossaryEntry[]> | GlossaryEntry[];
+  /**
+   * 引き受けたまま終わっていない作業（ADR 0009）。
+   *
+   * `contextId` を渡すとそのスレッドの分だけ。省略すると全部（日報と判定に使う）。
+   */
+  openTodos?(contextId?: string): Promise<OpenTodo[]> | OpenTodo[];
+}
+
+/** 未完了の作業1件。 */
+export interface OpenTodo {
+  id: number;
+  content: string;
+  state: "open" | "waiting";
+  waitingFor?: string;
+  /** 最後に動いた日からの経過日数。**止まっていることを見えるようにする**ための値。 */
+  staleDays: number;
 }
 
 /** 単語帳の見出しだけ（重複を避けるためにモデルへ見せる）。 */

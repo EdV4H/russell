@@ -21,6 +21,11 @@ export const BOXES: Box[] = [
     description: "このチームでだけ通じる言葉。忘却しない・別名で引く（ADR 0008）",
   },
   {
+    path: "/todos",
+    title: "作業",
+    description: "引き受けたまま終わっていないもの。忘却しない・止まった日数が見える（ADR 0009）",
+  },
+  {
     path: "/people",
     title: "個人カルテ",
     description: "一緒に働いて分かった事実だけ。評価は書かない・日報に出さない（ADR 0008）",

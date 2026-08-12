@@ -25,6 +25,13 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       const books: (RecalledBook & { archived?: boolean })[] = [];
       const termBook = new Map<string, { name: string; definition: string; aliases: string[] }>();
       const personBook = new Map<string, { name: string; definition: string; aliases: string[] }>();
+      const todoList: {
+        id: number;
+        content: string;
+        state: string;
+        contextId?: string;
+        waitingFor?: string;
+      }[] = [];
 
       const capability: MemoryCapability = {
         people(text: string) {
@@ -35,6 +42,18 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
               ),
             )
             .map((p) => ({ name: p.name, note: p.definition }));
+        },
+        openTodos(contextId?: string) {
+          return todoList
+            .filter((t) => t.state !== "done" && t.state !== "dropped")
+            .filter((t) => !contextId || t.contextId === contextId)
+            .map((t) => ({
+              id: t.id,
+              content: t.content,
+              state: t.state as "open" | "waiting",
+              waitingFor: t.waitingFor,
+              staleDays: 0,
+            }));
         },
         glossary() {
           return [...termBook.values()].map((t) => ({ name: t.name, aliases: t.aliases }));
@@ -64,6 +83,8 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       ctx.policy.declareEffect("deep_recall", "read");
       ctx.policy.declareEffect("term.define", "internal_write");
       ctx.policy.declareEffect("person.remember", "internal_write");
+      ctx.policy.declareEffect("todo.add", "internal_write");
+      ctx.policy.declareEffect("todo.close", "internal_write");
 
       const offNote = ctx.tools.register("note.write", {
         name: "note.write",
@@ -93,6 +114,34 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
             aliases: [...new Set([...(prev?.aliases ?? []), ...(input.aliases ?? [])])],
           });
           return { status: "succeeded" as const, saved: true };
+        },
+      });
+
+      const offTodoAdd = ctx.tools.register("todo.add", {
+        name: "todo.add",
+        effect: "internal_write",
+        async run(input: { content: string; contextId?: string; waitingFor?: string }) {
+          const content = (input.content ?? "").trim();
+          if (content === "") return { status: "succeeded" as const, saved: false };
+          const id = todoList.length + 1;
+          todoList.push({
+            id,
+            content,
+            state: input.waitingFor ? "waiting" : "open",
+            contextId: input.contextId,
+            waitingFor: input.waitingFor,
+          });
+          return { status: "succeeded" as const, saved: true, id };
+        },
+      });
+
+      const offTodoClose = ctx.tools.register("todo.close", {
+        name: "todo.close",
+        effect: "internal_write",
+        async run(input: { id: number; state?: "done" | "dropped" }) {
+          const todo = todoList.find((t) => t.id === input.id);
+          if (todo) todo.state = input.state === "dropped" ? "dropped" : "done";
+          return { status: "succeeded" as const, closed: todo ? 1 : 0 };
         },
       });
 
@@ -154,6 +203,8 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       return () => {
         offTerm();
         offPerson();
+        offTodoAdd();
+        offTodoClose();
         offNote();
         offShelf();
         offForget();

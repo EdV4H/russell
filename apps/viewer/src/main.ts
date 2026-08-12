@@ -55,6 +55,17 @@ const VIEWS: Record<string, View> = {
            WHERE type = 'term' AND ($1::text IS NULL OR agent_id = $1)
            ORDER BY updated_at DESC LIMIT ${LIMIT}`,
   },
+  "/todos": {
+    ...pick("/todos"),
+    columns: ["state", "content", "waiting_for", "止まった日数", "agent_id", "updated_at"],
+    // 止まっている順に見せる。**古いものが上**に来ないと、溜まっていることに気づけない
+    sql: `SELECT state, content, waiting_for,
+                 floor(extract(epoch from now() - updated_at) / 86400) AS "止まった日数",
+                 agent_id, updated_at
+            FROM todos
+           WHERE ($1::text IS NULL OR agent_id = $1)
+           ORDER BY (state IN ('open','waiting')) DESC, updated_at ASC LIMIT ${LIMIT}`,
+  },
   "/people": {
     ...pick("/people"),
     columns: ["updated_at", "agent_id", "name", "aliases", "summary", "sensitive_categories"],
@@ -126,6 +137,7 @@ async function overview(pool: pg.Pool, agent?: string): Promise<string> {
      UNION ALL SELECT '本棚', count(*)::text FROM books WHERE status = 'active' AND ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '単語帳', count(*)::text FROM entities WHERE type = 'term' AND ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '個人カルテ', count(*)::text FROM entities WHERE type = 'person' AND ($1::text IS NULL OR agent_id = $1)
+     UNION ALL SELECT '作業（未完了）', count(*)::text FROM todos WHERE state IN ('open','waiting') AND ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '書庫', count(*)::text FROM books WHERE status = 'archived' AND ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '日記', count(*)::text FROM journal_entries WHERE ($1::text IS NULL OR agent_id = $1)
      UNION ALL SELECT '監査ログ', count(*)::text FROM event_log WHERE ($1::text IS NULL OR agent_id = $1)

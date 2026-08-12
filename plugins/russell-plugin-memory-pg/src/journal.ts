@@ -16,6 +16,8 @@ export interface JournalMaterial {
   entryDate: string;
   agentName: string;
   notes: string[];
+  /** 引き受けたまま終わっていない作業（ADR 0009）。**日報に必ず出す。** */
+  todos?: { content: string; waitingFor?: string; staleDays: number }[];
 }
 
 /** 目安の長さ。長すぎると読まれず、短すぎると日記にならない。 */
@@ -38,13 +40,25 @@ export function buildJournalRequest(
 - **分からなかったこと・確認待ちのことを省かない。** それも一日の事実。
 - 推測を事実として書かない。曖昧なことは曖昧なまま書く。
 - ${TARGET_CHARS}程度。日付や見出しは書かず、本文だけを返す。
+- **抱えている作業が渡されていたら、最後の段落で必ず触れる。** 何が残っていて、
+  何を待っているのかが分からない日報は、読む側にとって価値が薄い。
+  長く止まっているものは「N日動いていない」と正直に書く。
 
 この日記は毎朝チームのチャンネルに投稿されます。
 ${doNotWrite}`;
 
+  const carrying = material.todos?.length
+    ? `\n\n抱えている作業（${material.todos.length}件）:\n${material.todos
+        .map(
+          (t) =>
+            `- ${t.content}${t.waitingFor ? `（${t.waitingFor} の返事待ち）` : ""}` +
+            `${t.staleDays >= 1 ? ` — ${t.staleDays}日動いていない` : ""}`,
+        )
+        .join("\n")}`
+    : "";
   const user = `${material.entryDate} のメモ（${material.notes.length}件）です。これを材料にして日記を書いてください。
 
-${material.notes.map((n, i) => `${i + 1}. ${n}`).join("\n")}`;
+${material.notes.map((n, i) => `${i + 1}. ${n}`).join("\n")}${carrying}`;
 
   return { system, user };
 }

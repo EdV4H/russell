@@ -13,6 +13,7 @@ import {
   type GlossaryEntry,
   MEMORY_SERVICE,
   type MemoryCapability,
+  type OpenTodo,
   type RecalledContext,
   type RecalledPerson,
   type RecalledTerm,
@@ -134,6 +135,31 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
           const rows = await loadEntities("person");
           return matchTerms(text, rows).map((m) => ({ name: m.name, note: m.definition }));
         },
+        /** 引き受けたまま終わっていない作業。**何日止まっているか**も返す。 */
+        async openTodos(contextId?: string): Promise<OpenTodo[]> {
+          const res = await pool.query<{
+            id: string;
+            content: string;
+            state: string;
+            waiting_for: string | null;
+            stale_days: string;
+          }>(
+            `SELECT id, content, state, waiting_for,
+                    floor(extract(epoch from now() - updated_at) / 86400) AS stale_days
+               FROM todos
+              WHERE agent_id = $1 AND state IN ('open', 'waiting')
+                AND ($2::text IS NULL OR context_id = $2)
+              ORDER BY updated_at ASC LIMIT 50`,
+            [agentId, contextId ?? null],
+          );
+          return res.rows.map((r) => ({
+            id: Number(r.id),
+            content: r.content,
+            state: r.state === "waiting" ? "waiting" : "open",
+            waitingFor: r.waiting_for ?? undefined,
+            staleDays: Number(r.stale_days),
+          }));
+        },
         /** 登録済みの見出し語（本文は返さない）。更新順で、モデルに見せる分だけ。 */
         async glossary(): Promise<GlossaryEntry[]> {
           const res = await pool.query<GlossaryEntry>(
@@ -155,6 +181,8 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
       ctx.policy.declareEffect("deep_recall", "read");
       ctx.policy.declareEffect("term.define", "internal_write");
       ctx.policy.declareEffect("person.remember", "internal_write");
+      ctx.policy.declareEffect("todo.add", "internal_write");
+      ctx.policy.declareEffect("todo.close", "internal_write");
       // 物理削除。効果分類として最も重い（danger は効果から導出, guides/22）
       ctx.policy.declareEffect("person.forget", "irreversible_write");
 
@@ -252,6 +280,49 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
         },
       });
 
+      // 引き受けた作業を記録する（ADR 0009）。**同じ作業を二重に持たない**ように、
+      // 判定には既存の未完了を見せてある（単語帳の重複対策と同じ手）。
+      const offTodoAdd = ctx.tools.register("todo.add", {
+        name: "todo.add",
+        effect: "internal_write",
+        async run(input: {
+          content: string;
+          contextId?: string;
+          waitingFor?: string;
+          sensitive?: string[];
+        }) {
+          const content = (input.content ?? "").trim();
+          if (content === "") return { status: "succeeded" as const, saved: false };
+          const res = await pool.query<{ id: string }>(
+            `INSERT INTO todos (agent_id, content, state, context_id, waiting_for, sensitive_categories)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+            [
+              agentId,
+              content,
+              input.waitingFor ? "waiting" : "open",
+              input.contextId ?? null,
+              input.waitingFor ?? null,
+              input.sensitive ?? [],
+            ],
+          );
+          return { status: "succeeded" as const, saved: true, id: Number(res.rows[0]?.id) };
+        },
+      });
+
+      // 終わった／やらないと決めた。**消さずに状態を変える**（判断も記録なので, §3.4 と同じ扱い）。
+      const offTodoClose = ctx.tools.register("todo.close", {
+        name: "todo.close",
+        effect: "internal_write",
+        async run(input: { id: number; state?: "done" | "dropped" }) {
+          const res = await pool.query(
+            `UPDATE todos SET state = $3, closed_at = now(), updated_at = now()
+              WHERE agent_id = $1 AND id = $2 AND state IN ('open', 'waiting')`,
+            [agentId, input.id, input.state === "dropped" ? "dropped" : "done"],
+          );
+          return { status: "succeeded" as const, closed: res.rowCount ?? 0 };
+        },
+      });
+
       // 「忘れて」= L1（弱める）。strength を下限まで下げて書庫へ落とす。
       // 物理削除（L2）は HITL 承認が前提（privacy-and-memory-policy §3）なので、
       // それが入るまでは可逆なこの段階だけを提供する。**消したと言わない**ことが重要。
@@ -295,6 +366,8 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
         offForget();
         offTerm();
         offPerson();
+        offTodoAdd();
+        offTodoClose();
         offForgetPerson();
         offRecall();
         await pool.end();
