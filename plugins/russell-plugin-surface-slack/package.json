@@ -19,7 +19,8 @@
   },
   "dependencies": {
     "@edv4h/russell-shared": "workspace:*",
-    "@slack/bolt": "^4.2.0"
+    "@slack/bolt": "^4.2.0",
+    "@slack/web-api": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

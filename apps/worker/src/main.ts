@@ -10,6 +10,12 @@
  *   pnpm consolidate              # 実行する（今日の分）
  *   pnpm consolidate --dry-run    # 本棚をどう整理するかだけ見せる（DB は変えない）
  *   pnpm consolidate --backfill   # 未処理のメモが残っている日を、古い順に1日ずつ書く
+ *   pnpm consolidate --publish 2026-08-11  # 既にある日記を**配信だけ**やり直す
+ *
+ * 前回の結果が `unknown` の日は自動では再送しない（§9.2）。実際に投稿されたかを人が確かめて、
+ * どちらだったかを記録する:
+ *   pnpm consolidate --resolve 2026-08-11 --not-sent  # 届いていなかった → 再送できるようになる
+ *   pnpm consolidate --resolve 2026-08-11 --sent      # 届いていた → 配信済みとして閉じる
  */
 
 import {
@@ -72,6 +78,17 @@ async function main(): Promise<void> {
    * 「いつの話か」が失われると意味が薄れる）。
    */
   const backfill = process.argv.includes("--backfill");
+  /**
+   * 既にある日記を**配信だけ**やり直す。
+   *
+   * 日記は書けているのに宛先を後から決めた、投稿に失敗した、といった場面で要る。
+   * これが無いと**日記を書き直さないと配信できず**、モデルを呼び直すことになる
+   * （中身が変わってしまうし、無駄に金がかかる）。
+   */
+  const publishOnly = (() => {
+    const i = process.argv.indexOf("--publish");
+    return i >= 0 ? process.argv[i + 1] : undefined;
+  })();
 
   // 夜間バッチは自発行動そのものなので、凍結中は走らせない（§12-4）。
   // app とは別プロセス＝別経路なので、ここでも独立に確かめる必要がある。
@@ -123,15 +140,19 @@ async function main(): Promise<void> {
       : undefined;
   }
 
-  /** Slack へ日報を投稿する段。**装備（Notion 等）を足すときは、ここに段を増やす。** */
+  /**
+   * Slack へ日報を投稿する段。**装備（Notion 等）を足すときは、ここに段を増やす。**
+   *
+   * poster は**段の外で作る**。中で作ると、設定の誤りのような「絶対に成功しない失敗」が
+   * 投稿の例外として `unknown` に化け、**二度と再送できなくなる**（unknown は blind retry
+   * 禁止なので）。実際それが起きた。構築の失敗はここで落として、送信の失敗と区別する。
+   */
   function slackStep(channel: string): PublishStep {
+    const poster = createSlackPoster();
     return {
       id: "slack",
       async deliver(ctx) {
-        const delivery = await createSlackPoster().post(
-          channel,
-          `*${ctx.entryDate} の日報*\n${ctx.narrative}`,
-        );
+        const delivery = await poster.post(channel, `*${ctx.entryDate} の日報*\n${ctx.narrative}`);
         return { status: delivery.status, detail: delivery.detail };
       },
     };
@@ -206,6 +227,59 @@ async function main(): Promise<void> {
     process.env.RUSSELL_JOURNAL_CHANNEL;
 
   try {
+    // 結果不明（unknown）の決着を人が付ける。**自動では解決しない**のがこの機構の要点で、
+    // 決着の付け方だけを用意しておく（無いと、unknown の日が永久に配信できない）。
+    const resolveIndex = process.argv.indexOf("--resolve");
+    if (resolveIndex >= 0) {
+      const date = process.argv[resolveIndex + 1];
+      const sent = process.argv.includes("--sent");
+      const notSent = process.argv.includes("--not-sent");
+      if (!date || sent === notSent) {
+        console.error("[worker] 使い方: --resolve <YYYY-MM-DD> --sent|--not-sent（どちらか一方）");
+        process.exit(64);
+      }
+      await appendAuditEvent(auditPool, {
+        agentId,
+        configVersion: process.env.RUSSELL_CONFIG_VERSION ?? "v0",
+        actor: process.env.RUSSELL_OPERATOR ?? "operator",
+        action: "journal.published",
+        payload: {
+          entryDate: date,
+          step: "slack",
+          // 届いていなかった＝送っていないのと同じ。次の配信で送り直せる
+          status: sent ? "succeeded" : "rejected",
+          resolvedByHuman: true,
+        },
+        trustLabel: "trusted",
+      });
+      console.log(
+        sent
+          ? `[worker] ${date} は配信済みとして閉じました。`
+          : `[worker] ${date} は未配信として記録しました。--publish ${date} で送り直せます。`,
+      );
+      return;
+    }
+
+    if (publishOnly) {
+      const row = await auditPool.query<{ narrative: string; events: unknown[] }>(
+        "SELECT narrative, events FROM journal_entries WHERE agent_id = $1 AND entry_date = $2",
+        [agentId, publishOnly],
+      );
+      const journal = row.rows[0];
+      if (!journal) {
+        console.log(`[worker] ${publishOnly} の日記がありません。`);
+        return;
+      }
+      await publish({
+        entryDate: publishOnly,
+        narrative: journal.narrative,
+        // 配信の判定に使うのは「出来事の数」だけ。他の値はこの経路では意味を持たない
+        notesConsolidated: journal.events.length,
+        notesWithheld: 0,
+      } as ConsolidationResult);
+      return;
+    }
+
     if (backfill) {
       const days = await auditPool.query<{ d: string }>(
         `SELECT DISTINCT created_at::date::text AS d FROM notes

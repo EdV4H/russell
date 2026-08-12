@@ -8,12 +8,12 @@
  * `createSlackSurfacePlugin` と同じパッケージに置いてあるのはそのためで、
  * トークンの読み方・投稿の作法はここに一本化される。
  *
- * **受信はしない。** `app.start()` を呼ばないので Socket Mode の接続は張られない
- * （バッチが常駐イベントを掴んだままになるのを避ける）。
+ * **受信はしない。** `bolt.App` ではなく `WebClient` を使う——`App` は受信の器なので、
+ * 投稿しかしないのに `signingSecret` を要求される（実際それで投稿が失敗した）。
  */
 
 import type { DeliveryResult } from "@edv4h/russell-shared";
-import bolt from "@slack/bolt";
+import { WebClient } from "@slack/web-api";
 
 export interface SlackPosterOptions {
   botToken?: string;
@@ -26,13 +26,12 @@ export interface SlackPoster {
 export function createSlackPoster(options: SlackPosterOptions = {}): SlackPoster {
   const token = options.botToken ?? process.env.SLACK_BOT_TOKEN;
   if (!token) throw new Error("slack-poster: SLACK_BOT_TOKEN がありません");
-  // receiver を渡さないので待ち受けは起きない。client だけを使う
-  const app = new bolt.App({ token });
+  const client = new WebClient(token);
 
   return {
     async post(channel: string, text: string): Promise<DeliveryResult> {
       try {
-        await app.client.chat.postMessage({ channel, text });
+        await client.chat.postMessage({ channel, text });
         return { status: "succeeded" };
       } catch (err) {
         // タイムアウト等は unknown（blind retry しない, §9.2）。二重投稿の方が害が大きい
