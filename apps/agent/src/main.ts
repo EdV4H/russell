@@ -105,6 +105,15 @@ async function main(): Promise<void> {
     assembleSpongePlugins(),
   );
 
+  // **黙った理由が見えないと調整できない。** 3人以上のスレッドで、宛先も話題も自分ではないと
+  // 判断したときだけ出る（決定論で即決した分は出ない）。本文は出さない（A1-5）。
+  agent.ctx.events.on<{ contextId: string; reply: boolean }>("reply:judged", (p) => {
+    console.log(`[reply] ${p.reply ? "返す" : "黙る"}（${p.contextId}）`);
+  });
+  agent.ctx.events.on<{ contextId: string; error: string }>("reply:judge-failed", (p) => {
+    console.warn(`[reply] 判定できなかったので黙ります（${p.contextId}）: ${p.error}`);
+  });
+
   // CLI が閉じる（Ctrl-D / EOF）か停止シグナルまで動かし、その後 LIFO で teardown。
   //
   // **SIGTERM も受ける。** プロセスマネージャ（docker stop / systemd / dev-down）が送るのは
