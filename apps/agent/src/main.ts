@@ -93,6 +93,20 @@ function resolveMode(): Mode {
   return "dryrun";
 }
 
+/**
+ * ログに出す居場所。**そのまま Slack で開ける形**にする。
+ *
+ * contextId（チャンネル:スレッド）だけだと「このスレッドで黙った」までしか分からず、
+ * どの発言に対する判断かを追えない（実際に追えなかった）。Slack のパーマリンクは
+ * `.../archives/<channel>/p<ドットを抜いた ts>` なので、その形で出す。
+ */
+function where(p: { surfaceId: string; contextId: string; messageId?: string }): string {
+  if (!p.messageId) return p.contextId;
+  if (p.surfaceId !== "slack") return `${p.contextId} / ${p.messageId}`;
+  const channel = p.contextId.split(":")[0];
+  return `${channel}/p${p.messageId.replace(".", "")}`;
+}
+
 async function main(): Promise<void> {
   const agent = await createAgent(
     {
@@ -108,14 +122,17 @@ async function main(): Promise<void> {
   // **黙った理由が見えないと調整できない。** 3人以上のスレッドで、宛先も話題も自分ではないと
   // 判断したときだけ出る（決定論で即決した分は出ない）。本文は出さない（A1-5）。
   const JUDGEMENT_LABEL = { reply: "返す", react: "印だけ付ける", silent: "黙る" } as const;
-  agent.ctx.events.on<{ contextId: string; judgement: keyof typeof JUDGEMENT_LABEL }>(
-    "reply:judged",
-    (p) => {
-      console.log(`[reply] ${JUDGEMENT_LABEL[p.judgement] ?? p.judgement}（${p.contextId}）`);
-    },
-  );
-  agent.ctx.events.on<{ contextId: string; error: string }>("reply:judge-failed", (p) => {
-    console.warn(`[reply] 判定できなかったので黙ります（${p.contextId}）: ${p.error}`);
+  type Judged = {
+    surfaceId: string;
+    contextId: string;
+    messageId?: string;
+    judgement: keyof typeof JUDGEMENT_LABEL;
+  };
+  agent.ctx.events.on<Judged>("reply:judged", (p) => {
+    console.log(`[reply] ${JUDGEMENT_LABEL[p.judgement] ?? p.judgement}（${where(p)}）`);
+  });
+  agent.ctx.events.on<Omit<Judged, "judgement"> & { error: string }>("reply:judge-failed", (p) => {
+    console.warn(`[reply] 判定できなかったので黙ります（${where(p)}）: ${p.error}`);
   });
 
   // CLI が閉じる（Ctrl-D / EOF）か停止シグナルまで動かし、その後 LIFO で teardown。
