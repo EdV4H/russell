@@ -72,6 +72,9 @@ importers:
       '@edv4h/russell-viewer':
         specifier: workspace:*
         version: link:../viewer
+      '@edv4h/russell-worker':
+        specifier: workspace:*
+        version: link:../worker
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1
@@ -115,6 +118,9 @@ importers:
       '@edv4h/russell-plugin-memory-pg':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-memory-pg
+      '@edv4h/russell-plugin-model-claude':
+        specifier: workspace:*
+        version: link:../../plugins/russell-plugin-model-claude
       '@edv4h/russell-plugin-model-claude-code':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-model-claude-code
@@ -127,6 +133,9 @@ importers:
       '@edv4h/russell-plugin-surface-slack':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-surface-slack
+      '@edv4h/russell-shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       pg:
         specifier: ^8.13.0
         version: 8.22.0

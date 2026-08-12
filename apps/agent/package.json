@@ -32,6 +32,7 @@
     "@types/pg": "^8.11.0",
     "pg": "^8.13.0",
     "typescript": "^5.7.0",
-    "@edv4h/russell-viewer": "workspace:*"
+    "@edv4h/russell-viewer": "workspace:*",
+    "@edv4h/russell-worker": "workspace:*"
   }
 }

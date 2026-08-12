@@ -18,15 +18,24 @@
     "@edv4h/russell-plugin-audit-pg": "workspace:*",
     "@edv4h/russell-plugin-killswitch-pg": "workspace:*",
     "@edv4h/russell-plugin-memory-pg": "workspace:*",
+    "@edv4h/russell-plugin-model-claude": "workspace:*",
     "@edv4h/russell-plugin-model-claude-code": "workspace:*",
     "@edv4h/russell-plugin-routines-pg": "workspace:*",
     "@edv4h/russell-plugin-settings-pg": "workspace:*",
     "@edv4h/russell-plugin-surface-slack": "workspace:*",
+    "@edv4h/russell-shared": "workspace:*",
     "pg": "^8.13.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "@types/pg": "^8.11.0"
+  },
+  "exports": {
+    "./model": {
+      "source": "./src/model.ts",
+      "types": "./dist/model.d.ts",
+      "import": "./dist/model.js"
+    }
   }
 }

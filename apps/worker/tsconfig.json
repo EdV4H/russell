@@ -11,6 +11,9 @@
       "path": "../../packages/core"
     },
     {
+      "path": "../../packages/shared"
+    },
+    {
       "path": "../../plugins/russell-plugin-audit-pg"
     },
     {
@@ -18,6 +21,9 @@
     },
     {
       "path": "../../plugins/russell-plugin-memory-pg"
+    },
+    {
+      "path": "../../plugins/russell-plugin-model-claude"
     },
     {
       "path": "../../plugins/russell-plugin-model-claude-code"
