@@ -578,12 +578,26 @@ export async function createAgent(
     try {
       const known = mem?.glossary ? await mem.glossary() : [];
       const carrying = mem?.openTodos ? await mem.openTodos() : [];
+      // **いま書いてある内容を見せる。** 書き込みは同じ name への上書きなので、
+      // これが無いと「同じ name で出す」＝それまでに分かっていたことを消す、になる。
+      // 見せるのは**この会話に出てきた語・人だけ**（一致で引くので、全件は渡らない）。
+      const currentCards = [
+        ...(mem?.terms ? await mem.terms(msg.text) : []).map((t) => ({
+          name: t.name,
+          content: t.definition,
+        })),
+        ...(mem?.people ? await mem.people(msg.text) : []).map((p) => ({
+          name: p.name,
+          content: p.note,
+        })),
+      ];
       const req = buildDecisionRequest(
         msg.authorName ? `${msg.authorName}: ${msg.text}` : msg.text,
         replyText,
         readings,
         known,
         carrying,
+        currentCards,
       );
       decision = parseDecision((await decider.complete(req)).text);
     } catch (err) {

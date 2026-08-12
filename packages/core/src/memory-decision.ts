@@ -85,8 +85,11 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
 - 否定（「覚えなくていい」「忘れないで」）を取り違えない。「忘れないで」は forget ではない。
 - 言語は問わない。どの言語のやりとりでも同じ基準で判断する。
 - **基本は note だけ**。shelf が埋まるのは明示的に頼まれた時に限られる。
-- **すでに単語帳にある語は、新しい行を作らない。** 同じものを指すなら **name を完全に一致させる**
-  （定義を書き直したいときも同じ name で出す。上書きではなく、分かったことを足す形で書く）。
+- **すでに単語帳にある語は、新しい行を作らない。** 同じものを指すなら **name を完全に一致させる**。
+- **同じ name で出すと、書いてある内容は丸ごと置き換わる。**
+  「いま書いてある内容」を渡してあるので、更新するときは**それを踏まえて全文を書き直す**こと。
+  今日分かったことだけを書くと、**それまでに分かっていたことが消える**。
+  まだ有効なことは残し、変わったことだけ直す。何も足すことが無いなら、その語は出さない。
   表記ゆれ・略称・旧称にすぎないなら、**その語の name で出して aliases に足す**。
   「すでに単語帳にある語」の一覧を渡してあるので、必ず先に見ること。
 - **意味が完全に分からなくても、そのチーム固有の言葉だと分かるなら載せる。**
@@ -111,6 +114,9 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
 - **Slack を見れば分かることは書かない**（表示名・アイコン・タイムゾーン）。
   書くのは**一緒に働いて分かったこと**だけ。
 - **推測を事実として書かない。** 役割が推測なら書かないか、推測だと分かるように書く。
+- **書いてある内容は丸ごと置き換わる**（用語と同じ）。同じ人を出すときは、
+  「いま書いてある内容」を踏まえて全文を書き直すこと。今日分かったことだけを書くと、
+  それまでに分かっていたことが消える。
 
 ${DO_NOT_WRITE_PROMPT}`;
 
@@ -125,6 +131,12 @@ const MAX_READINGS_CHARS = 4000;
  * のは同僚として不自然なので、材料として渡す。
  */
 /** モデルに見せる既知語の上限。見出しだけなので安いが、無制限にはしない。 */
+/**
+ * 判定へ見せる「いま書いてある内容」の上限。**この会話に出てきたものだけ**を渡すので
+ * 普通は数件で、上限は暴発したときの頭打ちである。
+ */
+const MAX_CURRENT_CARDS = 10;
+
 const MAX_KNOWN_TERMS = 120;
 
 export function buildDecisionRequest(
@@ -133,6 +145,7 @@ export function buildDecisionRequest(
   readings: string[] = [],
   known: { name: string; aliases: string[] }[] = [],
   todos: { id: number; content: string; waitingFor?: string }[] = [],
+  current: { name: string; content: string }[] = [],
 ): ModelRequest {
   const material = readings.join("\n\n").slice(0, MAX_READINGS_CHARS);
   const read = material
@@ -150,9 +163,18 @@ export function buildDecisionRequest(
     .map((t) => `#${t.id} ${t.content}${t.waitingFor ? `（${t.waitingFor} の返事待ち）` : ""}`)
     .join("\n");
   const carrying = open ? `\n\n--- すでに抱えている作業 ---\n${open}` : "";
+  // **いま書いてある内容を見せる。** 書き込みは上書きなので、これが無いと
+  // 「同じ name で出す」＝これまでに分かっていたことを消す、になる（実際そうなっていた）
+  const written = current
+    .slice(0, MAX_CURRENT_CARDS)
+    .map((c) => `${c.name}: ${c.content}`)
+    .join("\n");
+  const already = written
+    ? `\n\n--- いま書いてある内容（この会話に出てきた語・人） ---\n${written}`
+    : "";
   return {
     system: INSTRUCTIONS,
-    user: `相手: ${userText}\n同僚: ${assistantText}${read}${glossary}${carrying}`,
+    user: `相手: ${userText}\n同僚: ${assistantText}${read}${glossary}${already}${carrying}`,
   };
 }
 
