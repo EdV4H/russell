@@ -21,6 +21,7 @@
     "@edv4h/russell-plugin-model-claude": "workspace:*",
     "@edv4h/russell-plugin-model-claude-code": "workspace:*",
     "@edv4h/russell-plugin-model-echo": "workspace:*",
+    "@edv4h/russell-plugin-routines-pg": "workspace:*",
     "@edv4h/russell-plugin-settings-pg": "workspace:*",
     "@edv4h/russell-plugin-surface-cli": "workspace:*",
     "@edv4h/russell-plugin-surface-slack": "workspace:*",

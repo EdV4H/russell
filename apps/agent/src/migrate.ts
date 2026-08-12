@@ -23,6 +23,7 @@ import {
 import { AUDIT_MIGRATIONS } from "@edv4h/russell-plugin-audit-pg";
 import { KILLSWITCH_MIGRATIONS } from "@edv4h/russell-plugin-killswitch-pg";
 import { MEMORY_MIGRATIONS } from "@edv4h/russell-plugin-memory-pg";
+import { ROUTINES_MIGRATIONS } from "@edv4h/russell-plugin-routines-pg";
 import { SETTINGS_MIGRATIONS } from "@edv4h/russell-plugin-settings-pg";
 
 /** スポンジプリセットが使うテーブル群。プラグインを増やしたらここに足す。 */
@@ -30,6 +31,7 @@ const SETS: MigrationSet[] = [
   AUDIT_MIGRATIONS,
   KILLSWITCH_MIGRATIONS,
   MEMORY_MIGRATIONS,
+  ROUTINES_MIGRATIONS,
   SETTINGS_MIGRATIONS,
 ];
 

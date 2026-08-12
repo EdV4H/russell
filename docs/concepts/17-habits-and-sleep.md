@@ -41,6 +41,25 @@ dispatcher はコアではなく **worker** に住み、`routines` レジスト�
   `succeeded_zero`（正常に報告事項ゼロ）を名乗れるのは全ソース取得が complete のときだけ
   （§6.2 の完全性契約。[`16-findings-and-proactivity.md`](./16-findings-and-proactivity.md)）
 
+> [!IMPORTANT] **決定（2026-08-12）: dispatcher を実装した。**
+> `pnpm --filter @edv4h/russell-worker dispatch [--watch]`（worker に住む）。
+>
+> - 予定は台帳（`routines`）に持ち、tick ごとに**実行期限を迎えたものを claim** する
+> - 二重実行の防止は2段階: claim は `FOR UPDATE SKIP LOCKED`、**論理的な一意性**は
+>   `(agent_id, routine_id, scheduled_for)` の一意制約。claim をすり抜けても実行は1件
+> - リースが切れた（heartbeat が途絶えた）実行は別のプロセスが引き取れる。
+>   引き取りのたびに `fence` が上がり、**古い実行者の書き込みは通らない**
+> - **失敗した予定時刻は進めない。** 次の tick で取り直せるようにしておく
+> - 遡る上限は14日。止まっていた期間が長いほど、古い予定の価値は下がる
+> - 最初の予定は登録した**直前の1回だけ**を候補にする（登録した瞬間に過去分が湧かない）
+>
+> **日報だけの cron を作らなかった。** 単発で作ると、定期タスクを足すときに別経路が
+> もう1つできる。日報は dispatcher に載る最初のルーティン（`journal`, `0 3 * * *`,
+> catch-up は `replay_once`——日報は日付ごとに意味があるので、溜まった分は1日ずつ書く）。
+>
+> **手で流す口も残してある**（`pnpm consolidate`）。ただし実行部は共有していて、
+> 「手動では動くが自動実行では設定が違う」という差を作らないようにしてある。
+
 > [!NOTE]
 > catch-up policy の既定が `coalesce` なのは、「動いていなかった間の分を全部やり直す」より
 > 「今の状態を1回だけ報告する」ほうが同僚らしいから。復旧の挙動まで人間らしさに接続している。

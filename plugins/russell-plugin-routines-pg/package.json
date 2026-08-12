@@ -1,0 +1,32 @@
+{
+  "name": "@edv4h/russell-plugin-routines-pg",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ルーティンの台帳と dispatcher（§5.1）。実行期限を迎えたものを claim して走らせる。",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@edv4h/russell-core": "workspace:*",
+    "@edv4h/russell-migrate": "workspace:*",
+    "@edv4h/russell-shared": "workspace:*",
+    "cron-parser": "^4.9.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.7.0"
+  }
+}

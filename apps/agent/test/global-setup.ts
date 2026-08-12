@@ -14,6 +14,8 @@ import { createMigrationPool, runMigrations } from "@edv4h/russell-migrate";
 import { AUDIT_MIGRATIONS } from "@edv4h/russell-plugin-audit-pg";
 import { KILLSWITCH_MIGRATIONS } from "@edv4h/russell-plugin-killswitch-pg";
 import { MEMORY_MIGRATIONS } from "@edv4h/russell-plugin-memory-pg";
+import { ROUTINES_MIGRATIONS } from "@edv4h/russell-plugin-routines-pg";
+import { SETTINGS_MIGRATIONS } from "@edv4h/russell-plugin-settings-pg";
 import { testDatabaseName, toTestDatabaseUrl } from "./test-db.js";
 
 export async function setup(): Promise<void> {
@@ -34,9 +36,17 @@ export async function setup(): Promise<void> {
 
   const pool = createMigrationPool(toTestDatabaseUrl(devUrl));
   try {
-    await runMigrations(pool, [AUDIT_MIGRATIONS, KILLSWITCH_MIGRATIONS, MEMORY_MIGRATIONS], {
-      through: "contract",
-    });
+    await runMigrations(
+      pool,
+      [
+        AUDIT_MIGRATIONS,
+        KILLSWITCH_MIGRATIONS,
+        MEMORY_MIGRATIONS,
+        ROUTINES_MIGRATIONS,
+        SETTINGS_MIGRATIONS,
+      ],
+      { through: "contract" },
+    );
   } finally {
     await pool.end();
   }
