@@ -54,9 +54,22 @@ Russell は同僚の Slack 発言を記憶（メモ帳・本棚・日記）に�
   "archived_hard_delete_days": 730, // 書庫(archived)の物理削除。null=しない（既定案: 24か月）
   "pinned_min_strength": 0.8,      // 「覚えておいて」ピンは長期保持（§3.4）
   "usage_ledger_days": 730,        // 使用量イベント台帳
-  "event_log": "append_only"       // 監査ログは削除しない（§3.1）
+  "event_log": "append_only"       // 監査ログは削除しない（§3.1）。退避は下記
 }
 ```
+
+> [!IMPORTANT] **決定（2026-08-12）: 監査ログは「消さない」が「外へ出す」ことはできる。**
+> `event_log` は唯一増え続けるテーブルで、埋まると
+> 「監査に書けない → Policy Gate が read 以外を deny → 応答も記憶も止まる」に連鎖する（#26）。
+> 削除経路を自分で塞いでいるため、埋まってからでは回避できない。
+>
+> **消すのではなく、先に JSONL へ書き出してから、ライブのテーブルから外す。**
+> DELETE はセッション変数 `russell.archive` が立っているときだけ通り、UPDATE と TRUNCATE は
+> 引き続き常に拒否される。退避したことは（何行をどこへ出したかを含めて）event_log に残る。
+>
+> **自動では走らせない。** 監査を減らす操作は、いつ誰がやったかが分かる形で人が行う
+> （`pnpm --filter @edv4h/russell-worker archive-events`）。書き出し先の保管期間と置き場所は
+> 下記のサインオフ対象に含める。
 
 - **退職者の扱い（パラメータ `retention.offboard_days`）**: 退職から N 日以内に本人発言由来の記憶を削除または匿名化。N の既定案は要決定。
 - **削除依頼の受付窓口**: 管理チャンネル or 指定フォーム経由で受付、承認者（[`../operations/`](../operations/)）が実行。実行は `config_version` と event_log に記録。

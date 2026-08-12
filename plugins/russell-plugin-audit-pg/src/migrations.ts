@@ -47,5 +47,34 @@ CREATE TRIGGER event_log_no_mutate
   FOR EACH STATEMENT EXECUTE FUNCTION event_log_append_only();
 `,
     },
+    {
+      /*
+       * 退避のための穴を1つだけ開ける（#26）。
+       *
+       * 方針は「**監査ログは削除しない**」（privacy-and-memory-policy）。しかし retention が
+       * 無いと単調に増え、埋まると次の連鎖が起きる:
+       *   event_log に書けない → 監査 degraded → Policy Gate が read 以外を deny（fail-closed）
+       *   → 応答も記憶書き込みも止まる
+       * **唯一増え続けるテーブルで、自分で削除経路を塞いでいる**ため、埋まると回避手段が無い。
+       *
+       * 解決は「消す」ではなく「**外へ出してから、ライブのテーブルから外す**」。
+       * そのため DELETE を**セッション変数が立っているときだけ**通す。
+       * 誤って消せないことは変わらず、退避という明示的な操作だけが通る。
+       *
+       * UPDATE と TRUNCATE は**引き続き常に拒否**する。書き換えと一括消去に正当な用途は無い。
+       */
+      id: "0002_allow_archive_delete",
+      phase: "expand",
+      sql: `
+CREATE OR REPLACE FUNCTION event_log_append_only() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'DELETE' AND current_setting('russell.archive', true) = 'on' THEN
+    RETURN NULL; -- 退避中（BEFORE ... FOR EACH STATEMENT なので NULL でも削除は進む）
+  END IF;
+  RAISE EXCEPTION 'event_log is append-only (§3.1)';
+END;
+$$ LANGUAGE plpgsql;
+`,
+    },
   ],
 };

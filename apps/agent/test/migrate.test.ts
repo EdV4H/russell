@@ -155,7 +155,8 @@ describe.skipIf(!DB)("マイグレーション（DATABASE_URL 必須）", () => 
           })),
         };
         const status = await migrationStatus(pool, [tampered]);
-        expect(status.drifted).toHaveLength(1);
+        // 本数に依存しない（マイグレーションは増える）。**書き換えた分がすべて検出される**
+        expect(status.drifted).toHaveLength(AUDIT_MIGRATIONS.migrations.length);
         await expect(assertSchemaReady(pool, [tampered])).rejects.toThrow(/変更されています/);
         await expect(runMigrations(pool, [tampered])).rejects.toThrow(/変更されています/);
       } finally {
