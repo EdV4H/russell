@@ -599,6 +599,7 @@ export async function createAgent(
     let decision: MemoryDecision;
     try {
       const known = mem?.glossary ? await mem.glossary() : [];
+      const roster = mem?.roster ? await mem.roster() : [];
       const carrying = mem?.openTodos ? await mem.openTodos() : [];
       // **いま書いてある内容を見せる。** 書き込みは同じ name への上書きなので、
       // これが無いと「同じ name で出す」＝それまでに分かっていたことを消す、になる。
@@ -620,6 +621,7 @@ export async function createAgent(
         known,
         carrying,
         currentCards,
+        roster,
       );
       decision = parseDecision((await decider.complete(req)).text);
     } catch (err) {

@@ -87,9 +87,30 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
         sensitive?: string[];
         externalIds?: string[];
       }): Promise<boolean> {
-        const name = input.name.trim();
+        const incoming = input.name.trim();
         const summary = input.summary.trim();
-        if (name === "" || summary === "") return false;
+        if (incoming === "" || summary === "") return false;
+        // **すでに呼び名として知っている名前で来たら、その行を更新する。**
+        // 一意制約は name にしか効かないので、「マルさん」で来ると「丸山」とは別の行になる
+        // （実際、同じ人がカルテに二重に載った）。判定に一覧を見せるだけでは、外したときに残る。
+        //
+        // 当てにいくのは**完全一致だけ**。部分一致で寄せると、別人を1枚のカルテに混ぜる——
+        // 二重に載るより悪い。
+        const canon = await pool.query<{ name: string }>(
+          `SELECT name FROM entities
+            WHERE agent_id = $1 AND type = $2
+              AND (lower(name) = lower($3)
+                   OR EXISTS (SELECT 1 FROM unnest(aliases) a WHERE lower(a) = lower($3)))
+            ORDER BY (lower(name) = lower($3)) DESC
+            LIMIT 1`,
+          [agentId, input.type, incoming],
+        );
+        const name = canon.rows[0]?.name ?? incoming;
+        // 見出しに寄せたときは、来た名前を呼び名として残す（呼ばれ方を失わない）
+        const aliases =
+          name.toLowerCase() === incoming.toLowerCase()
+            ? (input.aliases ?? [])
+            : [...(input.aliases ?? []), incoming];
         // 別名は**和集合で足す**。減らすのは人の操作に限る（勝手に呼び名を忘れない）
         await pool.query(
           `INSERT INTO entities (agent_id, name, type, aliases, summary, sensitive_categories, external_ids)
@@ -105,7 +126,7 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
             agentId,
             name,
             input.type,
-            input.aliases ?? [],
+            aliases,
             summary,
             input.sensitive ?? [],
             input.externalIds ?? [],
@@ -176,6 +197,14 @@ export function createPgMemoryPlugin(options: PgMemoryOptions = {}): RussellPlug
           const res = await pool.query<GlossaryEntry>(
             `SELECT name, aliases FROM entities
               WHERE agent_id = $1 AND type = 'term' ORDER BY updated_at DESC LIMIT 200`,
+            [agentId],
+          );
+          return res.rows;
+        },
+        async roster(): Promise<GlossaryEntry[]> {
+          const res = await pool.query<GlossaryEntry>(
+            `SELECT name, aliases FROM entities
+              WHERE agent_id = $1 AND type = 'person' ORDER BY updated_at DESC LIMIT 200`,
             [agentId],
           );
           return res.rows;

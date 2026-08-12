@@ -44,6 +44,27 @@ function scripted(decision: string, reply = "わかりました") {
   return { plugin, requests };
 }
 
+/** ターンごとに違う判定を返す。呼び名で書き直す流れを再現するために要る。 */
+function scriptedQueue(decisions: string[], reply = "わかりました") {
+  const requests: ModelRequest[] = [];
+  let i = 0;
+  const plugin: RussellPlugin = {
+    id: "scripted",
+    name: "scripted",
+    setup(ctx) {
+      return ctx.models.register({
+        id: "echo",
+        async complete(req) {
+          requests.push(req);
+          if (!req.system.includes("記憶係")) return { text: reply };
+          return { text: decisions[Math.min(i++, decisions.length - 1)] ?? "{}" };
+        },
+      });
+    },
+  };
+  return { plugin, requests };
+}
+
 function surface() {
   const sent: string[] = [];
   let sink: ((m: InboundMessage) => void) | undefined;
@@ -156,6 +177,64 @@ test("人についても、上書きになることを指示に書いてある",
 
   expect(decision).toContain("書いてある内容は丸ごと置き換わる");
   expect(decision).toContain("全文を書き直す");
+
+  await agent.destroy();
+});
+
+test("**呼び名で来ても、同じ人の行を更新する**（新しく作らない）", async () => {
+  // 一意なのは見出しだけなので、「マルさん」で書くと「丸山」とは別の行になる。
+  // 実際、同じ人がカルテに二重に載った
+  const CALL_HIM = JSON.stringify({
+    note: null,
+    shelf: null,
+    title: null,
+    forget: null,
+    terms: [],
+    people: [{ name: "マルさん", note: "月曜は打ち合わせが多いらしい", aliases: [] }],
+  });
+  const m = scriptedQueue([REMEMBER, CALL_HIM, NOTHING]);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("丸山です。マーケ担当です");
+  await drain();
+  s.push("マルさんの予定の話");
+  await drain();
+  s.push("それで");
+  await drain();
+
+  // 3ターン目に渡る一覧が、**1人だけ**であること（二重に載っていない）
+  const roster = m.requests.filter((r) => r.system.includes("記憶係")).at(-1)?.user ?? "";
+  const listed = roster.split("--- すでにカルテにある人 ---")[1]?.split("---")[0]?.trim() ?? "";
+  expect(listed.split("\n").filter(Boolean)).toHaveLength(1);
+  expect(listed).toContain("丸山");
+  // 呼び名は失わない
+  expect(listed).toContain("マルさん");
+
+  await agent.destroy();
+});
+
+test("すでにカルテにある人を判定に見せる（別の呼び名で新しい行を作らせない）", async () => {
+  const { agent, requests, push } = await run(REMEMBER, "丸山です。マーケ担当です");
+
+  push("ところで");
+  await drain();
+
+  const decisions = requests.filter((r) => r.system.includes("記憶係"));
+  expect(decisions.at(-1)?.user).toContain("すでにカルテにある人");
+  expect(decisions.at(-1)?.user).toContain("丸山（呼び名: 丸山さん, マルさん）");
+
+  await agent.destroy();
+});
+
+test("同じ人を新しい行にするな、と指示している", async () => {
+  const { agent, requests } = await run(NOTHING, "やあ");
+  const decision = requests.find((r) => r.system.includes("記憶係"))?.system ?? "";
+
+  expect(decision).toContain("すでにカルテにある人は、新しい行を作らない");
+  expect(decision).toContain("name は一覧にある表記に揃え");
 
   await agent.destroy();
 });

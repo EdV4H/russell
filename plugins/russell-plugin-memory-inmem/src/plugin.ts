@@ -23,6 +23,20 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
       // スレッド単位のメモ帳と、個体全体の本棚（インメモリ）
       const notesByContext = new Map<string, string[]>();
       const books: (RecalledBook & { archived?: boolean })[] = [];
+      type Card = { name: string; definition: string; aliases: string[] };
+      /**
+       * **呼び名で引いても同じ行に当てる。** 一意なのは見出しだけなので、
+       * 「マルさん」で書くと「丸山」とは別の行になる（実際に二重に載った）。
+       * 当てにいくのは完全一致だけ——部分一致で寄せると別人を混ぜる。
+       */
+      function canonicalKey(book: Map<string, Card>, name: string): string {
+        const key = name.toLowerCase();
+        if (book.has(key)) return key;
+        for (const [k, card] of book) {
+          if (card.aliases.some((a) => a.toLowerCase() === key)) return k;
+        }
+        return key;
+      }
       const termBook = new Map<string, { name: string; definition: string; aliases: string[] }>();
       const personBook = new Map<string, { name: string; definition: string; aliases: string[] }>();
       const todoList: {
@@ -57,6 +71,9 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
         },
         glossary() {
           return [...termBook.values()].map((t) => ({ name: t.name, aliases: t.aliases }));
+        },
+        roster() {
+          return [...personBook.values()].map((p) => ({ name: p.name, aliases: p.aliases }));
         },
         terms(text: string) {
           const hits = [...termBook.values()].filter((t) =>
@@ -106,12 +123,19 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
           if (name === "" || (input.definition ?? "").trim() === "") {
             return { status: "succeeded" as const, saved: false };
           }
-          const prev = termBook.get(name.toLowerCase());
-          termBook.set(name.toLowerCase(), {
-            name,
+          const key = canonicalKey(termBook, name);
+          const prev = termBook.get(key);
+          termBook.set(key, {
+            name: prev?.name ?? name,
             definition: input.definition,
-            // 別名は和集合。勝手に呼び名を忘れない
-            aliases: [...new Set([...(prev?.aliases ?? []), ...(input.aliases ?? [])])],
+            // 別名は和集合。勝手に呼び名を忘れない。見出しに寄せたときは来た名前も呼び名に残す
+            aliases: [
+              ...new Set([
+                ...(prev?.aliases ?? []),
+                ...(input.aliases ?? []),
+                ...(prev && prev.name.toLowerCase() !== name.toLowerCase() ? [name] : []),
+              ]),
+            ],
           });
           return { status: "succeeded" as const, saved: true };
         },
@@ -153,11 +177,18 @@ export function createInMemoryMemoryPlugin(): RussellPlugin {
           if (name === "" || (input.note ?? "").trim() === "") {
             return { status: "succeeded" as const, saved: false };
           }
-          const prev = personBook.get(name.toLowerCase());
-          personBook.set(name.toLowerCase(), {
-            name,
+          const key = canonicalKey(personBook, name);
+          const prev = personBook.get(key);
+          personBook.set(key, {
+            name: prev?.name ?? name,
             definition: input.note,
-            aliases: [...new Set([...(prev?.aliases ?? []), ...(input.aliases ?? [])])],
+            aliases: [
+              ...new Set([
+                ...(prev?.aliases ?? []),
+                ...(input.aliases ?? []),
+                ...(prev && prev.name.toLowerCase() !== name.toLowerCase() ? [name] : []),
+              ]),
+            ],
           });
           return { status: "succeeded" as const, saved: true };
         },

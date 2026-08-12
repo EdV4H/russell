@@ -1,12 +1,14 @@
 /**
- * 単語帳の重複を1件に畳む（運用コマンド）。
+ * 索引カード（単語帳・個人カルテ）の重複を1件に畳む（運用コマンド）。
  *
- * 判定するモデルに既存の見出し語を見せるようにして**これから増えるのは止めた**が、
- * 既に分かれてしまった行は残る。実際、同じプロジェクトが4行になっていた。
+ * 判定するモデルに既存の見出しを見せるようにして**これから増えるのは止めた**が、
+ * 既に分かれてしまった行は残る。実際、同じプロジェクトが4行になり、
+ * 同じ人が別の呼び名で二重にカルテへ載った。
  *
  *   pnpm --filter @edv4h/russell-worker merge-term -- "残す語" "畳む語" ["畳む語"...]
+ *   pnpm --filter @edv4h/russell-worker merge-term -- --person "残す人" "畳む人" [...]
  *
- * 畳む側の**別名は残す側へ引き継ぐ**（呼び名を失わない）。定義は残す側のものを使う——
+ * 畳む側の**別名は残す側へ引き継ぐ**（呼び名を失わない）。中身は残す側のものを使う——
  * どちらが正しいかは機械では決められないので、**人が残す側を選ぶ**という形にしてある。
  */
 
@@ -14,16 +16,22 @@ import { appendAuditEvent } from "@edv4h/russell-plugin-audit-pg";
 import pg from "pg";
 
 async function main(): Promise<void> {
-  const [keep, ...absorb] = process.argv
+  const args = process.argv
     .slice(2)
     .map((a) => a.trim())
     .filter(Boolean);
+  // 既定は単語帳。人のカルテも同じ形なので、型だけ切り替える
+  const type = args[0] === "--person" ? "person" : "term";
+  const label = type === "person" ? "カルテ" : "単語帳";
+  const [keep, ...absorb] = args[0] === "--person" ? args.slice(1) : args;
   if (!process.env.DATABASE_URL) {
     console.error("[merge-term] DATABASE_URL が未設定です。");
     process.exit(1);
   }
   if (!keep || absorb.length === 0) {
-    console.error('[merge-term] 使い方: merge-term -- "残す語" "畳む語" ["畳む語"...]');
+    console.error(
+      '[merge-term] 使い方: merge-term -- [--person] "残す見出し" "畳む見出し" ["畳む見出し"...]',
+    );
     process.exit(64);
   }
   const agentId = process.env.RUSSELL_AGENT_ID ?? "bob";
@@ -34,11 +42,11 @@ async function main(): Promise<void> {
     await client.query("BEGIN");
     const target = await client.query<{ id: string; name: string }>(
       `SELECT id::text, name FROM entities
-        WHERE agent_id = $1 AND type = 'term' AND lower(name) = lower($2)`,
-      [agentId, keep],
+        WHERE agent_id = $1 AND type = $3 AND lower(name) = lower($2)`,
+      [agentId, keep, type],
     );
     if (target.rowCount === 0) {
-      console.error(`[merge-term] 残す語「${keep}」が単語帳にありません。`);
+      console.error(`[merge-term] 残す見出し「${keep}」が${label}にありません。`);
       await client.query("ROLLBACK");
       process.exit(1);
     }
@@ -46,8 +54,8 @@ async function main(): Promise<void> {
     // 畳む側の name と別名を、残す側の別名に足す（呼び名を失わない）
     const moved = await client.query<{ name: string; aliases: string[] }>(
       `SELECT name, aliases FROM entities
-        WHERE agent_id = $1 AND type = 'term' AND lower(name) = ANY($2::text[])`,
-      [agentId, absorb.map((a) => a.toLowerCase())],
+        WHERE agent_id = $1 AND type = $3 AND lower(name) = ANY($2::text[])`,
+      [agentId, absorb.map((a) => a.toLowerCase()), type],
     );
     if (moved.rowCount === 0) {
       console.log("[merge-term] 畳む対象がありません。");
@@ -60,13 +68,13 @@ async function main(): Promise<void> {
       `UPDATE entities
           SET aliases = ARRAY(SELECT DISTINCT unnest(aliases || $3::text[]) EXCEPT SELECT name),
               updated_at = now()
-        WHERE agent_id = $1 AND type = 'term' AND lower(name) = lower($2)`,
-      [agentId, keep, aliases],
+        WHERE agent_id = $1 AND type = $4 AND lower(name) = lower($2)`,
+      [agentId, keep, aliases, type],
     );
     const deleted = await client.query(
       `DELETE FROM entities
-        WHERE agent_id = $1 AND type = 'term' AND lower(name) = ANY($2::text[])`,
-      [agentId, absorb.map((a) => a.toLowerCase())],
+        WHERE agent_id = $1 AND type = $3 AND lower(name) = ANY($2::text[])`,
+      [agentId, absorb.map((a) => a.toLowerCase()), type],
     );
     await client.query("COMMIT");
 
@@ -79,7 +87,7 @@ async function main(): Promise<void> {
       configVersion: process.env.RUSSELL_CONFIG_VERSION ?? "v0",
       actor: process.env.RUSSELL_OPERATOR ?? "operator",
       action: "memory.terms_merged",
-      payload: { keep, absorbed: absorb, deleted: deleted.rowCount ?? 0 },
+      payload: { type, keep, absorbed: absorb, deleted: deleted.rowCount ?? 0 },
       trustLabel: "trusted",
     });
   } catch (err) {
