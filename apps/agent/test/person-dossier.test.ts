@@ -7,7 +7,7 @@
  * **公開経路に出ないこと**の2つ。
  */
 
-import { createAgent } from "@edv4h/russell-core";
+import { ambiguousPersonMatch, createAgent } from "@edv4h/russell-core";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import type {
   InboundMessage,
@@ -284,6 +284,84 @@ test("**他人のカルテに自分を呼び名として入れない**（自分�
   await drain();
   const byAlias = requests.filter((r) => !r.system.includes("記憶係")).at(-1)?.system ?? "";
   expect(byAlias).toContain("開発を担当している");
+
+  await agent.destroy();
+});
+
+test("同じ人だと分かるなら聞かない（当てられるものを人に聞かない）", () => {
+  const roster = [{ name: "丸山", aliases: ["丸山さん", "マルさん"] }];
+
+  expect(ambiguousPersonMatch("マルさん", roster)).toBeUndefined(); // 呼び名として知っている
+  expect(ambiguousPersonMatch("丸山", roster)).toBeUndefined();
+  // 何も重ならないなら別人。聞かない（全員に聞き始めることになる）
+  expect(ambiguousPersonMatch("石川", roster)).toBeUndefined();
+  // 1文字は当てにいかない
+  expect(ambiguousPersonMatch("丸", roster)).toBeUndefined();
+  // 文字が重なっていて、呼び名としては知らない → 紛らわしい
+  expect(ambiguousPersonMatch("丸山雄介", roster)).toBe("丸山");
+});
+
+test("**紛らわしい名前は、当てずに聞く**（書かない）", async () => {
+  // 当てて書けば別人が1枚に混ざり、黙って書けば同じ人が2枚に分かれる。
+  // どちらも取り返しがつきにくいので、その場で確かめる
+  const SIMILAR = JSON.stringify({
+    note: null,
+    shelf: null,
+    title: null,
+    forget: null,
+    terms: [],
+    people: [{ name: "丸山雄介", note: "デザインにも詳しいらしい", aliases: [] }],
+  });
+  const m = scriptedQueue([REMEMBER, SIMILAR, NOTHING]);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("丸山です。マーケ担当です");
+  await drain();
+  s.push("丸山雄介さんの話");
+  await drain();
+
+  // 聞いている
+  expect(s.sent.at(-1)).toContain("丸山雄介");
+  expect(s.sent.at(-1)).toContain("丸山");
+  expect(s.sent.at(-1)).toContain("同じ方でしょうか");
+
+  // **書いていない**（答えが返るまで行を増やさない）
+  s.push("それで");
+  await drain();
+  const roster = m.requests.filter((r) => r.system.includes("記憶係")).at(-1)?.user ?? "";
+  const listed = roster.split("--- すでにカルテにある人 ---")[1]?.split("---")[0]?.trim() ?? "";
+  expect(listed.split("\n").filter(Boolean)).toHaveLength(1);
+
+  await agent.destroy();
+});
+
+test("一度聞いたら、それ以上は聞かずに書く（聞き続ける方が鬱陶しい）", async () => {
+  const SIMILAR = JSON.stringify({
+    note: null,
+    shelf: null,
+    title: null,
+    forget: null,
+    terms: [],
+    people: [{ name: "丸山雄介", note: "デザインにも詳しいらしい", aliases: [] }],
+  });
+  const m = scriptedQueue([REMEMBER, SIMILAR, SIMILAR]);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("丸山です。マーケ担当です");
+  await drain();
+  s.push("丸山雄介さんの話"); // ここで1回聞く（確認が作業として残る）
+  await drain();
+  const asked = s.sent.filter((t) => t.includes("同じ方でしょうか")).length;
+  s.push("丸山雄介さんの話の続き");
+  await drain();
+
+  expect(s.sent.filter((t) => t.includes("同じ方でしょうか"))).toHaveLength(asked);
 
   await agent.destroy();
 });
