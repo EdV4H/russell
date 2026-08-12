@@ -29,3 +29,11 @@ export {
   shouldPublishJournal,
 } from "./mode.js";
 export type { PublishDecision } from "./mode.js";
+export { runPublication } from "./publication.js";
+export type {
+  PublicationDeps,
+  PublishContext,
+  PublishOutcome,
+  PublishStep,
+  StepReport,
+} from "./publication.js";

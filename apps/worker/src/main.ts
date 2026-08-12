@@ -12,7 +12,13 @@
  *   pnpm consolidate --backfill   # 未処理のメモが残っている日を、古い順に1日ずつ書く
  */
 
-import { DO_NOT_WRITE_PROMPT, inspectSensitive, shouldPublishJournal } from "@edv4h/russell-core";
+import {
+  DO_NOT_WRITE_PROMPT,
+  type PublishStep,
+  inspectSensitive,
+  runPublication,
+  shouldPublishJournal,
+} from "@edv4h/russell-core";
 import { appendAuditEvent } from "@edv4h/russell-plugin-audit-pg";
 import { isFrozen } from "@edv4h/russell-plugin-killswitch-pg";
 import {
@@ -97,7 +103,41 @@ async function main(): Promise<void> {
   /** worker も実行モードに従う（§6.5）。投稿は external_send なので dryrun では出さない。 */
   const mode = resolveMode();
 
-  /** 日報を投稿する。投稿したか・しなかった理由は必ず記録する。 */
+  /**
+   * その段が**この日付で既に実行されたか**を監査から読む（冪等キー = 日付 × 段）。
+   *
+   * 専用のテーブルを作らないのは、**監査そのものが「何が起きたか」の記録**だから。
+   * 二重に持つと必ずズレる。
+   */
+  async function priorResult(entryDate: string, stepId: string) {
+    const res = await auditPool.query<{ status: string }>(
+      `SELECT payload->>'status' AS status FROM event_log
+        WHERE agent_id = $1 AND action = 'journal.published'
+          AND payload->>'entryDate' = $2 AND payload->>'step' = $3
+        ORDER BY ts DESC LIMIT 1`,
+      [agentId, entryDate, stepId],
+    );
+    const status = res.rows[0]?.status;
+    return status === "succeeded" || status === "unknown" || status === "rejected"
+      ? status
+      : undefined;
+  }
+
+  /** Slack へ日報を投稿する段。**装備（Notion 等）を足すときは、ここに段を増やす。** */
+  function slackStep(channel: string): PublishStep {
+    return {
+      id: "slack",
+      async deliver(ctx) {
+        const delivery = await createSlackPoster().post(
+          channel,
+          `*${ctx.entryDate} の日報*\n${ctx.narrative}`,
+        );
+        return { status: delivery.status, detail: delivery.detail };
+      },
+    };
+  }
+
+  /** 日報を配信する。投稿したか・しなかった理由は必ず記録する。 */
   async function publish(result: ConsolidationResult): Promise<void> {
     const decision = shouldPublishJournal(mode, events(result));
     if (!decision.publish) {
@@ -112,30 +152,45 @@ async function main(): Promise<void> {
       console.log("[worker] RUSSELL_JOURNAL_CHANNEL が未設定のため投稿しません。");
       return;
     }
-    let delivery: { status: string; detail?: string };
-    try {
-      delivery = await createSlackPoster().post(
-        journalChannel,
-        `*${result.entryDate} の日報*\n${result.narrative}`,
-      );
-    } catch (err) {
-      delivery = { status: "unknown", detail: String(err) };
-    }
-    // 投稿は外部への送信。**本文は監査へ入れない**（A1-5）
-    await appendAuditEvent(auditPool, {
-      agentId,
-      configVersion: process.env.RUSSELL_CONFIG_VERSION ?? "v0",
-      actor: agentId,
-      action: "journal.posted",
-      payload: {
-        entryDate: result.entryDate,
-        channel: journalChannel,
-        status: delivery.status,
-        length: result.narrative.length,
+    // 宛先は段の並び。いまは Slack 1段だが、**Notion に書いて Slack で周知**のような
+    // 依存のある配信も、段を足すだけで表せる形にしてある。
+    const steps: PublishStep[] = [slackStep(journalChannel)];
+
+    const reports = await runPublication(
+      steps,
+      { entryDate: result.entryDate, narrative: result.narrative },
+      {
+        prior: (stepId) => priorResult(result.entryDate, stepId),
+        // 投稿は外部への送信。**本文は監査へ入れない**（A1-5）
+        record: (stepId, outcome) =>
+          appendAuditEvent(auditPool, {
+            agentId,
+            configVersion: process.env.RUSSELL_CONFIG_VERSION ?? "v0",
+            actor: agentId,
+            action: "journal.published",
+            payload: {
+              entryDate: result.entryDate,
+              step: stepId,
+              status: outcome.status,
+              length: result.narrative.length,
+            },
+            trustLabel: "trusted",
+          }),
       },
-      trustLabel: "trusted",
-    });
-    console.log(`[worker] 日報を投稿しました（${delivery.status}）: ${result.entryDate}`);
+    );
+
+    for (const r of reports) {
+      if (r.status === "skipped" && r.reason === "prior_unknown") {
+        // **自動では解決しない。** 前回投稿できたか分からない状態で投げ直すと二重投稿になる
+        console.warn(
+          `[worker] ${r.stepId}: 前回の結果が不明のため配信しません（${result.entryDate}）。実際に投稿されているか確認してから、必要なら手で投稿してください。`,
+        );
+        continue;
+      }
+      console.log(
+        `[worker] ${r.stepId}: ${r.status}${r.reason ? `（${r.reason}）` : ""} — ${result.entryDate}`,
+      );
+    }
   }
 
   // 監査は worker 自身のプールで残す（コアの AuditRegistry はこのプロセスに無い）。
