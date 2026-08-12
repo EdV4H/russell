@@ -419,6 +419,47 @@ test("同じものなら新しい行を作るな、と指示している", async
   await agent.destroy();
 });
 
+test("**いま書いてある内容**を判定に見せる（上書きで消さないため）", async () => {
+  const m = scripted(DEFINE_MQL);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("MQL は見込み顧客のこと");
+  await drain();
+
+  // 2ターン目。同じ語が出てきたので、**すでに書いてある定義**が判定に渡る。
+  // 渡らないと「同じ name で出す」＝それまでに分かっていたことを消す、になる
+  s.push("エムキューエルの話の続き");
+  await drain();
+
+  const decisions = m.requests.filter((r) => r.system.includes("記憶係"));
+  expect(decisions.at(-1)?.user).toContain("いま書いてある内容");
+  expect(decisions.at(-1)?.user).toContain("MQL: ");
+
+  await agent.destroy();
+});
+
+test("上書きになることを指示に書いてある（足す形で書け、では守れない）", async () => {
+  const m = scripted(NOTHING);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("やあ");
+  await drain();
+
+  const decision = m.requests.find((r) => r.system.includes("記憶係"));
+  expect(decision?.system).toContain("丸ごと置き換わる");
+  expect(decision?.system).toContain("全文を書き直す");
+  // 何が失われるかまで書く（「気をつけて」では守れない）
+  expect(decision?.system).toContain("それまでに分かっていたことが消える");
+
+  await agent.destroy();
+});
+
 test("単語帳が空なら一覧を渡さない（無駄な行を足さない）", async () => {
   const m = scripted(NOTHING);
   const s = surface();

@@ -135,6 +135,31 @@ test("覚えた人が次のターンで文脈に入る（呼び名でも引け�
   await agent.destroy();
 });
 
+test("**すでにカルテに書いてある内容**を判定に見せる（上書きで消さないため）", async () => {
+  const { agent, requests, push } = await run(REMEMBER, "丸山です。マーケ担当です");
+
+  push("マルさん、この件どう思います？");
+  await drain();
+
+  // 判定は同じ name で出すと丸ごと置き換える。**いま書いてある内容が見えていないと、
+  // 今日分かったことだけで上書きされ、それまでの記述が消える**
+  const decisions = requests.filter((r) => r.system.includes("記憶係"));
+  expect(decisions.at(-1)?.user).toContain("いま書いてある内容");
+  expect(decisions.at(-1)?.user).toContain("Notion に詳しい");
+
+  await agent.destroy();
+});
+
+test("人についても、上書きになることを指示に書いてある", async () => {
+  const { agent, requests } = await run(NOTHING, "やあ");
+  const decision = requests.find((r) => r.system.includes("記憶係"))?.system ?? "";
+
+  expect(decision).toContain("書いてある内容は丸ごと置き換わる");
+  expect(decision).toContain("全文を書き直す");
+
+  await agent.destroy();
+});
+
 test("何を書かないかが判定の指示に入っている（ここが本体）", async () => {
   const { agent, requests } = await run(NOTHING, "やあ");
   const decision = requests.find((r) => r.system.includes("記憶係"))?.system ?? "";
