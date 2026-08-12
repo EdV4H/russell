@@ -11,6 +11,7 @@
     "forget-person": "node --env-file-if-exists=../../.env dist/forget-person.js",
     "recheck-sensitive": "node --env-file-if-exists=../../.env dist/recheck-sensitive.js",
     "merge-term": "node --env-file-if-exists=../../.env dist/merge-term.js",
+    "detach-self": "node --env-file-if-exists=../../.env dist/detach-self.js",
     "dispatch": "node --env-file-if-exists=../../.env dist/dispatch.js",
     "archive-events": "node --env-file-if-exists=../../.env dist/archive-events.js"
   },

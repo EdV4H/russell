@@ -117,6 +117,8 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
 - **すでにカルテにある人は、新しい行を作らない。** 「すでにカルテにある人」の一覧には
   呼び名も書いてあるので、**先に見ること**。「マルさん」が「丸山」の呼び名として載っていれば、
   それは同じ人である。**name は一覧にある表記に揃え**、新しく知った呼び名は aliases に足す。
+- **自分自身は書かない。** カルテは一緒に働く**人**の記録で、あなたの記録ではない。
+  自分の名前を人の呼び名に入れることもしない。
 - **書いてある内容は丸ごと置き換わる**（用語と同じ）。同じ人を出すときは、
   「いま書いてある内容」を踏まえて全文を書き直すこと。今日分かったことだけを書くと、
   それまでに分かっていたことが消える。
@@ -187,6 +189,35 @@ export function buildDecisionRequest(
     system: INSTRUCTIONS,
     user: `相手: ${userText}\n同僚: ${assistantText}${read}${glossary}${dossiers}${already}${carrying}`,
   };
+}
+
+/**
+ * すでにカルテにいる人と**紛らわしい**名前か。同じ人だと確信できないが、別人だとも言えない状態。
+ *
+ * 返すのは**既存の見出し**（聞くときに使う）。同じ人だと分かるなら `undefined`——
+ * そちらは書き込み口が呼び名で寄せる（当てられるものを人に聞かない）。
+ *
+ * 当てにいくのは**文字が重なっているとき**だけ。「丸山」と「丸山さん」は気づけるが、
+ * 「マルさん」と「丸山」は文字が重ならないので**気づけない**。そこは判定モデルが
+ * 一覧（すでにカルテにある人）を見て拾う担当で、ここは保険である。
+ */
+export function ambiguousPersonMatch(
+  name: string,
+  roster: { name: string; aliases: string[] }[],
+): string | undefined {
+  const target = name.trim().toLowerCase();
+  if (target.length < 2) return undefined; // 1文字は当てにいかない（誤爆する）
+  for (const entry of roster) {
+    const known = [entry.name, ...entry.aliases].map((k) => k.trim().toLowerCase());
+    // 完全一致は「同じ人」。聞く必要がない
+    if (known.includes(target)) return undefined;
+  }
+  for (const entry of roster) {
+    const known = [entry.name, ...entry.aliases].map((k) => k.trim().toLowerCase());
+    const overlap = known.some((k) => k.length >= 2 && (k.includes(target) || target.includes(k)));
+    if (overlap) return entry.name;
+  }
+  return undefined;
 }
 
 /** 空白だけ・記号だけの「書いたつもり」を弾く。 */
