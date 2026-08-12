@@ -13,6 +13,7 @@
 import { assertAutoMigrateAllowed, assertSchemaReady, runMigrations } from "@edv4h/russell-migrate";
 import type { AgentContext, AuditEvent, RussellPlugin } from "@edv4h/russell-shared";
 import pg from "pg";
+import { beat } from "./heartbeat.js";
 import { AUDIT_MIGRATIONS } from "./migrations.js";
 
 export interface PgAuditOptions {
@@ -53,6 +54,22 @@ export function createPgAuditPlugin(options: PgAuditOptions = {}): RussellPlugin
         throw err;
       }
 
+      /**
+       * 生存の記録（#78）。**agent は event 駆動で止まらない**ので、周期で打つ。
+       *
+       * これが無いと「プロセスは生きているが Slack と切れている」を誰も見つけられない。
+       * 打つのは自分、**見るのは dispatcher**（監視するものが自分自身を監視できないため）。
+       */
+      const agentId = ctx.runtime.agentId;
+      await beat(pool, agentId, "agent").catch(() => {});
+      const beatTimer = setInterval(
+        () => {
+          void beat(pool, agentId, "agent").catch(() => {});
+        },
+        5 * 60 * 1000,
+      );
+      beatTimer.unref();
+
       const unregister = ctx.audit.registerSink({
         id: "audit-pg",
         async write(event: AuditEvent) {
@@ -73,6 +90,7 @@ export function createPgAuditPlugin(options: PgAuditOptions = {}): RussellPlugin
       });
 
       return async () => {
+        clearInterval(beatTimer);
         unregister();
         await pool.end();
       };

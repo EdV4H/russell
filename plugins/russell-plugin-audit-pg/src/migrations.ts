@@ -76,5 +76,27 @@ END;
 $$ LANGUAGE plpgsql;
 `,
     },
+    {
+      /*
+       * 死活（#78）。**監査と同じ関心**——何が起きているかを外から見るためのもの。
+       *
+       * event_log に heartbeat を積まない。5分ごとに1行入れると1日288行になり、
+       * #26 で片付けた「増え続ける」問題を自分で作り直すことになる。
+       * **1コンポーネント1行を上書き**する形にして、行が増えないようにする。
+       */
+      id: "0003_heartbeats",
+      phase: "expand",
+      sql: `
+CREATE TABLE IF NOT EXISTS component_heartbeats (
+  agent_id TEXT NOT NULL,
+  -- 'agent'（Slack の常駐）/ 'dispatcher'（定期実行）
+  component TEXT NOT NULL,
+  beat_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- 途絶えたことを通知済みか。**毎 tick 通知しない**ための状態
+  alerted BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (agent_id, component)
+);
+`,
+    },
   ],
 };

@@ -10,7 +10,7 @@
  */
 
 import type { RunStatus } from "@edv4h/russell-core";
-import { appendAuditEvent } from "@edv4h/russell-plugin-audit-pg";
+import { appendAuditEvent, beat, takeStale } from "@edv4h/russell-plugin-audit-pg";
 import { isFrozen } from "@edv4h/russell-plugin-killswitch-pg";
 import {
   claimRun,
@@ -19,6 +19,7 @@ import {
   heartbeat,
   loadRoutines,
 } from "@edv4h/russell-plugin-routines-pg";
+import { createSlackPoster } from "@edv4h/russell-plugin-surface-slack";
 import pg from "pg";
 import { runJournalRoutine } from "./journal-routine.js";
 
@@ -33,7 +34,41 @@ const HANDLERS: Record<
   journal: runJournalRoutine,
 };
 
+/**
+ * 途絶えを管理チャンネルへ知らせる。**Slack が死んでいたらログにだけ残る**——
+ * 知らせられないこと自体は止める理由にならない。
+ */
+async function reportStale(pool: pg.Pool, agentId: string): Promise<void> {
+  // 自分の途絶えは自分では気づけない。**agent 側が見る**（お互いを見る形）
+  const stale = await takeStale(pool, agentId, ["dispatcher"]);
+  for (const s of stale) {
+    const minutes = Math.round(s.ageMs / 60000);
+    const text = `:warning: ${agentId} の \`${s.component}\` が ${minutes} 分応答していません（最後: ${s.beatAt.toISOString()}）`;
+    console.warn(`[dispatch] ${text}`);
+    await appendAuditEvent(pool, {
+      agentId,
+      configVersion: process.env.RUSSELL_CONFIG_VERSION ?? "v0",
+      actor: agentId,
+      action: "liveness.stale",
+      payload: { component: s.component, ageMs: s.ageMs },
+      trustLabel: "trusted",
+    });
+    const channel = process.env.RUSSELL_ADMIN_CHANNEL;
+    if (!channel) continue;
+    try {
+      await createSlackPoster().post(channel, text);
+    } catch (err) {
+      // 知らせられないことは記録して進む。**通知の失敗で監視を止めない**
+      console.warn(`[dispatch] 管理チャンネルへ知らせられませんでした: ${String(err)}`);
+    }
+  }
+}
+
 async function tick(pool: pg.Pool, agentId: string): Promise<void> {
+  // **生存の記録は凍結中でも打つ。** 止まっているのと死んでいるのは別（止めたのは人の判断）
+  await beat(pool, agentId, "dispatcher");
+  await reportStale(pool, agentId);
+
   // 自発行動そのものなので、凍結中は走らせない（§12-4）。
   // **tick ごとに見る**——起動時に1回見るだけだと、発動しても止まらない。
   if (await isFrozen(agentId)) return;
