@@ -41,35 +41,44 @@ export function toMessages(req: ModelRequest): Anthropic.MessageParam[] {
   ];
 }
 
-export function createClaudeModelPlugin(options: ClaudeModelOptions = {}): RussellPlugin {
+/**
+ * ModelProvider だけを作る。**worker のようにコアの外にいるプロセス**が、
+ * プラグイン機構を通さずにモデルを呼びたいときに使う（夜間バッチ・dispatcher）。
+ *
+ * 切り出してあるのは、**agent と worker でモデル経路が食い違わないようにする**ため。
+ * 以前は worker だけが開発用の CLI を直叩きしていて、本番では日報が書けない状態だった。
+ */
+export function createClaudeProvider(options: ClaudeModelOptions = {}): ModelProvider {
   const providerId = options.id ?? "claude";
   const model = options.model ?? "claude-sonnet-5";
-  const maxTokens = options.maxTokens ?? 2048;
+  const maxTokens = options.maxTokens ?? 4096;
+  const client = new Anthropic(options.apiKey ? { apiKey: options.apiKey } : {});
 
+  return {
+    id: providerId,
+    async complete(req: ModelRequest): Promise<ModelResponse> {
+      const res = await client.messages.create({
+        model,
+        max_tokens: maxTokens,
+        system: req.system,
+        messages: toMessages(req),
+      });
+      return {
+        text: res.content
+          .filter((b): b is Anthropic.TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join(""),
+      };
+    },
+  };
+}
+
+export function createClaudeModelPlugin(options: ClaudeModelOptions = {}): RussellPlugin {
   return {
     id: "russell-plugin-model-claude",
     name: "Claude Model",
     setup(ctx: AgentContext) {
-      const client = new Anthropic(options.apiKey ? { apiKey: options.apiKey } : {});
-
-      const provider: ModelProvider = {
-        id: providerId,
-        async complete(req: ModelRequest): Promise<ModelResponse> {
-          const res = await client.messages.create({
-            model,
-            max_tokens: maxTokens,
-            system: req.system,
-            messages: toMessages(req),
-          });
-          const text = res.content
-            .filter((b): b is Anthropic.TextBlock => b.type === "text")
-            .map((b) => b.text)
-            .join("");
-          return { text };
-        },
-      };
-
-      const off = ctx.models.register(provider);
+      const off = ctx.models.register(createClaudeProvider(options));
       return () => off();
     },
   };

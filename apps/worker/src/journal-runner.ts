@@ -20,10 +20,10 @@ import {
   type OrganizePlan,
   runConsolidation,
 } from "@edv4h/russell-plugin-memory-pg";
-import { createClaudeCodeProvider } from "@edv4h/russell-plugin-model-claude-code";
 import { JOURNAL_CHANNEL_KEY, readSettingWithDefault } from "@edv4h/russell-plugin-settings-pg";
 import { createSlackPoster } from "@edv4h/russell-plugin-surface-slack";
 import type pg from "pg";
+import { resolveModelProvider } from "./model.js";
 
 export type Mode = "off" | "dryrun" | "live";
 
@@ -58,15 +58,18 @@ export async function createJournalRunner(pool: pg.Pool, agentId: string): Promi
 
   // モデルが用意できなければ整理も日記の文章も行わず、決定論的な処理だけが走る。
   // **バッチ全体は止めない**（記録の欠落を作らない）。
-  let organize: ((req: { system: string; user: string }) => Promise<string>) | undefined;
-  try {
-    const provider = createClaudeCodeProvider({
-      model: process.env.RUSSELL_MEMORY_MODEL ?? "sonnet",
-    });
-    organize = async (req) => (await provider.complete(req)).text;
-  } catch (err) {
-    console.warn(`[worker] モデルが用意できないため、整理と日記の生成は行いません: ${String(err)}`);
+  const resolved = resolveModelProvider();
+  if (resolved.route === "none") {
+    console.warn(
+      `[worker] モデル経路がありません（${resolved.reason}）。整理と日記の生成は行いません。`,
+    );
+  } else {
+    console.log(`[worker] モデル経路: ${resolved.route}`);
   }
+  const provider = resolved.provider;
+  const organize = provider
+    ? async (req: { system: string; user: string }) => (await provider.complete(req)).text
+    : undefined;
 
   // **設定（DB）が先、env はフォールバック。** どこへ出すかは Slack から変えられる。
   const journalChannel =

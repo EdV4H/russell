@@ -46,6 +46,27 @@ services:
     env_file:
       - path: .env
         required: false
+    # 落ちたら戻す（#27）。**サーバーでも同じことが要る**ので、ローカルで先に形を作る
+    restart: unless-stopped
+
+  # 定期実行（§5.1）。日報も週次レビューも、cron を台帳に足すだけで増える。
+  # **app とは別プロセス**にする——Socket Mode の常駐と夜間バッチは落ち方が違う。
+  dispatcher:
+    build: .
+    command: ["node", "apps/worker/dist/dispatch.js", "--watch"]
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://russell:russell@db:5432/russell
+      RUSSELL_MODE: dryrun
+      RUSSELL_KILL: "0"
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
 
 volumes:
   russell-pgdata:
