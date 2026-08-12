@@ -35,3 +35,4 @@ export type { SlackPoster, SlackPosterOptions } from "./poster.js";
 export { JOURNAL_CHANNEL_SETTING } from "./journal-setting.js";
 export { createNameResolver, mentionedIds } from "./names.js";
 export type { NameResolver } from "./names.js";
+export { createTextMemo, defaultReactionEmoji, pickReactionEmoji } from "./reactions.js";

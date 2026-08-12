@@ -41,15 +41,11 @@ import {
 } from "./inbound.js";
 import { operatorCheckFromEnv, runRussellCommand } from "./killswitch-command.js";
 import { createNameResolver, mentionedIds } from "./names.js";
+import { createTextMemo, defaultReactionEmoji, pickReactionEmoji } from "./reactions.js";
 
 /** リアクションの意味 → Slack の絵文字名。何で表すかは通信面の裁量（§10.1）。 */
 /** DM など、スレッドではない文脈で遡る件数。 */
 const MAX_HISTORY = 20;
-
-const REACTION_EMOJI: Record<ReactionRequest["kind"], string> = {
-  noted: "memo", // 📝「メモしました」
-  acknowledged: "eyes", // 👀「読みました」。返すほどではないが、居ることは示す
-};
 
 export interface SlackSurfaceOptions {
   botToken?: string;
@@ -103,6 +99,11 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
        * すれば戻る）。DB に置けば残せるが、テーブルが1つ増える。P0 の範囲ではこれで足りる。
        */
       const activeThreads = new Set<string>();
+      /**
+       * 受け取った発言の本文の控え。**絵文字を選ぶためだけに使う**（`reactions.ts`）。
+       * `react()` には id しか渡ってこないので、ここで覚えておかないと文面が分からない。
+       */
+      const textMemo = createTextMemo();
       /** listener の context からしか取れないので、最初に見たものを控えて capability から使う。 */
       const botUserIdRef: { value?: string } = {};
 
@@ -167,7 +168,13 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
 
       const unregister = ctx.surfaces.register({
         id: "slack",
-        async start(sink) {
+        async start(rawSink) {
+          // 流す前に本文を控える。**リアクションの絵文字を選ぶためだけ**の控えなので、
+          // 記憶でも監査でもない（プロセス内・上限つき・再起動で消える）。
+          const sink = (m: InboundMessage) => {
+            textMemo.remember(m.messageId, m.text);
+            rawSink(m);
+          };
           // @mention
           app.event("app_mention", async ({ event, context }) => {
             botUserIdRef.value ??= context.botUserId;
@@ -308,21 +315,35 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
             console.log(`[slack] 積み残しの確認: ${skipped}件の会話は読めませんでした（続行）`);
           }
           if (debug) console.log(`[slack] 積み残し ${found.length}件`);
+          for (const m of found) textMemo.remember(m.messageId, m.text);
           return found;
         },
         async react(req: ReactionRequest): Promise<DeliveryResult> {
           const { channel } = parseContextId(req.contextId);
+          const add = async (name: string) => {
+            await app.client.reactions.add({ channel, timestamp: req.messageId, name });
+          };
+          const chosen = pickReactionEmoji(req.kind, textMemo.get(req.messageId));
           try {
-            await app.client.reactions.add({
-              channel,
-              timestamp: req.messageId,
-              name: REACTION_EMOJI[req.kind],
-            });
+            await add(chosen);
             return { status: "succeeded" };
           } catch (err) {
             // 既に付いている（already_reacted）は成功と同じ。それ以外は結果を返して監査に残す。
             const detail = err instanceof Error ? err.message : String(err);
             if (detail.includes("already_reacted")) return { status: "succeeded" };
+            // **選んだ名前が無いだけなら、既定へ落として付け直す。**
+            // 絵文字を選り好みした結果、何も付かなくなるのは本末転倒
+            const fallback = defaultReactionEmoji(req.kind);
+            if (detail.includes("invalid_name") && chosen !== fallback) {
+              try {
+                await add(fallback);
+                return { status: "succeeded" };
+              } catch (err2) {
+                const d2 = err2 instanceof Error ? err2.message : String(err2);
+                if (d2.includes("already_reacted")) return { status: "succeeded" };
+                return { status: "unknown", detail: d2 };
+              }
+            }
             return { status: "unknown", detail };
           }
         },
