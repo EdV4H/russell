@@ -448,6 +448,10 @@ export async function createAgent(
       // 実際に何を書き留めるかは**この返答の後**に決まる（ADR 0003）。返答の時点では
       // 1件も書かれていないので、「書いておきました」と実績として語ると必ず嘘になる。
       // 実際、企画書を読んだ回で20語を列挙したが、保存されたのは5件だった。
+      // 相手が誰か分からないまま丁寧に振る舞おうとして、**存在しない名前を作った**（実測）。
+      // 分からないことを分からないままにする方が、当てるより常に良い。
+      "相手の名前が分からないときは、**名前で呼ばないでください**。知らない名前を作らないこと。" +
+      "誰と話しているか分からないなら、そのまま「はじめまして」と言えば足ります。" +
       "記憶への書き込みは、この返答を送った後に行われます。**何を書き留めたかを列挙しないでください。**" +
       "「書いておきました」ではなく「書き留めておきます」と言い、件数や内訳を断定しないこと。" +
       "何が残ったかは本人が単語帳や本棚を見れば分かります。";
@@ -573,7 +577,13 @@ export async function createAgent(
     try {
       const known = mem?.glossary ? await mem.glossary() : [];
       const carrying = mem?.openTodos ? await mem.openTodos() : [];
-      const req = buildDecisionRequest(msg.text, replyText, readings, known, carrying);
+      const req = buildDecisionRequest(
+        msg.authorName ? `${msg.authorName}: ${msg.text}` : msg.text,
+        replyText,
+        readings,
+        known,
+        carrying,
+      );
       decision = parseDecision((await decider.complete(req)).text);
     } catch (err) {
       events.emit("memory:decision-failed", { contextId: msg.contextId, error: String(err) });
@@ -810,7 +820,9 @@ export async function createAgent(
     ]
       .filter(Boolean)
       .join("\n");
-    const system = `${personaPrompt()}\n${memoryBlock}`;
+    // 誰と話しているかを渡す。**名前が引けたときだけ**——引けないのに埋めると嘘になる
+    const speaker = msg.authorName ? `いま話している相手: ${msg.authorName}` : "";
+    const system = [personaPrompt(), speaker, memoryBlock].filter(Boolean).join("\n");
 
     // モデル呼び出し（provider はプラグイン）。
     // これは外部 I/O（会話がプロセス外へ出て課金される）なので、他の副作用と同じく

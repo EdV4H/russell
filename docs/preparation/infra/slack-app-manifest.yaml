@@ -48,6 +48,9 @@ oauth_config:
       - channels:read
       - groups:read
       - im:read
+      # ★ 相手の名前を引く（users.info）。無いと個体は相手を user id でしか認識できず、
+      #    丁寧に振る舞おうとして**存在しない名前を作る**（実測）。
+      - users:read
 
 settings:
   event_subscriptions:

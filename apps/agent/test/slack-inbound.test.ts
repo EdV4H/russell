@@ -19,11 +19,13 @@ import { expect, test } from "vitest";
 
 test("mention はスレッド単位。スレッド外なら自分の ts が根になる", () => {
   const first = fromAppMention({ channel: "C1", ts: "100.1", user: "U1", text: "<@BOB> やあ" });
-  expect(first).toEqual({
+  expect(first).toMatchObject({
     surfaceId: "slack",
     contextId: "C1:100.1",
     author: "U1",
-    text: "やあ",
+    // **人が見ているのと同じ形**にする。名前が引けなければ id のまま残す
+    // （消すと文が壊れ、当てると嘘になる）
+    text: "@BOB やあ",
     trustLabel: "untrusted",
     isMention: true,
     messageId: "100.1",

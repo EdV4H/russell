@@ -40,6 +40,7 @@ import {
   parseContextId,
 } from "./inbound.js";
 import { operatorCheckFromEnv, runRussellCommand } from "./killswitch-command.js";
+import { createNameResolver, mentionedIds } from "./names.js";
 
 /** リアクションの意味 → Slack の絵文字名。何で表すかは通信面の裁量（§10.1）。 */
 /** DM など、スレッドではない文脈で遡る件数。 */
@@ -107,6 +108,19 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
       /** 参加していないと分かったスレッド。毎回 API を叩かないための否定キャッシュ。 */
       const notMine = new Set<string>();
 
+      /**
+       * その発言に出てくる人の名前を引く（発言者 + mention されている人）。
+       *
+       * **人が見ているのと同じものを見せる**ため。id のままだと、個体は相手が誰か
+       * 分からないまま会話し、実際に存在しない名前を作った。
+       */
+      const nameResolver = createNameResolver(app.client);
+      async function namesFor(text?: string, author?: string): Promise<Map<string, string>> {
+        const ids = [...mentionedIds(text ?? ""), ...(author ? [author] : [])];
+        if (ids.length === 0) return new Map();
+        return await nameResolver.resolve(ids);
+      }
+
       /** そのスレッド/DM の発言列を取る。取れなければ空。 */
       async function fetchMessages(contextId: string): Promise<SlackHistoryMessage[]> {
         const { channel, thread } = parseContextId(contextId);
@@ -157,7 +171,8 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
           app.event("app_mention", async ({ event, context }) => {
             botUserIdRef.value ??= context.botUserId;
             // biome-ignore lint/suspicious/noExplicitAny: Bolt の event union は広い。解釈は inbound.ts に集約。
-            sink(fromAppMention(event as any));
+            const e = event as any;
+            sink(fromAppMention(e, await namesFor(e.text, e.user)));
           });
           // キルスイッチ（§12-4 レベル1/2）。認知ループを通さず、ここで直接処理する——
           // 「止めろ」がモデル呼び出しや Policy Gate に依存していては、暴走時に効かない。
@@ -196,7 +211,8 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
           app.message(async ({ message, context }) => {
             // biome-ignore lint/suspicious/noExplicitAny: Bolt の message union は広い。解釈は inbound.ts に集約。
             const m = message as any;
-            const dm = fromDirectMessage(m);
+            const names = await namesFor(m?.text, m?.user);
+            const dm = fromDirectMessage(m, names);
             if (dm) {
               if (debug) console.log(`[slack] 採用 dm ${dm.contextId}`);
               sink(dm);
@@ -208,6 +224,7 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
               excludedChannels,
               activeThreads,
               botUserId: context.botUserId,
+              names,
             };
             let seen = inspectChannelMessage(m, follow);
             // 知らないスレッドなら Slack に聞く。自分が発言していれば会話に戻る（ADR 0001）。
