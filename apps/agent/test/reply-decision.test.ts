@@ -306,6 +306,25 @@ test("止まっているときは判定モデルを呼ばない（凍結の判�
   expect(m.requests.some((r) => r.system.includes("口を開くべきか"))).toBe(false);
 });
 
+test("判断の記録には、どの発言かまで入る（スレッドだけでは追えない）", async () => {
+  const m = judgeModel("no");
+  const s = threadSurface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  const seen: { contextId: string; messageId?: string }[] = [];
+  agent.ctx.events.on<{ contextId: string; messageId?: string }>("reply:judged", (p) => {
+    seen.push(p);
+  });
+  s.push("B-san の方が詳しいと思う");
+  await drain2();
+  await agent.destroy();
+
+  expect(seen).toHaveLength(1);
+  expect(seen[0]?.messageId).toBe("m1");
+});
+
 test("名指しなら判定そのものを飛ばす（無駄に呼ばない）", async () => {
   const { sent, requests } = await runThread("no", "お願い", true);
 

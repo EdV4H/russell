@@ -802,10 +802,22 @@ export async function createAgent(
     try {
       const answer = await judge.complete(buildReplyJudgeRequest(ctx));
       const judgement = parseReplyJudgement(answer.text);
-      events.emit("reply:judged", { contextId: msg.contextId, judgement });
+      // **どの発言に対する判断かまで出す。** contextId はスレッドなので、
+      // それだけでは「このスレッドで黙った」までしか分からない（実際に辿れなかった）
+      events.emit("reply:judged", {
+        surfaceId: msg.surfaceId,
+        contextId: msg.contextId,
+        messageId: msg.messageId,
+        judgement,
+      });
       return judgement;
     } catch (err) {
-      events.emit("reply:judge-failed", { contextId: msg.contextId, error: String(err) });
+      events.emit("reply:judge-failed", {
+        surfaceId: msg.surfaceId,
+        contextId: msg.contextId,
+        messageId: msg.messageId,
+        error: String(err),
+      });
       return "silent"; // 読めないときは黙る
     }
   }
