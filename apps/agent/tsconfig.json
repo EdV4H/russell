@@ -41,6 +41,9 @@
       "path": "../../plugins/russell-plugin-model-echo"
     },
     {
+      "path": "../../plugins/russell-plugin-routines-pg"
+    },
+    {
       "path": "../../plugins/russell-plugin-settings-pg"
     },
     {

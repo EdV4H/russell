@@ -10,7 +10,8 @@
     "consolidate": "node --env-file-if-exists=../../.env dist/main.js",
     "forget-person": "node --env-file-if-exists=../../.env dist/forget-person.js",
     "recheck-sensitive": "node --env-file-if-exists=../../.env dist/recheck-sensitive.js",
-    "merge-term": "node --env-file-if-exists=../../.env dist/merge-term.js"
+    "merge-term": "node --env-file-if-exists=../../.env dist/merge-term.js",
+    "dispatch": "node --env-file-if-exists=../../.env dist/dispatch.js"
   },
   "dependencies": {
     "@edv4h/russell-core": "workspace:*",
@@ -18,6 +19,7 @@
     "@edv4h/russell-plugin-killswitch-pg": "workspace:*",
     "@edv4h/russell-plugin-memory-pg": "workspace:*",
     "@edv4h/russell-plugin-model-claude-code": "workspace:*",
+    "@edv4h/russell-plugin-routines-pg": "workspace:*",
     "@edv4h/russell-plugin-settings-pg": "workspace:*",
     "@edv4h/russell-plugin-surface-slack": "workspace:*",
     "pg": "^8.13.0"

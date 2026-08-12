@@ -37,3 +37,5 @@ export type {
   PublishStep,
   StepReport,
 } from "./publication.js";
+export { leaseExpired, resolveCatchup } from "./schedule.js";
+export type { CatchupPolicy, DueOptions, RunStatus } from "./schedule.js";
