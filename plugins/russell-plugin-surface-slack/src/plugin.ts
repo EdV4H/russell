@@ -29,7 +29,7 @@ import type {
 } from "@edv4h/russell-shared";
 import { CONVERSATION_SERVICE, KILL_SWITCH_SERVICE, SETTINGS_SERVICE } from "@edv4h/russell-shared";
 import bolt from "@slack/bolt";
-import { pendingReply, withinWindow } from "./catchup.js";
+import { findPendingMessages, pendingReply, withinWindow } from "./catchup.js";
 import { type SlackHistoryMessage, hasOwnMessage, toTurns } from "./conversation.js";
 import {
   allowedChannelsFromEnv,
@@ -275,70 +275,36 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
          * 窓と件数の両方で必ず頭を打つようにしてある。**取りこぼしより叩きすぎの方が事故になる。**
          */
         async pendingMessages({ since, limit }): Promise<InboundMessage[]> {
-          const found: InboundMessage[] = [];
-          try {
-            const convos = await app.client.users.conversations({
-              types: "public_channel,private_channel,im",
-              exclude_archived: true,
-              limit: 200,
-            });
-            const oldest = String(Math.floor(since.getTime() / 1000));
-
-            for (const c of convos.channels ?? []) {
-              if (found.length >= limit) break;
-              const channel = c.id;
-              if (!channel) continue;
-              const isDm = c.is_im === true;
-              if (!isDm && excludedChannels?.has(channel)) continue;
-              if (!isDm && allowedChannels && !allowedChannels.has(channel)) continue;
-
-              const history = await app.client.conversations.history({
+          // 探し方は catchup.ts（テストできる形に切ってある）。ここは実クライアントを渡すだけ。
+          const { found, skipped } = await findPendingMessages({
+            since,
+            limit,
+            botUserId: botUserIdRef.value,
+            allowedChannels,
+            excludedChannels,
+            names: (text, author) => namesFor(text, author),
+            listConversations: async () => {
+              const res = await app.client.users.conversations({
+                types: "public_channel,private_channel,im",
+                exclude_archived: true,
+                limit: 200,
+              });
+              return (res.channels ?? []).map((c) => ({ id: c.id, isDm: c.is_im === true }));
+            },
+            history: async (channel, oldest) => {
+              const res = await app.client.conversations.history({
                 channel,
                 oldest,
                 limit: MAX_HISTORY,
               });
-              const messages = (history.messages ?? []) as SlackHistoryMessage[];
-
-              // 候補のやりとり。DM はチャンネル直下、チャンネルはスレッド単位（ADR 0002）。
-              const contexts = isDm
-                ? [`${channel}:`]
-                : [
-                    ...new Set(
-                      messages
-                        // biome-ignore lint/suspicious/noExplicitAny: history の生要素。thread_ts は型に無い
-                        .map((m) => (m as any).thread_ts as string | undefined)
-                        .filter((t): t is string => Boolean(t)),
-                    ),
-                  ].map((t) => `${channel}:${t}`);
-
-              for (const contextId of contexts) {
-                if (found.length >= limit) break;
-                const thread = await fetchMessages(contextId);
-                const pending = pendingReply(thread, botUserIdRef.value);
-                // 古すぎるものは拾わない。3日前の話に今さら返すのは回復ではなく事故に見える
-                if (!pending || !withinWindow(pending.messageId, since)) continue;
-                found.push({
-                  surfaceId: "slack",
-                  contextId,
-                  author: pending.author,
-                  text: pending.text,
-                  trustLabel: "untrusted",
-                  isMention: true, // 呼ばれた扱い（自分が関与しているやりとりなので）
-                  messageId: pending.messageId,
-                });
-                if (!isDm) activeThreads.add(contextId);
-              }
-            }
-          } catch (err) {
-            // 拾い直しに失敗しても通常の受信は動く。黙らないようにログだけ残す。
-            // **何をすれば直るかまで書く。** 権限不足は設定で直せるのに、
-            // メッセージが「missing_scope」だけだと運用者が何を足すか分からない。
-            const detail = err instanceof Error ? err.message : String(err);
-            console.warn(
-              detail.includes("missing_scope")
-                ? `[slack] 積み残しの確認には ${CATCHUP_SCOPES.join(" / ")} が要ります（Slack アプリに追加して再インストール）。通常の受信・返信には影響しません。`
-                : `[slack] 積み残しの確認に失敗: ${detail}`,
-            );
+              return (res.messages ?? []) as SlackHistoryMessage[];
+            },
+            messages: (contextId) => fetchMessages(contextId),
+            onJoined: (contextId) => activeThreads.add(contextId),
+          });
+          // **読めなかったことを黙らない。** 0件が「無い」なのか「見られなかった」なのかは別物
+          if (skipped > 0) {
+            console.log(`[slack] 積み残しの確認: ${skipped}件の会話は読めませんでした（続行）`);
           }
           if (debug) console.log(`[slack] 積み残し ${found.length}件`);
           return found;

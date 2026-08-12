@@ -11,6 +11,7 @@
  * 二重に返信するか、永久に返信しないかのどちらかになる。
  */
 
+import type { InboundMessage } from "@edv4h/russell-shared";
 import type { SlackHistoryMessage } from "./conversation.js";
 import { stripMention } from "./inbound.js";
 
@@ -75,4 +76,91 @@ export function withinWindow(ts: string | undefined, since: Date): boolean {
   const seconds = Number.parseFloat(ts);
   if (!Number.isFinite(seconds)) return false;
   return seconds * 1000 >= since.getTime();
+}
+
+/** 探すのに必要なものだけ。**実クライアントを持ち込まない**ので、そのままテストできる。 */
+export interface PendingSearchDeps {
+  since: Date;
+  limit: number;
+  botUserId?: string;
+  allowedChannels?: ReadonlySet<string>;
+  excludedChannels?: ReadonlySet<string>;
+  listConversations(): Promise<{ id?: string; isDm: boolean }[]>;
+  history(channel: string, oldest: string): Promise<SlackHistoryMessage[]>;
+  messages(contextId: string): Promise<SlackHistoryMessage[]>;
+  names(text: string, author?: string): Promise<Map<string, string>>;
+  onJoined?(contextId: string): void;
+}
+
+/**
+ * 返信し忘れているやりとりを探す。
+ *
+ * **1つ読めないだけで全部止めない。** 実データでは読めない会話が必ず混ざる
+ * （アーカイブ、消えたチャンネル、削除済みユーザーとの DM）。実際 `channel_not_found` で
+ * 確認が丸ごと止まっていた。0件が「無い」なのか「見られなかった」なのかは別物なので、
+ * 読めなかった数は必ず報告する。
+ */
+export async function findPendingMessages(
+  deps: PendingSearchDeps,
+): Promise<{ found: InboundMessage[]; skipped: number }> {
+  const found: InboundMessage[] = [];
+  let skipped = 0;
+  const oldest = String(Math.floor(deps.since.getTime() / 1000));
+
+  for (const convo of await deps.listConversations()) {
+    if (found.length >= deps.limit) break;
+    const channel = convo.id;
+    if (!channel) continue;
+    if (!convo.isDm && deps.excludedChannels?.has(channel)) continue;
+    if (!convo.isDm && deps.allowedChannels && !deps.allowedChannels.has(channel)) continue;
+
+    let history: SlackHistoryMessage[];
+    try {
+      history = await deps.history(channel, oldest);
+    } catch {
+      skipped++;
+      continue;
+    }
+
+    // やりとりの単位。DM はチャンネル直下、チャンネルはスレッド単位（ADR 0002）
+    const contexts = convo.isDm
+      ? [`${channel}:`]
+      : [
+          ...new Set(
+            history
+              // biome-ignore lint/suspicious/noExplicitAny: history の生要素。thread_ts は型に無い
+              .map((m) => (m as any).thread_ts as string | undefined)
+              .filter((t): t is string => Boolean(t)),
+          ),
+        ].map((t) => `${channel}:${t}`);
+
+    for (const contextId of contexts) {
+      if (found.length >= deps.limit) break;
+      let thread: SlackHistoryMessage[];
+      try {
+        thread = await deps.messages(contextId);
+      } catch {
+        skipped++;
+        continue;
+      }
+      const pending = pendingReply(thread, deps.botUserId);
+      // 古すぎるものは拾わない。3日前の話に今さら返すのは回復ではなく事故に見える
+      if (!pending || !withinWindow(pending.messageId, deps.since)) continue;
+
+      const names = await deps.names(pending.text, pending.author).catch(() => new Map());
+      found.push({
+        surfaceId: "slack",
+        contextId,
+        author: pending.author,
+        authorName: names.get(pending.author),
+        people: [...names].map(([id, name]) => ({ id, name })),
+        text: pending.text,
+        trustLabel: "untrusted",
+        isMention: true, // 自分が関与しているやりとりなので、呼ばれた扱い
+        messageId: pending.messageId,
+      });
+      if (!convo.isDm) deps.onJoined?.(contextId);
+    }
+  }
+  return { found, skipped };
 }
