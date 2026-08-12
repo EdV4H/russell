@@ -22,4 +22,18 @@ export {
 } from "./lookup.js";
 export type { LookupRequest, LookupTool } from "./lookup.js";
 export type { TermOverflow } from "./memory-decision.js";
-export { modeAllowsSend, modeAllowsTool, modeSuppressionReason } from "./mode.js";
+export {
+  modeAllowsSend,
+  modeAllowsTool,
+  modeSuppressionReason,
+  shouldPublishJournal,
+} from "./mode.js";
+export type { PublishDecision } from "./mode.js";
+export { runPublication } from "./publication.js";
+export type {
+  PublicationDeps,
+  PublishContext,
+  PublishOutcome,
+  PublishStep,
+  StepReport,
+} from "./publication.js";

@@ -21,6 +21,12 @@
     },
     {
       "path": "../../plugins/russell-plugin-model-claude-code"
+    },
+    {
+      "path": "../../plugins/russell-plugin-settings-pg"
+    },
+    {
+      "path": "../../plugins/russell-plugin-surface-slack"
     }
   ]
 }

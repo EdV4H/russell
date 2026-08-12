@@ -12,12 +12,39 @@
  *   pnpm consolidate --backfill   # 未処理のメモが残っている日を、古い順に1日ずつ書く
  */
 
-import { DO_NOT_WRITE_PROMPT, inspectSensitive } from "@edv4h/russell-core";
+import {
+  DO_NOT_WRITE_PROMPT,
+  type PublishStep,
+  inspectSensitive,
+  runPublication,
+  shouldPublishJournal,
+} from "@edv4h/russell-core";
 import { appendAuditEvent } from "@edv4h/russell-plugin-audit-pg";
 import { isFrozen } from "@edv4h/russell-plugin-killswitch-pg";
-import { type OrganizePlan, runConsolidation } from "@edv4h/russell-plugin-memory-pg";
+import {
+  type ConsolidationResult,
+  type OrganizePlan,
+  runConsolidation,
+} from "@edv4h/russell-plugin-memory-pg";
 import { createClaudeCodeProvider } from "@edv4h/russell-plugin-model-claude-code";
+import { JOURNAL_CHANNEL_KEY, readSetting } from "@edv4h/russell-plugin-settings-pg";
+import { createSlackPoster } from "@edv4h/russell-plugin-surface-slack";
 import pg from "pg";
+
+/** その日の日報に載る出来事の数。0 なら投稿しない（毎朝「何もなかった」を流さない）。 */
+function events(result: ConsolidationResult): number {
+  return result.notesConsolidated - result.notesWithheld;
+}
+
+/**
+ * 実行モード（§6.5）。agent と同じ規則で読む。**既定は dryrun**。
+ * 解釈できない値は dryrun に倒す（打ち間違いが live にならないように）。
+ */
+function resolveMode(): "off" | "dryrun" | "live" {
+  const raw = process.env.RUSSELL_MODE?.trim();
+  if (raw === "live" || raw === "off") return raw;
+  return "dryrun";
+}
 
 /** 計画を人が読める形にする。dry-run はこれを見て判断してもらうためにある。 */
 function renderPlan(plan: OrganizePlan): string {
@@ -69,12 +96,114 @@ async function main(): Promise<void> {
   /** 生成後の二次フィルタ（A-1）。判定はコアが持っているので注入で渡す。 */
   const screen = (text: string) => inspectSensitive(text).categories;
   const agentName = process.env.RUSSELL_AGENT_NAME ?? "Bob";
+  /**
+   * 日報の投稿先（§10.1）。**未設定なら投稿しない。**
+   * 「どこへ出すか」は運用が決めることなので、既定でどこかへ流し始めない。
+   */
+  /** worker も実行モードに従う（§6.5）。投稿は external_send なので dryrun では出さない。 */
+  const mode = resolveMode();
+
+  /**
+   * その段が**この日付で既に実行されたか**を監査から読む（冪等キー = 日付 × 段）。
+   *
+   * 専用のテーブルを作らないのは、**監査そのものが「何が起きたか」の記録**だから。
+   * 二重に持つと必ずズレる。
+   */
+  async function priorResult(entryDate: string, stepId: string) {
+    const res = await auditPool.query<{ status: string }>(
+      `SELECT payload->>'status' AS status FROM event_log
+        WHERE agent_id = $1 AND action = 'journal.published'
+          AND payload->>'entryDate' = $2 AND payload->>'step' = $3
+        ORDER BY ts DESC LIMIT 1`,
+      [agentId, entryDate, stepId],
+    );
+    const status = res.rows[0]?.status;
+    return status === "succeeded" || status === "unknown" || status === "rejected"
+      ? status
+      : undefined;
+  }
+
+  /** Slack へ日報を投稿する段。**装備（Notion 等）を足すときは、ここに段を増やす。** */
+  function slackStep(channel: string): PublishStep {
+    return {
+      id: "slack",
+      async deliver(ctx) {
+        const delivery = await createSlackPoster().post(
+          channel,
+          `*${ctx.entryDate} の日報*\n${ctx.narrative}`,
+        );
+        return { status: delivery.status, detail: delivery.detail };
+      },
+    };
+  }
+
+  /** 日報を配信する。投稿したか・しなかった理由は必ず記録する。 */
+  async function publish(result: ConsolidationResult): Promise<void> {
+    const decision = shouldPublishJournal(mode, events(result));
+    if (!decision.publish) {
+      // **黙って出さないことはしない。** 出さなかった理由が分からないと運用が詰む
+      console.log(`[worker] 日報は投稿しません（${decision.reason}）`);
+      if (decision.reason === "mode_dryrun" || decision.reason === "mode_off") {
+        console.log(`[worker] 投稿するはずだった内容:\n${result.narrative}`);
+      }
+      return;
+    }
+    if (!journalChannel) {
+      console.log("[worker] RUSSELL_JOURNAL_CHANNEL が未設定のため投稿しません。");
+      return;
+    }
+    // 宛先は段の並び。いまは Slack 1段だが、**Notion に書いて Slack で周知**のような
+    // 依存のある配信も、段を足すだけで表せる形にしてある。
+    const steps: PublishStep[] = [slackStep(journalChannel)];
+
+    const reports = await runPublication(
+      steps,
+      { entryDate: result.entryDate, narrative: result.narrative },
+      {
+        prior: (stepId) => priorResult(result.entryDate, stepId),
+        // 投稿は外部への送信。**本文は監査へ入れない**（A1-5）
+        record: (stepId, outcome) =>
+          appendAuditEvent(auditPool, {
+            agentId,
+            configVersion: process.env.RUSSELL_CONFIG_VERSION ?? "v0",
+            actor: agentId,
+            action: "journal.published",
+            payload: {
+              entryDate: result.entryDate,
+              step: stepId,
+              status: outcome.status,
+              length: result.narrative.length,
+            },
+            trustLabel: "trusted",
+          }),
+      },
+    );
+
+    for (const r of reports) {
+      if (r.status === "skipped" && r.reason === "prior_unknown") {
+        // **自動では解決しない。** 前回投稿できたか分からない状態で投げ直すと二重投稿になる
+        console.warn(
+          `[worker] ${r.stepId}: 前回の結果が不明のため配信しません（${result.entryDate}）。実際に投稿されているか確認してから、必要なら手で投稿してください。`,
+        );
+        continue;
+      }
+      console.log(
+        `[worker] ${r.stepId}: ${r.status}${r.reason ? `（${r.reason}）` : ""} — ${result.entryDate}`,
+      );
+    }
+  }
 
   // 監査は worker 自身のプールで残す（コアの AuditRegistry はこのプロセスに無い）。
   const auditPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   auditPool.on("error", (err) => {
     console.error("[worker] 監査用 Postgres 接続エラー:", err.message);
   });
+
+  // **設定（DB）が先、env はフォールバック。** どこへ出すかは Slack から変えられる
+  // （`/russell journal here`）ので、env で固定するものではない。
+  const journalChannel =
+    (await readSetting(auditPool, agentId, JOURNAL_CHANNEL_KEY)) ??
+    process.env.RUSSELL_JOURNAL_CHANNEL;
 
   try {
     if (backfill) {
@@ -112,6 +241,7 @@ async function main(): Promise<void> {
             `promoted=${r.booksPromoted} merged=${r.booksMerged}`,
         );
         console.log(`  [日報] ${r.narrative}`);
+        await publish(r);
       }
       return;
     }
@@ -160,8 +290,8 @@ async function main(): Promise<void> {
         `merged=${result.booksMerged} absorbed=${result.booksAbsorbed} ` +
         `retitled=${result.booksRetitled} decayed=${result.booksDecayed} archived=${result.booksArchived}`,
     );
-    // この narrative を #<個体名>-日報 に投稿するのが §10.1（surface 経由）。
     console.log(`[日報] ${result.narrative}`);
+    await publish(result);
   } finally {
     await auditPool.end();
   }

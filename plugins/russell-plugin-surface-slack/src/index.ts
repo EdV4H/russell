@@ -27,3 +27,6 @@ export { createSlackSurfacePlugin } from "./plugin.js";
 export type { SlackSurfaceOptions } from "./plugin.js";
 export { pendingReply, withinWindow } from "./catchup.js";
 export type { PendingReply } from "./catchup.js";
+export { createSlackPoster } from "./poster.js";
+export type { SlackPoster, SlackPosterOptions } from "./poster.js";
+export { JOURNAL_CHANNEL_SETTING } from "./journal-setting.js";

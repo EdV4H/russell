@@ -917,7 +917,7 @@ export async function createAgent(
       // **送るはずだった内容は見せる。** 見えないと dryrun で何も確かめられない。
       // 監査ではなく event / ログに出す（本文を監査へ流さない, A1-5）。
       events.emit("surface:send-suppressed", { contextId: msg.contextId, text });
-      console.log(`[dryrun] 送信せず（${msg.contextId}）: ${text}`);
+      console.log(`[${runtime.mode()}] 送信せず（${msg.contextId}）: ${text}`);
       await decideMemory(msg, replyText, gathered);
       return;
     }

@@ -17,6 +17,7 @@ import { createPgMemoryPlugin } from "@edv4h/russell-plugin-memory-pg";
 import { createClaudeModelPlugin } from "@edv4h/russell-plugin-model-claude";
 import { createClaudeCodeModelPlugin } from "@edv4h/russell-plugin-model-claude-code";
 import { createEchoModelPlugin } from "@edv4h/russell-plugin-model-echo";
+import { createPgSettingsPlugin } from "@edv4h/russell-plugin-settings-pg";
 import { createCliSurfacePlugin } from "@edv4h/russell-plugin-surface-cli";
 import { createSlackSurfacePlugin } from "@edv4h/russell-plugin-surface-slack";
 import type { Mode, RussellPlugin, Temperament } from "@edv4h/russell-shared";
@@ -68,7 +69,7 @@ const BOB: Temperament = {
  */
 function assembleSpongePlugins(): RussellPlugin[] {
   return [
-    ...(usePg ? [createPgAuditPlugin(), createPgKillSwitchPlugin()] : []),
+    ...(usePg ? [createPgAuditPlugin(), createPgKillSwitchPlugin(), createPgSettingsPlugin()] : []),
     usePg ? createPgMemoryPlugin() : createInMemoryMemoryPlugin(),
     ...(useNotion ? [createNotionEquipmentPlugin()] : []),
     modelPlugin(),
