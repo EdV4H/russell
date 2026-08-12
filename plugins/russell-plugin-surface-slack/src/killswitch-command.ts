@@ -143,12 +143,22 @@ async function runJournalCommand(
   if (!channel) return { reply: "チャンネルが分からないため設定できません。" };
   const { before } = await settings.set(JOURNAL_CHANNEL_SETTING, channel, userId);
   if (before === channel) return { reply: "すでにこのチャンネルへ出す設定になっています。" };
+
+  // **DM は公開ではない。** 日報は「記憶の全公開」（§10.1）が前提の仕組みなので、
+  // DM に向けるのは建前から外れる。禁止はしない——「まず自分だけで数日読む」は正当な
+  // 使い方で、実際そこから始めたくなる。ただし**外れていることは必ず言う**。
+  // 黙って許すと、公開しているつもりで誰も読んでいない状態が続く。
+  const isDm = channel.startsWith("D");
   return {
-    reply: "日報の投稿先をこのチャンネルにしました。",
+    reply: isDm
+      ? "日報の投稿先をこの DM にしました。**この日報はあなたにしか見えません**。日報はチームに公開する前提の仕組みなので、確認が済んだらチャンネルで `/russell journal here` を打ち直してください。"
+      : "日報の投稿先をこのチャンネルにしました。",
     // **新しい投稿先に宣言する。** 静かに移らない
     declare: `:newspaper: これから毎日の日報はこのチャンネルに出します（設定: <@${userId}>）。`,
-    announce: before
-      ? `:newspaper: 日報の投稿先を変更: <#${before}> → <#${channel}> / 実行者: <@${userId}>`
-      : `:newspaper: 日報の投稿先を設定: <#${channel}> / 実行者: <@${userId}>`,
+    announce: isDm
+      ? `:newspaper: 日報の投稿先を **DM** に設定: <@${userId}>（公開されません）`
+      : before
+        ? `:newspaper: 日報の投稿先を変更: <#${before}> → <#${channel}> / 実行者: <@${userId}>`
+        : `:newspaper: 日報の投稿先を設定: <#${channel}> / 実行者: <@${userId}>`,
   };
 }

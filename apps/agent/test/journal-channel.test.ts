@@ -94,3 +94,28 @@ test("設定を持たない構成では、その旨を返す", async () => {
   const result = await runRussellCommand("journal here", "U1", deps(undefined));
   expect(result.reply).toContain("運用設定");
 });
+
+test("DM に設定できるが、公開されないことを必ず伝える", async () => {
+  const s = fakeSettings();
+  const result = await runRussellCommand("journal here", "U1", deps(s.capability, "D_DM"));
+
+  // 禁止はしない（「まず自分だけで数日読む」は正当な使い方）
+  expect(s.store.get(JOURNAL_CHANNEL_SETTING)).toBe("D_DM");
+  // **建前から外れていることは必ず言う**
+  expect(result.reply).toContain("あなたにしか見えません");
+  expect(result.reply).toContain("チームに公開する前提");
+  // 管理チャンネルにも「DM である」と分かる形で流れる
+  expect(result.announce).toContain("DM");
+  expect(result.announce).toContain("公開されません");
+});
+
+test("通常のチャンネルでは DM の注意書きは出ない", async () => {
+  const result = await runRussellCommand(
+    "journal here",
+    "U1",
+    deps(fakeSettings().capability, "C_TEAM"),
+  );
+
+  expect(result.reply).not.toContain("あなたにしか見えません");
+  expect(result.announce).toContain("<#C_TEAM>");
+});
