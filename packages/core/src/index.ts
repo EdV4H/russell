@@ -22,6 +22,7 @@ export {
 } from "./lookup.js";
 export type { LookupRequest, LookupTool } from "./lookup.js";
 export type { TermOverflow } from "./memory-decision.js";
+export { ambiguousPersonMatch } from "./memory-decision.js";
 export {
   modeAllowsSend,
   modeAllowsTool,

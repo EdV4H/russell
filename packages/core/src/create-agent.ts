@@ -60,6 +60,7 @@ import {
 } from "./lookup.js";
 import {
   type MemoryDecision,
+  ambiguousPersonMatch,
   buildDecisionRequest,
   isEmptyDecision,
   parseDecision,
@@ -587,6 +588,31 @@ export async function createAgent(
    *
    * 記憶係の不調で会話を壊さない。判定が読めなければ何も書き留めずに終わる。
    */
+  /**
+   * 確認の一言を送る（返答とは別の発話）。
+   *
+   * **返答と同じ関門を通す**——モードで止まり、監査が残らないなら送らない。
+   * これも外向きの発話なので、返答だけを守っても意味がない。
+   */
+  async function askAside(msg: InboundMessage, text: string): Promise<void> {
+    const surface = surfaces.get(msg.surfaceId);
+    if (!surface) return;
+    if (!modeAllowsSend(runtime.mode())) {
+      events.emit("surface:send-suppressed", { contextId: msg.contextId, text });
+      console.log(`[${runtime.mode()}] 送信せず（${msg.contextId}）: ${text}`);
+      return;
+    }
+    if (!auditLog.registry.healthy()) return;
+    const audited = await auditLog.registry.record({
+      actor: runtime.agentId,
+      action: "surface.send",
+      payload: { surfaceId: msg.surfaceId, contextId: msg.contextId, textLength: text.length },
+      trustLabel: "trusted",
+    });
+    if (!audited) return;
+    await surface.send({ contextId: msg.contextId, text });
+  }
+
   async function decideMemory(
     msg: InboundMessage,
     replyText: string,
@@ -597,10 +623,13 @@ export async function createAgent(
     const mem = services.get<MemoryCapability>(MEMORY_SERVICE);
 
     let decision: MemoryDecision;
+    // 判定に見せたものは、書くときにも要る（紛らわしさの判断と、二重に聞かないため）
+    let roster: { name: string; aliases: string[] }[] = [];
+    let carrying: { id: number; content: string; waitingFor?: string }[] = [];
     try {
       const known = mem?.glossary ? await mem.glossary() : [];
-      const roster = mem?.roster ? await mem.roster() : [];
-      const carrying = mem?.openTodos ? await mem.openTodos() : [];
+      roster = mem?.roster ? await mem.roster() : [];
+      carrying = mem?.openTodos ? await mem.openTodos() : [];
       // **いま書いてある内容を見せる。** 書き込みは同じ name への上書きなので、
       // これが無いと「同じ name で出す」＝それまでに分かっていたことを消す、になる。
       // 見せるのは**この会話に出てきた語・人だけ**（一致で引くので、全件は渡らない）。
@@ -688,6 +717,37 @@ export async function createAgent(
         events.emit("todo:closed", { contextId: msg.contextId, id });
       }
       for (const person of decision.people ?? []) {
+        // **紛らわしいときは、当てずに聞く。**
+        // 当てて書けば別人が1枚のカルテに混ざり、黙って書けば同じ人が2枚に分かれる。
+        // どちらも取り返しがつきにくいので、その場で本人に確かめる（同僚なら普通そうする）。
+        const doubt = ambiguousPersonMatch(person.name, roster);
+        const asked = doubt
+          ? carrying.some((t) => t.content.includes(person.name) && t.content.includes(doubt))
+          : false;
+        if (doubt && !asked) {
+          // **一度だけ聞く。** 確認を作業として残すので、答えが返れば次の判定が閉じる
+          await invokeTool(
+            "todo.add",
+            {
+              content: `「${person.name}」が${doubt}と同じ人か確認する`,
+              contextId: msg.contextId,
+              waitingFor: msg.authorName ?? undefined,
+            },
+            msg.trustLabel,
+          );
+          await askAside(
+            msg,
+            `すみません、確認させてください。${person.name} というのは ${doubt} と同じ方でしょうか？ 同じなら1つにまとめておきます。`,
+          );
+          events.emit("memory:person-ambiguous", {
+            contextId: msg.contextId,
+            name: person.name,
+            similarTo: doubt,
+          });
+          continue; // 答えが返るまで書かない（分かれた行を作らない）
+        }
+        // 聞いたのに答えが無いままなら、それ以上は聞かずに別人として書く。
+        // **聞き続けるのはもっと鬱陶しい**し、覚えないままにもしておけない。
         const marks = await markSensitive(`${person.name}\n${person.note}`, "person.remember", msg);
         // **カルテと Slack ユーザーを紐づける。** 表示名は覚えない（取り直せる, ADR 0008）が、
         // 「このカルテはこの人のこと」という対応は Slack 側からは取れないので、こちらで持つ。

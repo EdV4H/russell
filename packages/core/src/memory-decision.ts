@@ -189,6 +189,35 @@ export function buildDecisionRequest(
   };
 }
 
+/**
+ * すでにカルテにいる人と**紛らわしい**名前か。同じ人だと確信できないが、別人だとも言えない状態。
+ *
+ * 返すのは**既存の見出し**（聞くときに使う）。同じ人だと分かるなら `undefined`——
+ * そちらは書き込み口が呼び名で寄せる（当てられるものを人に聞かない）。
+ *
+ * 当てにいくのは**文字が重なっているとき**だけ。「丸山」と「丸山さん」は気づけるが、
+ * 「マルさん」と「丸山」は文字が重ならないので**気づけない**。そこは判定モデルが
+ * 一覧（すでにカルテにある人）を見て拾う担当で、ここは保険である。
+ */
+export function ambiguousPersonMatch(
+  name: string,
+  roster: { name: string; aliases: string[] }[],
+): string | undefined {
+  const target = name.trim().toLowerCase();
+  if (target.length < 2) return undefined; // 1文字は当てにいかない（誤爆する）
+  for (const entry of roster) {
+    const known = [entry.name, ...entry.aliases].map((k) => k.trim().toLowerCase());
+    // 完全一致は「同じ人」。聞く必要がない
+    if (known.includes(target)) return undefined;
+  }
+  for (const entry of roster) {
+    const known = [entry.name, ...entry.aliases].map((k) => k.trim().toLowerCase());
+    const overlap = known.some((k) => k.length >= 2 && (k.includes(target) || target.includes(k)));
+    if (overlap) return entry.name;
+  }
+  return undefined;
+}
+
 /** 空白だけ・記号だけの「書いたつもり」を弾く。 */
 function meaningful(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
