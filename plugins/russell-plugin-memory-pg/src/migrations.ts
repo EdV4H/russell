@@ -148,5 +148,26 @@ CREATE INDEX IF NOT EXISTS todos_agent_state_idx ON todos (agent_id, state, upda
 CREATE INDEX IF NOT EXISTS todos_agent_context_idx ON todos (agent_id, context_id);
 `,
     },
+    {
+      /*
+       * カルテと外部アカウントの紐付け（ADR 0008 の補足）。
+       *
+       * **表示名は覚えない**（`users.info` で取り直せる。変わったら追随できなくなる）。
+       * 覚えるのは「**このカルテはこの Slack ユーザーのこと**」という対応で、
+       * これは Slack 側からは取れない——私たちが持つべき情報。
+       *
+       * これがあると:
+       * - 表示名が変わっても同じ人だと分かる
+       * - 同じ人を別名で二重に持ったとき、後から畳める
+       * - 退職者対応を**名前ではなく id で**指定できる（同姓同名で誤爆しない）
+       */
+      id: "0007_entity_external_ids",
+      phase: "expand",
+      sql: `
+-- 'slack:U123' の形で持つ。将来 GitHub 等が増えても同じ列に入る
+ALTER TABLE entities ADD COLUMN IF NOT EXISTS external_ids TEXT[] NOT NULL DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS entities_external_ids_idx ON entities USING GIN (external_ids);
+`,
+    },
   ],
 };

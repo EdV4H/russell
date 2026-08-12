@@ -71,6 +71,14 @@ export interface InboundMessage {
    * 人格プロンプト側で「知らない名前を作らない」と縛る。
    */
   authorName?: string;
+  /**
+   * この発言に出てくる人（発言者と mention された人）の id と名前。
+   *
+   * **表示名を記憶するためではない**（それは取り直せる, ADR 0008）。
+   * 「このカルテはこの Slack ユーザーのこと」という**紐付け**を作るために使う。
+   * 紐付けは Slack 側からは取れないので、こちらで持つ必要がある。
+   */
+  people?: { id: string; name: string }[];
   text: string;
   trustLabel: TrustLabel;
   isMention: boolean;

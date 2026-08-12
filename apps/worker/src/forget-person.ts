@@ -9,6 +9,7 @@
  * 「消して」と言われた個体が自分で消せる状態にはしない（承認者が実行する, §2）。
  *
  *   pnpm --filter @edv4h/russell-worker forget-person -- "丸山"
+ *   pnpm --filter @edv4h/russell-worker forget-person -- "slack:U0123"   # **同姓同名で誤爆しない**
  */
 
 import { appendAuditEvent } from "@edv4h/russell-plugin-audit-pg";
@@ -29,10 +30,11 @@ async function main(): Promise<void> {
 
   try {
     // 何を消すのかを**先に見せる**。不可逆なので、名前の取り違えに気づける最後の機会になる
+    // **id でも指定できる**（`slack:U123`）。同姓同名で誤爆しないのは id の方
     const target = await pool.query<{ name: string; aliases: string[] }>(
       `SELECT name, aliases FROM entities
         WHERE agent_id = $1 AND type = 'person'
-          AND (lower(name) = lower($2) OR $2 = ANY(aliases))`,
+          AND (lower(name) = lower($2) OR $2 = ANY(aliases) OR $2 = ANY(external_ids))`,
       [agentId, name],
     );
     if (target.rowCount === 0) {
@@ -46,7 +48,7 @@ async function main(): Promise<void> {
     const res = await pool.query(
       `DELETE FROM entities
         WHERE agent_id = $1 AND type = 'person'
-          AND (lower(name) = lower($2) OR $2 = ANY(aliases))`,
+          AND (lower(name) = lower($2) OR $2 = ANY(aliases) OR $2 = ANY(external_ids))`,
       [agentId, name],
     );
     // 実行は必ず記録する（§2「実行は config_version と event_log に記録」）。

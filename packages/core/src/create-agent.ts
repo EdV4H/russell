@@ -650,6 +650,12 @@ export async function createAgent(
       }
       for (const person of decision.people ?? []) {
         const marks = await markSensitive(`${person.name}\n${person.note}`, "person.remember", msg);
+        // **カルテと Slack ユーザーを紐づける。** 表示名は覚えない（取り直せる, ADR 0008）が、
+        // 「このカルテはこの人のこと」という対応は Slack 側からは取れないので、こちらで持つ。
+        // これがあると、表示名が変わっても同じ人だと分かり、退職者対応も id で指定できる。
+        const linked = (msg.people ?? [])
+          .filter((p) => matchesPerson(p.name, person))
+          .map((p) => `slack:${p.id}`);
         await invokeTool(
           "person.remember",
           {
@@ -657,6 +663,7 @@ export async function createAgent(
             note: person.note,
             aliases: person.aliases,
             sensitive: marks,
+            externalIds: linked,
           },
           msg.trustLabel,
         );
@@ -733,6 +740,19 @@ export async function createAgent(
   const catchup = config.catchup ?? {};
   /** 拾い直しを試した回数（contextId ごと）。失敗が続くループを防ぐ。 */
   const catchupAttempts = new Map<string, number>();
+
+  /**
+   * その Slack ユーザーが、このカルテの人か。
+   *
+   * 表記の揺れ（「丸山」/「丸山さん」/「丸山雄介」）を吸収するため、**どちらかがどちらかを
+   * 含む**なら同じ人とみなす。**当てにいかない**——短い名前は誤爆するので2文字以上を要求する。
+   */
+  function matchesPerson(slackName: string, person: { name: string; aliases: string[] }): boolean {
+    const candidates = [person.name, ...person.aliases].map((c) => c.trim().toLowerCase());
+    const target = slackName.trim().toLowerCase();
+    if (target.length < 2) return false;
+    return candidates.some((c) => c.length >= 2 && (c.includes(target) || target.includes(c)));
+  }
 
   const modelId = config.model ?? [...modelsMap.keys()][0];
   // 記憶の判定に使うモデル。既定は会話用と同じ。安いモデルに寄せたいときに分ける

@@ -68,8 +68,16 @@ const VIEWS: Record<string, View> = {
   },
   "/people": {
     ...pick("/people"),
-    columns: ["updated_at", "agent_id", "name", "aliases", "summary", "sensitive_categories"],
-    sql: `SELECT updated_at, agent_id, name, aliases, summary, sensitive_categories
+    columns: [
+      "updated_at",
+      "agent_id",
+      "name",
+      "aliases",
+      "external_ids",
+      "summary",
+      "sensitive_categories",
+    ],
+    sql: `SELECT updated_at, agent_id, name, aliases, external_ids, summary, sensitive_categories
             FROM entities
            WHERE type = 'person' AND ($1::text IS NULL OR agent_id = $1)
            ORDER BY updated_at DESC LIMIT ${LIMIT}`,

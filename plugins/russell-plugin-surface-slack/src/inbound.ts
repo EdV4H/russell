@@ -46,6 +46,14 @@ export type NameBook = ReadonlyMap<string, string>;
  * 「誰か分からない人がいる」と分かる形にしておく（人格プロンプト側で「知らない名前を
  * 作らない」と縛ってある）。
  */
+/**
+ * 引けた分だけを渡す。**カルテと Slack ユーザーを紐づける**ために使う
+ * （表示名を覚えるためではない, ADR 0008）。
+ */
+function toPeople(names: NameBook): { id: string; name: string }[] {
+  return [...names].map(([id, name]) => ({ id, name }));
+}
+
 export function renderMentions(text: string, names: NameBook): string {
   return text
     .replace(/<@([^>|\s]+)(?:\|[^>]*)?>/g, (_m, id: string) => `@${names.get(id) ?? id}`)
@@ -71,6 +79,7 @@ export function fromAppMention(e: SlackMentionEvent, names: NameBook = new Map()
     author: e.user ?? "unknown",
     // **記録は id、会話には名前**。id は安定した識別子なので監査はそちらを使う
     authorName: e.user ? names.get(e.user) : undefined,
+    people: toPeople(names),
     text: renderMentions(e.text ?? "", names),
     trustLabel: "untrusted", // 他者の Slack 発言は untrusted（§12-3）
     isMention: true,
@@ -111,6 +120,7 @@ export function fromDirectMessage(
     contextId: toContextId(m.channel, m.thread_ts),
     author: m.user ?? "unknown",
     authorName: m.user ? names.get(m.user) : undefined,
+    people: toPeople(names),
     text: renderMentions(m.text, names),
     trustLabel: "untrusted",
     isMention: true, // DM は宛先が自分しかいない＝常に自分への発話
@@ -214,7 +224,9 @@ export function inspectChannelMessage(
       surfaceId: "slack",
       contextId,
       author: m.user ?? "unknown",
-      text: m.text,
+      authorName: m.user ? ctx.names?.get(m.user) : undefined,
+      people: toPeople(ctx.names ?? new Map()),
+      text: renderMentions(m.text, ctx.names ?? new Map()),
       trustLabel: "untrusted",
       isMention: true, // 自分が参加しているスレッドの続き＝自分への発話として扱う
       messageId: m.ts,

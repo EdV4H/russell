@@ -103,7 +103,9 @@ test("スレッド追従: 参加しているスレッドの続きだけを拾う
   const base = { channel: "C1", channel_type: "channel", ts: "100.5", user: "U1" };
 
   // Bob が参加しているスレッドの続き → 拾う（mention 不要）
-  expect(fromChannelMessage({ ...base, thread_ts: "100.1", text: "で、どうする？" }, ctx)).toEqual({
+  expect(
+    fromChannelMessage({ ...base, thread_ts: "100.1", text: "で、どうする？" }, ctx),
+  ).toMatchObject({
     surfaceId: "slack",
     contextId: "C1:100.1",
     author: "U1",
@@ -183,9 +185,10 @@ test("スレッド追従: mention 入りは app_mention に任せる（2回返�
 
   // mention を含む発言は app_mention でも届くので、こちらでは捨てる
   expect(fromChannelMessage({ ...base, text: "<@UBOB> これお願い" }, ctx)).toBeUndefined();
-  // 他人への mention は関係ないので拾う
+  // 他人への mention は関係ないので拾う。**スレッド追従でも名前の形に直す**
+  // （名前が引けていないので id のまま残る＝当てにいかない）
   expect(fromChannelMessage({ ...base, text: "<@UOTHER> どう思う？" }, ctx)?.text).toBe(
-    "<@UOTHER> どう思う？",
+    "@UOTHER どう思う？",
   );
 });
 

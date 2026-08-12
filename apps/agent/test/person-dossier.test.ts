@@ -76,7 +76,17 @@ function surface() {
       isMention: true,
       messageId: "m1",
     });
-  return { plugin, sent, push };
+  const pushWith = (over: { text: string; people?: { id: string; name: string }[] }) =>
+    sink?.({
+      surfaceId: "fake",
+      contextId: "t1",
+      author: "u",
+      trustLabel: "untrusted",
+      isMention: true,
+      messageId: "m1",
+      ...over,
+    });
+  return { plugin, sent, push, pushWith };
 }
 
 const drain = async () => {
@@ -183,5 +193,69 @@ test("機微情報の印は人にも付く", async () => {
   const marked = agent.ctx.audit.recent().find((e) => e.action === "memory.sensitive_marked");
   expect(marked?.payload).toMatchObject({ tool: "person.remember", categories: ["health"] });
 
+  await agent.destroy();
+});
+
+test("カルテと Slack ユーザーを紐づける（表示名は覚えない）", async () => {
+  const m = scripted(REMEMBER);
+  const s = surface();
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+
+  // 通信面が引いた id ↔ 名前を渡す。**紐付けは Slack 側からは取れない**ので、こちらで持つ
+  s.pushWith({
+    text: "丸山です。マーケ担当です",
+    people: [
+      { id: "U_MARU", name: "丸山" },
+      { id: "U_OTHER", name: "無関係" },
+    ],
+  });
+  await drain();
+
+  const call = agent.ctx.audit
+    .recent()
+    .find((e) => e.action === "tool.invoked" && e.payload.tool === "person.remember");
+  expect(call).toBeDefined();
+  await agent.destroy();
+});
+
+test("名前の揺れを吸収して紐づける（「丸山」と「丸山さん」は同じ人）", async () => {
+  const m = scripted('{"people":[{"name":"丸山さん","note":"マーケ担当","aliases":["マルさん"]}]}');
+  const s = surface();
+  const linked: unknown[] = [];
+  const spy: RussellPlugin = {
+    id: "spy",
+    name: "spy",
+    setup(ctx) {
+      // person.remember の入力を覗く（監査には本文が載らないため）
+      const original = ctx.tools.get("person.remember");
+      if (!original) return;
+      return ctx.tools.register("person.remember", {
+        ...original,
+        async run(input: { externalIds?: string[] }) {
+          linked.push(input.externalIds);
+          return await original.run(input);
+        },
+      });
+    },
+  };
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), spy, m.plugin, s.plugin],
+  );
+
+  s.pushWith({
+    text: "丸山です",
+    people: [
+      { id: "U_MARU", name: "丸山" }, // 「丸山さん」と表記が違うが同じ人
+      { id: "U_OTHER", name: "佐藤" },
+    ],
+  });
+  await drain();
+
+  // 揺れは吸収するが、**無関係な人は紐づけない**
+  expect(linked[0]).toEqual(["slack:U_MARU"]);
   await agent.destroy();
 });
