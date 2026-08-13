@@ -19,6 +19,8 @@
 import type {
   AgentContext,
   AlertSink,
+  ApprovalOutcome,
+  ApprovalRequest,
   ConversationCapability,
   DeliveryResult,
   InboundMessage,
@@ -35,6 +37,7 @@ import {
   SETTINGS_SERVICE,
 } from "@edv4h/russell-shared";
 import bolt from "@slack/bolt";
+import { approvalBlocks, createApprovalDesk, decidedText, mayApprove } from "./approval.js";
 import { findPendingMessages, pendingReply, withinWindow } from "./catchup.js";
 import { type SlackHistoryMessage, hasOwnMessage, toTurns } from "./conversation.js";
 import {
@@ -118,6 +121,10 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
        * `react()` には id しか渡ってこないので、ここで覚えておかないと文面が分からない。
        */
       const textMemo = createTextMemo();
+      /** 待っている承認（HITL）。プロセス内だけ——再起動したら「承認されなかった」になる。 */
+      const desk = createApprovalDesk();
+      /** 承認を求めた投稿の ts（決まったら書き換えるため）。 */
+      const posted = new Map<string, string>();
       /** listener の context からしか取れないので、最初に見たものを控えて capability から使う。 */
       const botUserIdRef: { value?: string } = {};
 
@@ -295,6 +302,51 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
             }
             if (seen.accepted) sink(seen.accepted);
           });
+          // 承認ボタン。**押した人を見てから通す**（誰でも押せると意味がない）
+          for (const [actionId, approved] of [
+            ["russell_approve", true],
+            ["russell_reject", false],
+          ] as const) {
+            app.action(actionId, async ({ ack, body, respond }) => {
+              await ack(); // Slack の3秒制約
+              // biome-ignore lint/suspicious/noExplicitAny: Bolt の action body は広い
+              const b = body as any;
+              const nonce = b?.actions?.[0]?.value as string | undefined;
+              const userId = b?.user?.id as string | undefined;
+              if (!nonce || !userId) return;
+              const pending = desk.peek(nonce);
+              if (!pending) {
+                // 期限切れ・再起動後。**黙って通さない**
+                await respond({
+                  response_type: "ephemeral",
+                  text: "この承認はもう有効ではありません（期限切れか、再起動後です）。",
+                });
+                return;
+              }
+              if (!mayApprove(userId, pending, isOperator)) {
+                await respond({
+                  response_type: "ephemeral",
+                  text: "この承認は、依頼した本人か運用者だけが押せます。",
+                });
+                return;
+              }
+              const outcome = { approved, by: userId };
+              const req = desk.close(nonce, outcome);
+              const ts = posted.get(nonce);
+              posted.delete(nonce);
+              if (req && ts) {
+                // ボタンを消す。**押せる状態で残さない**
+                await app.client.chat
+                  .update({
+                    channel: b.channel?.id,
+                    ts,
+                    text: decidedText(req, outcome),
+                    blocks: [],
+                  })
+                  .catch(() => {});
+              }
+            });
+          }
           await app.start();
         },
         async send(out: OutboundMessage): Promise<DeliveryResult> {
@@ -364,6 +416,37 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
           if (debug) console.log(`[slack] 積み残し ${found.length}件`);
           for (const m of found) textMemo.remember(m.messageId, m.text);
           return found;
+        },
+        /**
+         * 人に承認を求める（§12-2）。**押せるのは依頼者本人か運用者**。
+         *
+         * 期限が来たら却下として扱い、投稿もその形に書き換える——
+         * ボタンが残ったままだと、後から押せるように見える。
+         */
+        async requestApproval(req: ApprovalRequest): Promise<ApprovalOutcome> {
+          const { channel, thread } = parseContextId(req.contextId);
+          const { nonce, promise } = desk.open(req, async (_n, expired) => {
+            const at = posted.get(_n);
+            if (at) {
+              await app.client.chat
+                .update({
+                  channel,
+                  ts: at,
+                  text: decidedText(expired, { approved: false, reason: "expired" }),
+                  blocks: [],
+                })
+                .catch(() => {});
+              posted.delete(_n);
+            }
+          });
+          const res = await app.client.chat.postMessage({
+            channel,
+            thread_ts: thread || undefined,
+            text: `承認をお願いします: ${req.summary}`, // 通知に出る1行
+            blocks: approvalBlocks(req, nonce),
+          });
+          if (res.ts) posted.set(nonce, res.ts);
+          return await promise;
         },
         async react(req: ReactionRequest): Promise<DeliveryResult> {
           const { channel } = parseContextId(req.contextId);

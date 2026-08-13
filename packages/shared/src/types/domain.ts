@@ -139,10 +139,19 @@ export interface ApprovalRequest {
   contextId: string;
   summary: string;
   previewText?: string;
+  /** 何をしようとしているか（道具名と効果分類）。**人が判断するのに要る**。 */
+  tool: string;
+  effect: EffectClass;
+  /** 誰の依頼で起きたか。通信面は**この人になら押させてよい**の判断に使う。 */
+  requestedBy?: string;
+  /** いつまで待つか（ISO8601）。過ぎたら**却下として扱う**（fail-closed）。 */
+  expiresAt: string;
 }
 export interface ApprovalOutcome {
   approved: boolean;
   reason?: string;
+  /** 誰が決めたか（Slack の user id 等）。**監査に残す**のはこちら（理由は残さない）。 */
+  by?: string;
 }
 
 /** スコープ付き事前承認（§12-2）。 */
