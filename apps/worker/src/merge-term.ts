@@ -52,9 +52,11 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    // 畳む側の name と別名を、残す側の別名に足す（呼び名を失わない）
-    const moved = await client.query<{ name: string; aliases: string[] }>(
-      `SELECT name, aliases FROM entities
+    // 畳む側の name と別名を、残す側の別名に足す（呼び名を失わない）。
+    // **紐付け（external_ids）も引き継ぐ。** Slack 側からは取れない情報なので、
+    // 畳む側にしか無い id を落とすと二度と復元できない（ADR 0008）
+    const moved = await client.query<{ name: string; aliases: string[]; external_ids: string[] }>(
+      `SELECT name, aliases, external_ids FROM entities
         WHERE agent_id = $1 AND type = $3 AND lower(name) = ANY($2::text[])`,
       [agentId, absorb.map((a) => a.toLowerCase()), type],
     );
@@ -64,13 +66,15 @@ async function main(): Promise<void> {
       return;
     }
     const aliases = [...new Set(moved.rows.flatMap((r) => [r.name, ...r.aliases]))];
+    const externalIds = [...new Set(moved.rows.flatMap((r) => r.external_ids))];
 
     await client.query(
       `UPDATE entities
           SET aliases = ARRAY(SELECT DISTINCT unnest(aliases || $3::text[]) EXCEPT SELECT name),
+              external_ids = ARRAY(SELECT DISTINCT unnest(external_ids || $5::text[])),
               updated_at = now()
         WHERE agent_id = $1 AND type = $4 AND lower(name) = lower($2)`,
-      [agentId, keep, aliases, type],
+      [agentId, keep, aliases, type, externalIds],
     );
     const deleted = await client.query(
       `DELETE FROM entities
@@ -80,7 +84,8 @@ async function main(): Promise<void> {
     await client.query("COMMIT");
 
     console.log(
-      `[merge-term] ${target.rows[0]?.name} に ${deleted.rowCount}件を畳みました（別名: ${aliases.join(", ")}）`,
+      `[merge-term] ${target.rows[0]?.name} に ${deleted.rowCount}件を畳みました` +
+        `（別名: ${aliases.join(", ")}${externalIds.length > 0 ? ` / 紐付け: ${externalIds.join(", ")}` : ""}）`,
     );
     // 記憶の構造を変える操作なので記録する。**語そのものは残す**（本文ではないので A1-5 に触れない）
     await appendAuditEvent(pool, {
@@ -88,7 +93,13 @@ async function main(): Promise<void> {
       configVersion: process.env.RUSSELL_CONFIG_VERSION ?? "v0",
       actor: process.env.RUSSELL_OPERATOR ?? "operator",
       action: "memory.terms_merged",
-      payload: { type, keep, absorbed: absorb, deleted: deleted.rowCount ?? 0 },
+      payload: {
+        type,
+        keep,
+        absorbed: absorb,
+        deleted: deleted.rowCount ?? 0,
+        externalIds: externalIds.length,
+      },
       trustLabel: "trusted",
     });
   } catch (err) {
