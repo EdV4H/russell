@@ -63,6 +63,13 @@ export interface SlackSurfaceOptions {
    */
   adminChannel?: string;
   /**
+   * 安全側に倒れたことを流す先（既定 env `RUSSELL_ALERT_CHANNEL`）。
+   *
+   * **管理チャンネルとは別**。発動記録は「人がやった1回」だが、通知は壊れている間ずっと出る。
+   * 未設定なら Slack へは流さない（プロセスログには出る, #25）。
+   */
+  alertChannel?: string;
+  /**
    * 追従から除外するチャンネル（既定 env `RUSSELL_SLACK_EXCLUDE_CHANNELS`）。
    * 招待されていても入っていかない。
    */
@@ -162,15 +169,20 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
         }
       }
 
-      // 運用への通知先（#25）。**管理チャンネルが無いなら提供しない**——
-      // 提供しておいて黙って捨てるより、無いことが分かる方がよい（通知側はログに出す）。
-      if (adminChannel) {
+      // 運用への通知先（#25）。**既定は投稿しない。**
+      //
+      // 管理チャンネルに相乗りさせない理由は、性質が違うから——キルスイッチの発動記録は
+      // 「人がやった1回」だが、通知は**壊れている間ずっと出る**。同じ場所へ流すかどうかは
+      // 運用が決めることなので、専用の設定にして**明示的に有効化されたときだけ**流す。
+      // 設定が無ければプラグイン側がログに出す（黙りはしない）。
+      const alertChannel = options.alertChannel ?? process.env.RUSSELL_ALERT_CHANNEL;
+      if (alertChannel) {
         ctx.services.provide<AlertSink>(ALERT_SERVICE, {
           async send(text: string) {
             // 監査もモードも通さない。**壊れているときに使う経路**なので、
             // 途中に関門を置くと、いちばん要るときに届かない（#25）。
             // 宛先は管理チャンネル固定・本文は定型なので、会話が漏れることはない。
-            await app.client.chat.postMessage({ channel: adminChannel, text });
+            await app.client.chat.postMessage({ channel: alertChannel, text });
           },
         });
       }
