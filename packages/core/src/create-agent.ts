@@ -1261,6 +1261,12 @@ ${length}
       mode: runtime.mode(),
       plugins: plugins.map((p) => p.id),
       model: modelId ?? null,
+      // **どの気質で動き出したかを残す。** 気質はコードにあり DB には無いので、
+      // ここに残さないと「いま何で動いているか」を外から知る方法が無い
+      // （リポジトリを読んでも、動いている個体が再起動済みとは限らない）。
+      // 会話の本文ではなく設定なので、監査に載せてよい（A1-5）。
+      configVersion: runtime.configVersion,
+      temperament: config.temperament,
     },
     trustLabel: "trusted",
   });

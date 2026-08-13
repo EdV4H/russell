@@ -10,6 +10,7 @@ import {
   escapeHtml,
   formatCell,
   renderAgentPicker,
+  renderDefs,
   renderPage,
   renderTable,
   truncate,
@@ -115,4 +116,33 @@ test("箱の並びは記憶の流れに沿っている（メモ帳 → 本棚 �
   expect(paths.indexOf("/notes")).toBeLessThan(paths.indexOf("/books"));
   expect(paths.indexOf("/books")).toBeLessThan(paths.indexOf("/terms"));
   expect(paths.indexOf("/terms")).toBeLessThan(paths.indexOf("/archive"));
+});
+
+// --- 個体（気質の表示） ---
+
+test("名前と値の並びは、値が無いことも出す", () => {
+  // 空欄と「まだ入っていない」は違う。—— が出ることで、見落としではないと分かる
+  const html = renderDefs([
+    ["名前", "Bob"],
+    ["背景", undefined],
+    ["反応度 reaction_rate", 0.7],
+  ]);
+
+  expect(html).toContain("Bob");
+  expect(html).toContain("0.7");
+  expect(html).toContain("nil"); // — の印
+});
+
+test("気質の値もエスケープする（設定は外から書き換わりうる）", () => {
+  const html = renderDefs([["口調", '<img src=x onerror="steal()">']]);
+
+  expect(html).not.toContain("<img");
+  expect(html).toContain("&lt;img");
+});
+
+test("個体のページが並びに入っている", () => {
+  const box = BOXES.find((b) => b.path === "/agent");
+
+  expect(box?.title).toBe("個体");
+  expect(box?.description).toContain("気質");
 });

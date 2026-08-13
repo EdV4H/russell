@@ -12,7 +12,7 @@
 
 import { createServer } from "node:http";
 import pg from "pg";
-import { BOXES, escapeHtml, renderPage, renderTable } from "./render.js";
+import { BOXES, escapeHtml, renderDefs, renderPage, renderTable } from "./render.js";
 
 const PORT = Number(process.env.RUSSELL_VIEWER_PORT ?? 4000);
 const HOST = "127.0.0.1";
@@ -158,6 +158,47 @@ async function overview(pool: pg.Pool, agent?: string): Promise<string> {
   return `<div class=counts>${cards}</div>`;
 }
 
+/**
+ * いま何で動いているか。**起動の監査から拾う**——気質はコードにあって DB には無いので、
+ * リポジトリを読んでも「動いている個体がその版で再起動済みか」は分からない。
+ *
+ * 直近の `agent.started` が答えである。**古い値が出ることもあるが、それが事実**
+ * （変更したのに再起動していない、という状態が見える方がよい）。
+ */
+async function agentProfile(pool: pg.Pool, agent?: string): Promise<string> {
+  const res = await pool.query<{ ts: Date; agent_id: string; payload: Record<string, unknown> }>(
+    `SELECT ts, agent_id, payload FROM event_log
+      WHERE action = 'agent.started' AND ($1::text IS NULL OR agent_id = $1)
+      ORDER BY id DESC LIMIT 1`,
+    [agent ?? null],
+  );
+  const row = res.rows[0];
+  if (!row) {
+    return "<p class=empty>まだ一度も起動していません（起動は必ず監査に残ります）。</p>";
+  }
+  const p = row.payload ?? {};
+  const t = (p.temperament ?? {}) as Record<string, unknown>;
+  const defs = renderDefs([
+    ["個体", row.agent_id],
+    ["名前", t.name],
+    ["最後の起動", row.ts],
+    ["モード", p.mode],
+    ["設定版", p.configVersion],
+    ["モデル", p.model],
+    ["口調", t.tone],
+    ["背景", t.backstory],
+    ["自発性 proactivity", t.proactivity],
+    ["1日の発言上限", t.daily_speak_cap],
+    ["好奇心 curiosity", t.curiosity],
+    ["反応度 reaction_rate", t.reaction_rate],
+    ["返信の長さ verbosity", t.verbosity ?? "normal（既定）"],
+    ["プラグイン", p.plugins],
+  ]);
+  // **いつの値かを言う。** 再起動していなければ、リポジトリの値とここは食い違う
+  return `${defs}<p class=desc>この値は<b>最後に起動したときのもの</b>です。
+    気質を変えても、再起動するまでここは変わりません。</p>`;
+}
+
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) {
     console.error("[viewer] DATABASE_URL が未設定です。");
@@ -181,6 +222,12 @@ async function main(): Promise<void> {
       if (path === "/") {
         const body = await overview(pool, agent);
         send(200, renderPage("/", "Russell の記憶", "読み取り専用ビューア", body, shell));
+        return;
+      }
+      if (path === "/agent") {
+        const body = await agentProfile(pool, agent);
+        const box = pick("/agent");
+        send(200, renderPage(path, box.title, box.description, body, shell));
         return;
       }
       const view = VIEWS[path];
