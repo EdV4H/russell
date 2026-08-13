@@ -14,6 +14,7 @@
  */
 
 import type { SourceResult } from "@edv4h/russell-shared";
+import { toBlocks } from "./markdown.js";
 import { type NotionPageRef, blocksToText, pageTitle, toPageRef } from "./render.js";
 
 /** Notion のバージョンヘッダ。上げるときは動作確認とセットで。 */
@@ -38,28 +39,6 @@ export interface NotionPageContent extends NotionPageRef {
 function statusFor(httpStatus: number): SourceResult["status"] {
   if (httpStatus === 401 || httpStatus === 403) return "unauthorized";
   return "failed";
-}
-
-/**
- * 本文を段落ブロックにする。**空行で区切るだけ**。
- *
- * Notion のブロックは1つ 2000 文字まで、1回の作成で 100 個までなので、そこで頭を打つ。
- * **切り詰めたことは黙らない**——最後に印を足す（黙って消えると、書いたつもりで欠ける）。
- */
-export function toParagraphs(body: string): unknown[] {
-  const chunks: string[] = [];
-  for (const para of body.split(/\n{2,}/)) {
-    const text = para.trim();
-    if (!text) continue;
-    for (let i = 0; i < text.length; i += 1800) chunks.push(text.slice(i, i + 1800));
-  }
-  const limited = chunks.slice(0, 99);
-  if (chunks.length > limited.length) limited.push("（以下は長すぎるため省略しました）");
-  return limited.map((content) => ({
-    object: "block",
-    type: "paragraph",
-    paragraph: { rich_text: [{ type: "text", text: { content } }] },
-  }));
 }
 
 export class NotionClient {
@@ -143,7 +122,7 @@ export class NotionClient {
           properties: {
             title: { title: [{ type: "text", text: { content: input.title.slice(0, 200) } }] },
           },
-          children: toParagraphs(input.body),
+          children: toBlocks(input.body),
         }),
       });
       if (!res.ok) return { status: statusFor(res.status), freshness: new Date().toISOString() };
@@ -169,7 +148,7 @@ export class NotionClient {
     try {
       const res = await this.request(`/blocks/${encodeURIComponent(input.pageId)}/children`, {
         method: "PATCH",
-        body: JSON.stringify({ children: toParagraphs(input.body) }),
+        body: JSON.stringify({ children: toBlocks(input.body) }),
       });
       if (!res.ok) return { status: statusFor(res.status), freshness: new Date().toISOString() };
       return {
