@@ -1267,7 +1267,9 @@ ${length}
             // 中身はモデルが書いており、その材料は相手の発言（untrusted）である。
             // **その来歴を消さない**（§12-3）。承認は、その来歴を人が引き受ける行為でもある。
             const ask =
-              tools.get(allowed.tool)?.effect === "read" ? undefined : approvalFor(msg, allowed);
+              tools.get(allowed.tool)?.effect === "read"
+                ? undefined
+                : await approvalFor(msg, allowed);
             // 引き金は相手の発言なので untrusted のまま Policy Gate を通す
             result = await invokeTool(allowed.tool, allowed.input, msg.trustLabel, ask);
           } catch (err) {

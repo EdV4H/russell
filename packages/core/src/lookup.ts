@@ -71,8 +71,12 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
   "notion.read_page":
     'Notion のページ本文を読む。notion.search の結果の id を使う。入力 {"pageId": "..."}',
   "notion.create_page":
-    "Notion に**新しいページを1枚作る**（決められた場所の配下にだけ）。" +
-    '入力 {"title": "見出し", "body": "本文（空行で段落）"}',
+    "Notion に新しいページを1枚作る。" +
+    '入力 {"title": "見出し", "body": "本文（空行で段落）", "parentPageId": "作る場所（省略可）"}。' +
+    "場所は notion.search で見つけた id を使う。省略すると既定の場所へ作る",
+  "notion.append":
+    "Notion のページに書き足す（新しいページを作らず、既にあるページの末尾へ）。" +
+    '入力 {"pageId": "...", "body": "書き足す本文"}',
   deep_recall:
     '自分の書庫と日記を本文で検索する（普段の想起で出てこない古い記憶）。入力 {"query": "語"}',
 };

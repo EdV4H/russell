@@ -5,9 +5,11 @@
  * `ctx.policy` へ各ツールの効果分類を申告する。判定の枠組みと下限はコアが持つ
  * （プラグインは緩和できない, §9.2）。
  *
- * **読むのが主で、書くのは限定的。** ページの作成は `external_write` で、実行の前に
- * 人の承認が要る（#113）。しかも**書く先は1箇所に固定**する（`NOTION_PARENT_PAGE_ID`）——
- * 未設定なら書く道具そのものを支給しない。権限の段階的解放（§9.3）の続きである。
+ * **読むだけでなく、書ける。** ページの作成と追記は `external_write` で、
+ * 実行の前に**人の承認**が要る（#113）。承認画面には**どこへ書くか**を名前で出す。
+ *
+ * 書ける範囲の境界は、読むときと同じで**Notion 側の共有設定**である。統合に共有されて
+ * いないページには届かない。共有を外せば即座に書けなくなる（回収と同じ効果, §9.3）。
  *
  * トークンが無いときは**何も register しない**。「未支給の装備はツール定義自体を
  * コンテキストに載せない」（§9.2）——モデルは持っていない能力の存在すら知らない。
@@ -26,10 +28,10 @@ export interface NotionEquipmentOptions {
   /** 検索結果の既定件数。 */
   defaultLimit?: number;
   /**
-   * 書き込む先の親ページ（既定 env `NOTION_PARENT_PAGE_ID`）。
+   * 場所を指定されなかったときの作成先（既定 env `NOTION_PARENT_PAGE_ID`）。
    *
-   * **未設定なら書く道具を支給しない。** 「どこにでも書ける」状態は、承認を挟んでも危ない——
-   * 押す人が毎回、書き先の妥当性まで判断させられることになる。
+   * **既定であって、制限ではない。** モデルは `notion.search` で見つけた場所も指定できる。
+   * どこへ書くかは承認画面に名前で出るので、**押す人がそこで判断できる**。
    */
   parentPageId?: string;
 }
@@ -66,11 +68,12 @@ export function createNotionEquipmentPlugin(options: NotionEquipmentOptions = {}
       // 効果分類の申告（§9.2）。読むのは read、書くのは external_write（人の承認が要る）。
       ctx.policy.declareEffect("notion.search", "read");
       ctx.policy.declareEffect("notion.read_page", "read");
-      // **書く先が決まっていなければ、道具そのものを支給しない**（§9.2）。
-      // 「どこにでも書ける」状態は、承認を挟んでも危ない——押す人は毎回、
-      // 書き先が妥当かどうかまで判断させられることになる。
-      const parentPageId = options.parentPageId ?? process.env.NOTION_PARENT_PAGE_ID;
-      if (parentPageId) ctx.policy.declareEffect("notion.create_page", "external_write");
+      // 書ける範囲は**Notion 側の共有設定**がそのまま境界になる（読むときと同じ）。
+      // 統合に共有されていないページには、書こうとしても届かない。
+      // そのうえで**実行の前に人の承認**が入り、承認画面には**どこへ書くか**を出す。
+      const defaultParentId = options.parentPageId ?? process.env.NOTION_PARENT_PAGE_ID;
+      ctx.policy.declareEffect("notion.create_page", "external_write");
+      ctx.policy.declareEffect("notion.append", "external_write");
 
       const offEquipment = ctx.equipment.register({
         id: "notion",
@@ -78,17 +81,17 @@ export function createNotionEquipmentPlugin(options: NotionEquipmentOptions = {}
         mcpServer: { kind: "http", baseUrl: "https://api.notion.com/v1" },
         // 統合に共有されたページしか読めない。**スコープの実体は Notion 側の共有設定**で、
         // ここに書くのはその宣言。共有を外せば即座に読めなくなる（回収と同じ効果）。
-        scopes: ["notion:read"],
-        // 効果分類から**導出**する（read → 0）。手で盛らない（guides/22）。
+        scopes: ["notion:read", "notion:write"],
+        // 効果分類から**導出**する（external_write → 2。2以上は毎回 HITL, guides/22）。
+        // 手で盛らないのと同じく、**手で下げない**——書けるようになった以上、0 ではない。
         // 外部の untrusted テキストを運び込む点は危険度ではなく**来歴**の問題で、
         // 戻り値に trustLabel を付けることで扱う（§12-3）。
-        dangerLevel: 0,
+        dangerLevel: 2,
         tools: () => [
           { name: "notion.search", effect: "read" },
           { name: "notion.read_page", effect: "read" },
-          ...(parentPageId
-            ? [{ name: "notion.create_page", effect: "external_write" as const }]
-            : []),
+          { name: "notion.create_page", effect: "external_write" as const },
+          { name: "notion.append", effect: "external_write" as const },
         ],
       });
 
@@ -118,32 +121,73 @@ export function createNotionEquipmentPlugin(options: NotionEquipmentOptions = {}
         },
       });
 
+      /** 承認画面に出す「どこへ」。**引けなければ id をそのまま見せる**（当てない）。 */
+      async function where(pageId: string): Promise<string> {
+        return (await client.titleOf(pageId)) ?? pageId;
+      }
+
       /**
-       * ページを1枚作る。**書く先は固定**（`NOTION_PARENT_PAGE_ID` の配下）。
+       * ページを1枚作る。
        *
-       * 実行の前に人の承認が要る（`external_write`, §12-2）。承認の画面を出すのは
-       * コアと通信面の仕事で、ここは**承認が取れた後に呼ばれる**だけである。
+       * 親は**モデルが指定できる**（`notion.search` で見つけた id）。省略されたら既定の場所へ。
+       * どちらも無ければ作らない——**どこへ書くか分からないまま書きにいかない**。
        */
-      const offCreate = parentPageId
-        ? ctx.tools.register("notion.create_page", {
-            name: "notion.create_page",
-            effect: "external_write",
-            async run(input: { title: string; body: string }): Promise<
-              NotionToolResult<NotionPageRef>
-            > {
-              const title = (input?.title ?? "").trim();
-              const body = (input?.body ?? "").trim();
-              // **中身が無いページを作らない。** 承認を通ったからといって、空を書きに行かない
-              if (title === "" || body === "") {
-                return untrusted({ status: "failed", freshness: new Date().toISOString() });
-              }
-              return untrusted(await client.createPage({ parentPageId, title, body }));
-            },
-          })
-        : undefined;
+      const offCreate = ctx.tools.register("notion.create_page", {
+        name: "notion.create_page",
+        effect: "external_write",
+        async describe(input: { title?: string; body?: string; parentPageId?: string }) {
+          const parent = (input?.parentPageId ?? defaultParentId ?? "").trim();
+          const at = parent ? `〈${await where(parent)}〉の下に` : "（場所の指定なし）";
+          return {
+            summary: `Notion の ${at}「${(input?.title ?? "").trim()}」を作ります`,
+            preview: input?.body ?? "",
+          };
+        },
+        async run(input: { title: string; body: string; parentPageId?: string }): Promise<
+          NotionToolResult<NotionPageRef>
+        > {
+          const title = (input?.title ?? "").trim();
+          const body = (input?.body ?? "").trim();
+          const parentPageId = (input?.parentPageId ?? defaultParentId ?? "").trim();
+          // **中身が無いページを作らない。** 承認を通ったからといって、空を書きに行かない
+          if (title === "" || body === "" || parentPageId === "") {
+            return untrusted({ status: "failed", freshness: new Date().toISOString() });
+          }
+          return untrusted(await client.createPage({ parentPageId, title, body }));
+        },
+      });
+
+      /**
+       * すでにあるページに書き足す。**普段いちばん使うのはこちら**——
+       * 「このページに追記しておいて」は、新しいページを作る話ではない。
+       */
+      const offAppend = ctx.tools.register("notion.append", {
+        name: "notion.append",
+        effect: "external_write",
+        async describe(input: { pageId?: string; body?: string }) {
+          const id = (input?.pageId ?? "").trim();
+          return {
+            summary: id
+              ? `Notion の〈${await where(id)}〉に書き足します`
+              : "Notion に書き足します（ページの指定なし）",
+            preview: input?.body ?? "",
+          };
+        },
+        async run(input: { pageId: string; body: string }): Promise<
+          NotionToolResult<NotionPageRef>
+        > {
+          const pageId = (input?.pageId ?? "").trim();
+          const body = (input?.body ?? "").trim();
+          if (pageId === "" || body === "") {
+            return untrusted({ status: "failed", freshness: new Date().toISOString() });
+          }
+          return untrusted(await client.appendToPage({ pageId, body }));
+        },
+      });
 
       return () => {
-        offCreate?.();
+        offAppend();
+        offCreate();
         offRead();
         offSearch();
         offEquipment();

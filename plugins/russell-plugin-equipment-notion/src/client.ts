@@ -162,6 +162,41 @@ export class NotionClient {
     }
   }
 
+  /** すでにあるページの末尾に段落を足す（`external_write`）。 */
+  async appendToPage(input: { pageId: string; body: string }): Promise<
+    SourceResult<NotionPageRef>
+  > {
+    try {
+      const res = await this.request(`/blocks/${encodeURIComponent(input.pageId)}/children`, {
+        method: "PATCH",
+        body: JSON.stringify({ children: toParagraphs(input.body) }),
+      });
+      if (!res.ok) return { status: statusFor(res.status), freshness: new Date().toISOString() };
+      return {
+        status: "complete",
+        freshness: new Date().toISOString(),
+        data: { id: input.pageId, title: "", url: "" },
+      };
+    } catch {
+      return { status: "failed", freshness: new Date().toISOString() };
+    }
+  }
+
+  /**
+   * ページの見出しだけを引く。**承認画面に「どこへ書くか」を出す**ために要る。
+   * 引けなければ `undefined`——**id をそのまま見せる**（当てない）。
+   */
+  async titleOf(pageId: string): Promise<string | undefined> {
+    try {
+      const res = await this.request(`/pages/${encodeURIComponent(pageId)}`, { method: "GET" });
+      if (!res.ok) return undefined;
+      const page = (await res.json()) as Record<string, unknown>;
+      return pageTitle(page) || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** ページ1件を読む（プロパティ + 本文ブロック）。 */
   async readPage(pageId: string): Promise<SourceResult<NotionPageContent>> {
     try {
