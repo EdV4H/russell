@@ -14,6 +14,7 @@
 
 import type { DeliveryResult } from "@edv4h/russell-shared";
 import { WebClient } from "@slack/web-api";
+import { toSlackMrkdwn } from "./mrkdwn.js";
 
 export interface SlackPosterOptions {
   botToken?: string;
@@ -31,7 +32,8 @@ export function createSlackPoster(options: SlackPosterOptions = {}): SlackPoster
   return {
     async post(channel: string, text: string): Promise<DeliveryResult> {
       try {
-        await client.chat.postMessage({ channel, text });
+        // 日報も同じ書式で出す（面が同じなら見え方も同じであるべき）
+        await client.chat.postMessage({ channel, text: toSlackMrkdwn(text) });
         return { status: "succeeded" };
       } catch (err) {
         // タイムアウト等は unknown（blind retry しない, §9.2）。二重投稿の方が害が大きい

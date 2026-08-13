@@ -40,6 +40,7 @@ import {
   parseContextId,
 } from "./inbound.js";
 import { operatorCheckFromEnv, runRussellCommand } from "./killswitch-command.js";
+import { toSlackMrkdwn } from "./mrkdwn.js";
 import { createNameResolver, mentionedIds } from "./names.js";
 import { createTextMemo, defaultReactionEmoji, pickReactionEmoji } from "./reactions.js";
 
@@ -272,7 +273,9 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
             await app.client.chat.postMessage({
               channel,
               thread_ts: thread || undefined,
-              text: out.text,
+              // **Slack の書式へ直してから送る。** コアは Markdown を書くので、
+              // そのままだと `**強調**` が記号のまま出る（見え方は面の都合, §10.1）
+              text: toSlackMrkdwn(out.text),
             });
             // 発言したスレッドを覚えておく。以降このスレッドの続きは mention 無しで拾う。
             if (thread) activeThreads.add(out.contextId);

@@ -442,6 +442,22 @@ export async function createAgent(
     conversationContext.set(contextId, turns);
   }
 
+  /**
+   * 返信の形。**「簡潔に」だけでは効かない**——資料を読んだ回の返信が、読んだものの
+   * 要約を丸ごと並べる形になった（チャットで読む長さではない）。
+   *
+   * 長さの目安と、**書かないもの**を具体的に挙げる。チャットは往復できる場所なので、
+   * 全部を一度に渡す必要がない、というのが理由の中心である。
+   */
+  const REPLY_SHAPE = `返信の形:
+- **結論から書く。** 前置き・復唱・「承知しました」だけの行を置かない。
+- **普通は3〜5行。** 長くなるなら、要点だけ書いて「詳しく出しますか」と聞く。
+  全部を一度に渡さない——チャットは往復できる場所です。
+- **資料を読んだときも、読んだものを並べない。** 相手が次に動けることだけ書く。
+  一覧が要るなら、件数と代表例にとどめて「全部出しますか」と聞く。
+- **見出し（#）と表は使わない。** チャットには重い。箇条書きは短く、多くて5つまで。
+- **確認は多くて2つ。** 質問攻めにしない。聞かなくても進められるなら、進めてから報告する。`;
+
   /** temperament から人格プロンプトを生成する（§6.1）。 */
   function personaPrompt(): string {
     const t = config.temperament;
@@ -467,7 +483,7 @@ export async function createAgent(
     const tools = lookupInstructions(
       lookupCatalog(equipment.getAll(), toolsMap, TOOL_DESCRIPTIONS),
     );
-    return `あなたは「${t.name}」という名前の同僚です。口調: ${t.tone}。${back}記憶を頼りに、簡潔に応答してください。\n${memoryHonesty}${tools}`;
+    return `あなたは「${t.name}」という名前の同僚です。口調: ${t.tone}。${back}記憶を頼りに応答してください。\n${REPLY_SHAPE}\n${memoryHonesty}${tools}`;
   }
 
   /**
