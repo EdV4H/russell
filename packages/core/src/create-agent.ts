@@ -572,7 +572,7 @@ ${length}
     // 依頼の文脈が無い）では、今までどおり拒否する——**黙って通さない**のが原則で、
     // 承認はその原則を緩めるのではなく、**人を1人挟む**ためのものである。
     if (!decision.allowed && decision.approvable && ask) {
-      const granted = await requestApproval(name, ask, trustLabel);
+      const granted = await requestApproval(name, input, ask, trustLabel);
       if (granted) return await runTool(name, input, trustLabel);
     }
     if (!decision.allowed) {
@@ -627,6 +627,7 @@ ${length}
    */
   async function requestApproval(
     name: string,
+    input: unknown,
     ask: ApprovalContext,
     trustLabel: TrustLabel,
   ): Promise<boolean> {
@@ -644,13 +645,23 @@ ${length}
     });
     if (!audited) return false;
 
+    // **何をどこへ、は道具しか知らない。** コアは入力を JSON としてしか見られないので、
+    // 「〈設計メモ〉の下に作ります」のような文はここでは作れない。作れる道具には作らせる。
+    // **聞く場所に寄せてある**——呼び出し側ごとに書くと、経路によって承認画面の質が変わる。
+    let described: { summary?: string; preview?: string } = {};
+    try {
+      described = (await tool.describe?.(input)) ?? {};
+    } catch {
+      // 説明が作れなくても承認は止めない（素朴な文になるだけ）
+    }
+
     let outcome: ApprovalOutcome;
     try {
       outcome = await Promise.race([
         surface.requestApproval({
           contextId: ask.contextId,
-          summary: ask.summary,
-          previewText: ask.previewText,
+          summary: described.summary ?? ask.summary,
+          previewText: described.preview ?? ask.previewText,
           tool: name,
           effect: tool.effect,
           requestedBy: ask.requestedBy,
@@ -1267,9 +1278,7 @@ ${length}
             // 中身はモデルが書いており、その材料は相手の発言（untrusted）である。
             // **その来歴を消さない**（§12-3）。承認は、その来歴を人が引き受ける行為でもある。
             const ask =
-              tools.get(allowed.tool)?.effect === "read"
-                ? undefined
-                : await approvalFor(msg, allowed);
+              tools.get(allowed.tool)?.effect === "read" ? undefined : approvalFor(msg, allowed);
             // 引き金は相手の発言なので untrusted のまま Policy Gate を通す
             result = await invokeTool(allowed.tool, allowed.input, msg.trustLabel, ask);
           } catch (err) {
