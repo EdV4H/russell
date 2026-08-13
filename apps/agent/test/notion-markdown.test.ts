@@ -9,7 +9,12 @@
  * ことがない。ここで固めたいのは、その**機械的であること**。
  */
 
-import { toBlocks, toRichText } from "@edv4h/russell-plugin-equipment-notion";
+import {
+  findBlock,
+  toBlockRefs,
+  toBlocks,
+  toRichText,
+} from "@edv4h/russell-plugin-equipment-notion";
 import { expect, test } from "vitest";
 
 /** ブロックの型だけを並べる（構造を見るため）。 */
@@ -100,4 +105,53 @@ test("長すぎるときは切るが、**切ったことは黙らない**", () =
   expect(blocks.length).toBeLessThanOrEqual(100); // Notion の上限
   const last = blocks.at(-1) as { paragraph: { rich_text: { text: { content: string } }[] } };
   expect(last.paragraph.rich_text[0]?.text.content).toContain("省略しました");
+});
+
+// --- 直す場所を、文で探す（id をモデルに扱わせない） ---
+
+const REFS = [
+  { id: "b1", type: "paragraph", text: "定例は金曜15時から" },
+  { id: "b2", type: "bulleted_list_item", text: "資料を作る" },
+  { id: "b3", type: "bulleted_list_item", text: "資料を配る" },
+];
+
+test("文で1件に決まれば、その場所を返す", () => {
+  const hit = findBlock(REFS, "定例は金曜15時から");
+
+  expect(hit).toEqual({ found: REFS[0] });
+});
+
+test("空白の違いでは見失わない（人は文をそのまま写さない）", () => {
+  expect(findBlock(REFS, "  定例は金曜15時から  ")).toEqual({ found: REFS[0] });
+});
+
+test("部分でも当たるが、**複数当たったら直さない**", () => {
+  expect(findBlock(REFS, "資料を作る")).toEqual({ found: REFS[1] });
+  // 「資料を」は2件に当たる。どれを直すか決まらないまま当てにいくと、別の行を壊す
+  expect(findBlock(REFS, "資料を")).toEqual({ error: "ambiguous" });
+});
+
+test("見つからなければ直さない", () => {
+  expect(findBlock(REFS, "存在しない文")).toEqual({ error: "none" });
+  expect(findBlock(REFS, "")).toEqual({ error: "none" });
+});
+
+test("完全一致を優先する（部分一致に引きずられない）", () => {
+  const refs = [
+    { id: "a", type: "paragraph", text: "資料" },
+    { id: "b", type: "paragraph", text: "資料を作る" },
+  ];
+
+  // 「資料」は両方に含まれるが、完全一致する方に決まる
+  expect(findBlock(refs, "資料")).toEqual({ found: refs[0] });
+});
+
+test("本文を持たないブロックは、直す対象に出てこない", () => {
+  const refs = toBlockRefs([
+    { id: "d", type: "divider", divider: {} },
+    { id: "p", type: "paragraph", paragraph: { rich_text: [{ plain_text: "あ" }] } },
+    { id: "e", type: "paragraph", paragraph: { rich_text: [] } },
+  ]);
+
+  expect(refs.map((r) => r.id)).toEqual(["p"]);
 });

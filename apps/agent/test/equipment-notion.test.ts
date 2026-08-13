@@ -99,10 +99,15 @@ test("装備として登録され、読む道具と書く道具を持つ", async
     "notion.read_page",
     "notion.create_page",
     "notion.append",
+    "notion.edit",
   ]);
   // 書く道具は external_write。**内部の書き込みとして紛れ込ませない**
   const writes = notion?.tools().filter((t) => t.effect !== "read") ?? [];
-  expect(writes.map((t) => t.effect)).toEqual(["external_write", "external_write"]);
+  expect(writes.map((t) => t.effect)).toEqual([
+    "external_write",
+    "external_write",
+    "external_write",
+  ]);
 
   await agent.destroy();
 });
@@ -293,6 +298,68 @@ test("場所が分からなければ書かない（承認を通っても）", as
     ?.run({ title: "議事録", body: "本文" })) as { status: string };
 
   // 既定の作成先も指定も無い。**どこへ書くか分からないまま書きにいかない**
+  expect(result.status).toBe("failed");
+
+  await agent.destroy();
+});
+
+test("**編集の承認画面には、消える文と入る文を並べて出す**", async () => {
+  const { agent } = await withNotion({
+    "/pages/page-1": { body: PAGE },
+    "/blocks/page-1/children": {
+      body: {
+        results: [
+          {
+            id: "b1",
+            type: "paragraph",
+            paragraph: { rich_text: [{ plain_text: "定例は金曜15時から" }] },
+          },
+        ],
+      },
+    },
+  });
+
+  const described = await agent.ctx.tools.get("notion.edit")?.describe?.({
+    pageId: "page-1",
+    find: "定例は金曜15時から",
+    replace: "定例は木曜14時から",
+  });
+
+  // 入る文だけでは、押す人は何が失われるか分からない
+  expect(described?.preview).toContain("− 定例は金曜15時から");
+  expect(described?.preview).toContain("＋ 定例は木曜14時から");
+  expect(described?.summary).toContain("定例メモ"); // どのページか
+
+  await agent.destroy();
+});
+
+test("直す場所が決まらないことも、押す前に見せる", async () => {
+  const { agent } = await withNotion({
+    "/pages/page-1": { body: PAGE },
+    "/blocks/page-1/children": { body: { results: [] } },
+  });
+
+  const described = await agent.ctx.tools
+    .get("notion.edit")
+    ?.describe?.({ pageId: "page-1", find: "無い文", replace: "新しい文" });
+
+  expect(described?.summary).toContain("見つかりません");
+
+  await agent.destroy();
+});
+
+test("承認の後にもう一度探し、変わっていたら書き換えない", async () => {
+  const { agent } = await withNotion({
+    "/blocks/page-1/children": { body: { results: [] } }, // 承認の間に消えた/直された
+  });
+
+  const result = (await agent.ctx.tools
+    .get("notion.edit")
+    ?.run({ pageId: "page-1", find: "承認したときの文", replace: "新しい文" })) as {
+    status: string;
+  };
+
+  // 承認したときと違うものを上書きしない
   expect(result.status).toBe("failed");
 
   await agent.destroy();

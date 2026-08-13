@@ -17,6 +17,7 @@
 
 import type { AgentContext, RussellPlugin, SourceResult } from "@edv4h/russell-shared";
 import { type FetchLike, NotionClient, type NotionPageContent } from "./client.js";
+import { findBlock } from "./render.js";
 import type { NotionPageRef } from "./render.js";
 
 export interface NotionEquipmentOptions {
@@ -74,6 +75,9 @@ export function createNotionEquipmentPlugin(options: NotionEquipmentOptions = {}
       const defaultParentId = options.parentPageId ?? process.env.NOTION_PARENT_PAGE_ID;
       ctx.policy.declareEffect("notion.create_page", "external_write");
       ctx.policy.declareEffect("notion.append", "external_write");
+      // 編集も external_write。**取り消せない扱いにはしない**——Notion 側にページ履歴が
+      // あり、人は戻せる。代わりに**承認画面で何が消えるかを見せる**ことで担保する。
+      ctx.policy.declareEffect("notion.edit", "external_write");
 
       const offEquipment = ctx.equipment.register({
         id: "notion",
@@ -92,6 +96,7 @@ export function createNotionEquipmentPlugin(options: NotionEquipmentOptions = {}
           { name: "notion.read_page", effect: "read" },
           { name: "notion.create_page", effect: "external_write" as const },
           { name: "notion.append", effect: "external_write" as const },
+          { name: "notion.edit", effect: "external_write" as const },
         ],
       });
 
@@ -185,7 +190,57 @@ export function createNotionEquipmentPlugin(options: NotionEquipmentOptions = {}
         },
       });
 
+      /**
+       * すでに書いてあるものを直す。**文で場所を指す**（id をモデルに扱わせない）。
+       *
+       * 追記と違い、**何かが消える**。承認画面には「消える文」と「入る文」を並べて出す——
+       * 入る文だけでは、押す人は何が失われるか分からない。
+       */
+      const offEdit = ctx.tools.register("notion.edit", {
+        name: "notion.edit",
+        effect: "external_write",
+        async describe(input: { pageId?: string; find?: string; replace?: string }) {
+          const pageId = (input?.pageId ?? "").trim();
+          const blocks = pageId ? await client.listBlocks(pageId) : undefined;
+          const hit = blocks ? findBlock(blocks, input?.find ?? "") : undefined;
+          const at = pageId ? `〈${await where(pageId)}〉` : "（ページの指定なし）";
+          if (!hit || "error" in hit) {
+            // **見つからないことも、押す前に見せる。** 押してから失敗するより良い
+            const why =
+              hit && hit.error === "ambiguous" ? "同じ文が複数あります" : "見つかりません";
+            return {
+              summary: `Notion の ${at} を直します（${why}）`,
+              preview: input?.replace ?? "",
+            };
+          }
+          return {
+            summary: `Notion の ${at} の1行を直します`,
+            // **消える文と入る文を並べる。** 入る文だけでは何が失われるか分からない
+            preview: `− ${hit.found.text}\n＋ ${(input?.replace ?? "").trim()}`,
+          };
+        },
+        async run(input: { pageId: string; find: string; replace: string }): Promise<
+          NotionToolResult<NotionPageRef>
+        > {
+          const pageId = (input?.pageId ?? "").trim();
+          const replace = (input?.replace ?? "").trim();
+          if (pageId === "" || replace === "") {
+            return untrusted({ status: "failed", freshness: new Date().toISOString() });
+          }
+          const blocks = await client.listBlocks(pageId);
+          if (!blocks) return untrusted({ status: "failed", freshness: new Date().toISOString() });
+          // **承認した後に、もう一度同じ文で探す。** その間に誰かが直していたら見つからず、
+          // 書き換えは起きない（承認したときと違うものを上書きしない）
+          const hit = findBlock(blocks, input?.find ?? "");
+          if ("error" in hit) {
+            return untrusted({ status: "failed", freshness: new Date().toISOString() });
+          }
+          return untrusted(await client.updateBlockText(hit.found, replace));
+        },
+      });
+
       return () => {
+        offEdit();
         offAppend();
         offCreate();
         offRead();

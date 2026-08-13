@@ -110,6 +110,57 @@ export function blockToText(block: unknown): string {
   return `${prefix}${text}`;
 }
 
+/** 中身に触れるときの1件。**id が要る**（テキストだけでは書き換えられない）。 */
+export interface NotionBlockRef {
+  id: string;
+  type: string;
+  /** 装飾を落とした素のテキスト。**照合と、承認画面に出す「いまの文」に使う**。 */
+  text: string;
+}
+
+/** 書き換えの対象にできるブロックを、id つきで拾う。本文を持たない種別は落とす。 */
+export function toBlockRefs(blocks: unknown[]): NotionBlockRef[] {
+  const refs: NotionBlockRef[] = [];
+  for (const block of blocks) {
+    if (typeof block !== "object" || block === null) continue;
+    const b = block as Record<string, unknown>;
+    const type = typeof b.type === "string" ? b.type : "";
+    const id = typeof b.id === "string" ? b.id : "";
+    const body = b[type];
+    if (!id || typeof body !== "object" || body === null) continue;
+    const text = plainText((body as Record<string, unknown>).rich_text);
+    if (!text) continue;
+    refs.push({ id, type, text });
+  }
+  return refs;
+}
+
+/**
+ * 書き換える1件を、文で探す。**モデルに id を扱わせない**——
+ * 「この文をこう直す」は人の言い方で、id の受け渡しは間違いが起きるだけである。
+ *
+ * 見つからない・複数当たるときは**書き換えない**。どれを直すか決まらないまま
+ * 当てにいくと、別の行を壊す。
+ */
+export function findBlock(
+  refs: NotionBlockRef[],
+  find: string,
+): { found: NotionBlockRef } | { error: "none" | "ambiguous" } {
+  const needle = normalize(find);
+  if (needle === "") return { error: "none" };
+  const exact = refs.filter((r) => normalize(r.text) === needle);
+  const hits = exact.length > 0 ? exact : refs.filter((r) => normalize(r.text).includes(needle));
+  if (hits.length === 0) return { error: "none" };
+  if (hits.length > 1) return { error: "ambiguous" };
+  // biome-ignore lint/style/noNonNullAssertion: 直前に1件だけと確かめている
+  return { found: hits[0]! };
+}
+
+/** 照合用の正規化。**空白の違いで見つからない、を避ける**（人は文をそのまま写さない）。 */
+function normalize(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 /** ブロックの配列を本文テキストにする。空行は畳む。 */
 export function blocksToText(blocks: unknown[]): string {
   return blocks
