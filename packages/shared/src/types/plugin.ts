@@ -118,6 +118,15 @@ export interface ToolSpec {
   effect: EffectClass;
   // biome-ignore lint/suspicious/noExplicitAny: 提案骨格。実装時に入出力スキーマを確定する。
   run(input: any): Promise<unknown>;
+  /**
+   * 承認を求めるときに、人へ見せる形にする（任意）。
+   *
+   * **どこへ書くのかは、道具しか知らない。** コアは入力を JSON としてしか見られないので、
+   * 「〈設計メモ〉の下に作ります」のような文はここでしか作れない。
+   * 実装しなければコアが素朴な文で代替する（**押す人の判断材料が減るだけ**で、壊れはしない）。
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: run と同じ入力を受ける。
+  describe?(input: any): Promise<{ summary?: string; preview?: string }>;
 }
 export interface ToolRegistry {
   register(name: string, tool: ToolSpec): () => void;

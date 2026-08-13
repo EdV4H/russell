@@ -40,6 +40,28 @@ function statusFor(httpStatus: number): SourceResult["status"] {
   return "failed";
 }
 
+/**
+ * 本文を段落ブロックにする。**空行で区切るだけ**。
+ *
+ * Notion のブロックは1つ 2000 文字まで、1回の作成で 100 個までなので、そこで頭を打つ。
+ * **切り詰めたことは黙らない**——最後に印を足す（黙って消えると、書いたつもりで欠ける）。
+ */
+export function toParagraphs(body: string): unknown[] {
+  const chunks: string[] = [];
+  for (const para of body.split(/\n{2,}/)) {
+    const text = para.trim();
+    if (!text) continue;
+    for (let i = 0; i < text.length; i += 1800) chunks.push(text.slice(i, i + 1800));
+  }
+  const limited = chunks.slice(0, 99);
+  if (chunks.length > limited.length) limited.push("（以下は長すぎるため省略しました）");
+  return limited.map((content) => ({
+    object: "block",
+    type: "paragraph",
+    paragraph: { rich_text: [{ type: "text", text: { content } }] },
+  }));
+}
+
 export class NotionClient {
   private readonly token: string;
   private readonly fetchImpl: FetchLike;
@@ -98,6 +120,80 @@ export class NotionClient {
       };
     } catch {
       return { status: "failed", freshness: new Date().toISOString() };
+    }
+  }
+
+  /**
+   * ページを1枚作る（`external_write`）。**親を指定しないと作れない**——
+   * Notion 側の仕様でもあるが、装備としても「どこに書くか」を人が決める形になる。
+   *
+   * 本文は**段落だけ**にしてある。見出しや表を組み立て始めると、
+   * 「何が書かれるか」を承認画面で見せきれなくなる（押す人が判断できない）。
+   */
+  async createPage(input: {
+    parentPageId: string;
+    title: string;
+    body: string;
+  }): Promise<SourceResult<NotionPageRef>> {
+    try {
+      const res = await this.request("/pages", {
+        method: "POST",
+        body: JSON.stringify({
+          parent: { page_id: input.parentPageId },
+          properties: {
+            title: { title: [{ type: "text", text: { content: input.title.slice(0, 200) } }] },
+          },
+          children: toParagraphs(input.body),
+        }),
+      });
+      if (!res.ok) return { status: statusFor(res.status), freshness: new Date().toISOString() };
+      const page = (await res.json()) as Record<string, unknown>;
+      return {
+        status: "complete",
+        freshness: new Date().toISOString(),
+        data: {
+          id: typeof page.id === "string" ? page.id : "",
+          title: input.title,
+          url: typeof page.url === "string" ? page.url : "",
+        },
+      };
+    } catch {
+      return { status: "failed", freshness: new Date().toISOString() };
+    }
+  }
+
+  /** すでにあるページの末尾に段落を足す（`external_write`）。 */
+  async appendToPage(input: { pageId: string; body: string }): Promise<
+    SourceResult<NotionPageRef>
+  > {
+    try {
+      const res = await this.request(`/blocks/${encodeURIComponent(input.pageId)}/children`, {
+        method: "PATCH",
+        body: JSON.stringify({ children: toParagraphs(input.body) }),
+      });
+      if (!res.ok) return { status: statusFor(res.status), freshness: new Date().toISOString() };
+      return {
+        status: "complete",
+        freshness: new Date().toISOString(),
+        data: { id: input.pageId, title: "", url: "" },
+      };
+    } catch {
+      return { status: "failed", freshness: new Date().toISOString() };
+    }
+  }
+
+  /**
+   * ページの見出しだけを引く。**承認画面に「どこへ書くか」を出す**ために要る。
+   * 引けなければ `undefined`——**id をそのまま見せる**（当てない）。
+   */
+  async titleOf(pageId: string): Promise<string | undefined> {
+    try {
+      const res = await this.request(`/pages/${encodeURIComponent(pageId)}`, { method: "GET" });
+      if (!res.ok) return undefined;
+      const page = (await res.json()) as Record<string, unknown>;
+      return pageTitle(page) || undefined;
+    } catch {
+      return undefined;
     }
   }
 

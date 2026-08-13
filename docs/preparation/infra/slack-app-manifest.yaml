@@ -61,9 +61,12 @@ settings:
       - message.channels
       - message.groups # groups:history を使わないなら消す
       - message.im
-  # HITL の承認ボタン（Block Kit）は P0 スコープ外。必要になったら有効化する。
+  # ★ HITL の承認ボタン（Block Kit）に要る。**これが off だと押しても何も起きない**——
+  #    ボタンは表示されるので、「壊れている」ではなく「無反応」という形で出る。
+  #    Socket Mode が有効なら Request URL は要らない（画面上も出ない）。
+  #    スコープは増えないので、**入れ直し（Reinstall）は不要**。
   interactivity:
-    is_enabled: false
+    is_enabled: true
   socket_mode_enabled: true
   org_deploy_enabled: false
   token_rotation_enabled: false

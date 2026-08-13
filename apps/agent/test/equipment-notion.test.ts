@@ -87,15 +87,22 @@ async function withNotion(
   return { agent, calls: notion.calls };
 }
 
-test("装備として登録され、read のツールを2つ持つ", async () => {
+test("装備として登録され、読む道具と書く道具を持つ", async () => {
   const { agent } = await withNotion({});
 
   const notion = agent.ctx.equipment.get("notion");
-  expect(notion?.scopes).toEqual(["notion:read"]);
-  expect(notion?.dangerLevel).toBe(0); // read から導出。手で盛らない（guides/22）
-  expect(notion?.tools().map((t) => t.name)).toEqual(["notion.search", "notion.read_page"]);
-  // 書き込みの効果分類を持つツールが混ざっていないこと
-  expect(notion?.tools().every((t) => t.effect === "read")).toBe(true);
+  expect(notion?.scopes).toEqual(["notion:read", "notion:write"]);
+  // 効果分類から導出。**書けるようになった以上 0 ではない**（2以上は毎回 HITL, guides/22）
+  expect(notion?.dangerLevel).toBe(2);
+  expect(notion?.tools().map((t) => t.name)).toEqual([
+    "notion.search",
+    "notion.read_page",
+    "notion.create_page",
+    "notion.append",
+  ]);
+  // 書く道具は external_write。**内部の書き込みとして紛れ込ませない**
+  const writes = notion?.tools().filter((t) => t.effect !== "read") ?? [];
+  expect(writes.map((t) => t.effect)).toEqual(["external_write", "external_write"]);
 
   await agent.destroy();
 });
@@ -240,6 +247,53 @@ test("空の検索語では外部を叩かない", async () => {
   expect(result.status).toBe("complete");
   expect(result.data).toEqual([]);
   expect(calls).toHaveLength(0);
+
+  await agent.destroy();
+});
+
+test("**どこへ書くかを、承認画面に名前で出す**（id では判断できない）", async () => {
+  const { agent } = await withNotion({
+    // 親ページの見出しを引く経路（GET /pages/:id）に答える
+    "/pages/parent-1": {
+      body: { properties: { title: { type: "title", title: [{ plain_text: "設計メモ" }] } } },
+    },
+  });
+
+  const tool = agent.ctx.tools.get("notion.create_page");
+  const described = await tool?.describe?.({
+    title: "議事録",
+    body: "決まったこと",
+    parentPageId: "parent-1",
+  });
+
+  expect(described?.summary).toContain("設計メモ"); // どこへ
+  expect(described?.summary).toContain("議事録"); // 何を
+  expect(described?.preview).toBe("決まったこと"); // 中身はそのまま
+
+  await agent.destroy();
+});
+
+test("見出しが引けなければ id をそのまま見せる（当てない）", async () => {
+  const { agent } = await withNotion({}); // /pages/... は 404 になる
+
+  const described = await agent.ctx.tools
+    .get("notion.append")
+    ?.describe?.({ pageId: "page-xyz", body: "追記" });
+
+  expect(described?.summary).toContain("page-xyz");
+
+  await agent.destroy();
+});
+
+test("場所が分からなければ書かない（承認を通っても）", async () => {
+  const { agent } = await withNotion({});
+
+  const result = (await agent.ctx.tools
+    .get("notion.create_page")
+    ?.run({ title: "議事録", body: "本文" })) as { status: string };
+
+  // 既定の作成先も指定も無い。**どこへ書くか分からないまま書きにいかない**
+  expect(result.status).toBe("failed");
 
   await agent.destroy();
 });
