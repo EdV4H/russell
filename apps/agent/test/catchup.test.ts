@@ -317,6 +317,46 @@ test("読めない会話があっても止まらず、読めなかった数を�
   expect(result.found).toHaveLength(1);
   // 0件が「無い」なのか「見られなかった」なのかは別物なので、必ず数える
   expect(result.skipped).toBe(1);
+  // **理由も返す。** 数だけだと、直せるものかどうかが判断できない
+  expect(result.reasons).toEqual(["channel_not_found"]);
+});
+
+test("読めなかった理由は、直せるものかどうかが分かる形で返る", async () => {
+  const result = await findPendingMessages(
+    fakeSlack({
+      async listConversations() {
+        return [
+          { id: "C_NO_SCOPE", isDm: false },
+          { id: "C_GONE", isDm: false },
+          { id: "C_ALSO_GONE", isDm: false },
+        ];
+      },
+      async history(channel) {
+        // 権限不足は**こちらで直せる**。消えたチャンネルは直せない。この区別が要る
+        if (channel === "C_NO_SCOPE") throw new Error("An API error occurred: missing_scope");
+        throw new Error("An API error occurred: channel_not_found");
+      },
+    }),
+  );
+
+  expect(result.skipped).toBe(3);
+  // 同じ理由は畳む（3件読めなくても、理由は2種類）
+  expect([...result.reasons].sort()).toEqual(["channel_not_found", "missing_scope"]);
+});
+
+test("知らない失敗は「不明」として残す（黙って落とさない）", async () => {
+  const result = await findPendingMessages(
+    fakeSlack({
+      async listConversations() {
+        return [{ id: "C_WEIRD", isDm: false }];
+      },
+      async history() {
+        throw new Error("socket hang up");
+      },
+    }),
+  );
+
+  expect(result.reasons).toEqual(["不明"]);
 });
 
 test("スレッドが1つ読めなくても、他のスレッドは見る", async () => {
