@@ -24,6 +24,11 @@
       "source": "./src/render.ts",
       "types": "./dist/render.d.ts",
       "import": "./dist/render.js"
+    },
+    "./access": {
+      "source": "./src/access.ts",
+      "types": "./dist/access.d.ts",
+      "import": "./dist/access.js"
     }
   }
 }

@@ -6,16 +6,25 @@
  *
  *   pnpm --filter @edv4h/russell-viewer start   # http://127.0.0.1:4000
  *
- * 認証は無い。代わりに **127.0.0.1 にしか待ち受けない**（記憶の本文がそのまま出るため）。
- * 外に出す必要が生じたら、そのときは認証と一緒に設計する。
+ * **既定は 127.0.0.1 にしか待ち受けない**（記憶の本文がそのまま出るため）。
+ * 外へ出すときは合言葉（`RUSSELL_VIEWER_TOKEN`）が要る——無いまま外向きに開こうとしたら
+ * **起動しない**（`access.ts`, #81）。
+ *
+ * > [!IMPORTANT]
+ * > ここで守れるのは「**運用者が見る**」までである。**チーム全員に見せる話とは別**——
+ * > そちらは箱ごとに誰へ見せるかを決める必要があり（個人カルテ・機微情報の印, ADR 0007/0008）、
+ * > 認証を付けても、その問いは解けない。
  */
 
 import { createServer } from "node:http";
 import pg from "pg";
+import { type AccessConfig, authorize, checkStartup } from "./access.js";
 import { BOXES, escapeHtml, renderDefs, renderPage, renderTable } from "./render.js";
 
 const PORT = Number(process.env.RUSSELL_VIEWER_PORT ?? 4000);
-const HOST = "127.0.0.1";
+/** 既定はループバック。**外向きにするには合言葉が要る**（`checkStartup`）。 */
+const HOST = process.env.RUSSELL_VIEWER_HOST ?? "127.0.0.1";
+const TOKEN = process.env.RUSSELL_VIEWER_TOKEN;
 const LIMIT = 200;
 
 interface View {
@@ -204,6 +213,14 @@ async function main(): Promise<void> {
     console.error("[viewer] DATABASE_URL が未設定です。");
     process.exit(1);
   }
+  const access: AccessConfig = { host: HOST, token: TOKEN };
+  // **開く前に確かめる。** 外向きに待ち受けるのに合言葉が無いなら起動しない（fail-closed）。
+  // 警告では防げない——動いてしまうので。
+  const startup = checkStartup(access);
+  if (!startup.ok) {
+    console.error(`[viewer] 起動しません: ${startup.reason}`);
+    process.exit(1);
+  }
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   // idle 接続のエラーで落とさない（本体側と同じ扱い）。
   pool.on("error", (err) => console.error("[viewer] Postgres 接続エラー:", err.message));
@@ -212,10 +229,23 @@ async function main(): Promise<void> {
     const url = new URL(req.url ?? "/", `http://${HOST}:${PORT}`);
     const path = url.pathname;
     const agent = url.searchParams.get("agent") || undefined;
+    const gate = authorize(access, { url, cookie: req.headers.cookie });
+    const cookie = gate.allowed ? gate.setCookie : undefined;
     const send = (status: number, html: string) => {
-      res.writeHead(status, { "content-type": "text/html; charset=utf-8" });
+      res.writeHead(status, {
+        "content-type": "text/html; charset=utf-8",
+        // 記憶の本文が出るページなので、残さない・拾わせない
+        "cache-control": "no-store",
+        "x-robots-tag": "noindex, nofollow",
+        ...(cookie ? { "set-cookie": cookie } : {}),
+      });
       res.end(html);
     };
+    if (!gate.allowed) {
+      // **何が出る場所なのかは言わない。** 合言葉を知らない相手に中身の説明は要らない
+      send(401, renderPage("/", "合言葉が要ります", "", "<p class=empty>—</p>"));
+      return;
+    }
     try {
       const agents = await agentIds(pool);
       const shell = { agent, agents };
@@ -247,7 +277,9 @@ async function main(): Promise<void> {
   });
 
   server.listen(PORT, HOST, () => {
-    console.log(`[viewer] http://${HOST}:${PORT}`);
+    // **どちらの構えで動いているかを出す。** 「守られているつもり」を作らない
+    const guard = TOKEN ? "合言葉あり" : "ループバック限定";
+    console.log(`[viewer] http://${HOST}:${PORT}（${guard}）`);
   });
 
   await new Promise<void>((resolve) => {
