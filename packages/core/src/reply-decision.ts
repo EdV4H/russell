@@ -35,6 +35,13 @@ export interface ReplyContext {
   selfName: string;
   /** 直近のやりとり。**発言者が入っている**ことが効く。 */
   history: ModelTurn[];
+  /**
+   * 群れの中でどれだけ反応するか（気質の `reaction_rate`, 0-1）。
+   *
+   * **判定の傾きだけを動かす。** 決定論の分岐（名指し・1対1）は気質で変えない——
+   * 直接呼ばれて黙る個体は、気質ではなく故障に見える。
+   */
+  reactionRate?: number;
 }
 
 export type ReplyVerdict =
@@ -132,6 +139,24 @@ const JUDGE = `あなたは会話の同席者です。**直前の発言に、あ
 返信するのと同じくらい鬱陶しく、しかも「全部読んでいます」という表明になります。
 迷ったときに選ぶのは stamp ではなく no です。`;
 
+/**
+ * 気質による傾き。**既定の帯（0.4〜0.8）では何も足さない**——
+ * 実測して落ち着いた文面をそのまま使う。外れたときだけ一行足す。
+ *
+ * 帯にしているのは、0.63 と 0.71 の差を言葉にできないから。数値をそのまま渡すと、
+ * 持っていない精度を持っているふりになる。
+ */
+function tilt(rate?: number): string {
+  if (rate === undefined) return "";
+  if (rate < 0.4) {
+    return "\n\nあなたは口数が少ない性格です。**よほど自分宛でなければ no** にしてください。";
+  }
+  if (rate > 0.8) {
+    return "\n\nあなたは反応がよい性格です。自分に関係がありそうなら、少し前のめりに yes で構いません。";
+  }
+  return "";
+}
+
 /** 曖昧なときにモデルへ渡す要求。**短く保つ**——これは会話ではなく判定なので。 */
 export function buildReplyJudgeRequest(ctx: ReplyContext): { system: string; user: string } {
   const recent = ctx.history
@@ -139,7 +164,7 @@ export function buildReplyJudgeRequest(ctx: ReplyContext): { system: string; use
     .map((t) => `${t.role === "assistant" ? ctx.selfName : (t.speaker ?? "誰か")}: ${t.text}`)
     .join("\n");
   return {
-    system: `${JUDGE}\n\nあなたの名前: ${ctx.selfName}`,
+    system: `${JUDGE}${tilt(ctx.reactionRate)}\n\nあなたの名前: ${ctx.selfName}`,
     user: `${recent}\n\n--- 直前の発言 ---\n${ctx.speaker ? `${ctx.speaker}: ` : ""}${ctx.text}`,
   };
 }

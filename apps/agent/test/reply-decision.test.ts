@@ -146,6 +146,28 @@ test("判定の軸は「宛先か」ではなく「自分が出てくるか」",
   expect(req.system).toContain("人同士の会話であっても、あなたの話をしているなら yes");
 });
 
+test("気質は判定の傾きだけを動かす（既定の帯では何も足さない）", () => {
+  const base = buildReplyJudgeRequest(ctx({ history: group })).system;
+
+  // Bob の 0.7 は既定の帯。**実測して落ち着いた文面をそのまま使う**
+  expect(buildReplyJudgeRequest(ctx({ history: group, reactionRate: 0.7 })).system).toBe(base);
+  // 外れたときだけ一行足す
+  expect(buildReplyJudgeRequest(ctx({ history: group, reactionRate: 0.2 })).system).toContain(
+    "よほど自分宛でなければ no",
+  );
+  expect(buildReplyJudgeRequest(ctx({ history: group, reactionRate: 0.9 })).system).toContain(
+    "少し前のめりに yes",
+  );
+});
+
+test("気質では決定論の分岐を変えない（呼ばれて黙る個体は故障に見える）", () => {
+  // 口数が少ない設定でも、名指しと1対1は即決で返す
+  expect(decideReply(ctx({ isMention: true, reactionRate: 0, history: group })).reply).toBe(true);
+  expect(decideReply(ctx({ speaker: "丸山", reactionRate: 0, history: oneOnOne })).reply).toBe(
+    true,
+  );
+});
+
 test("自分が出てこなければ黙る、と指示している", () => {
   const req = buildReplyJudgeRequest(ctx({ history: group }));
 
@@ -364,4 +386,48 @@ test("複数人の履歴は、誰の発言かを付けてモデルへ渡す", as
     (r) => !r.system.includes("記憶係") && !r.system.includes("口を開くべきか"),
   );
   expect(JSON.stringify(conversation)).toContain("丸山: これどう？");
+});
+
+// --- 気質で返信の長さを変える（verbosity） ---
+
+/** 人格プロンプトを取り出す。会話用の要求（記憶係でも判定でもないもの）に入っている。 */
+async function personaOf(verbosity?: Temperament["verbosity"]): Promise<string> {
+  const m = judgeModel("yes");
+  const s = threadSurface();
+  const agent = await createAgent(
+    {
+      agentId: "bob",
+      configVersion: "v0",
+      temperament: { ...BOB, ...(verbosity ? { verbosity } : {}) },
+      model: "echo",
+      mode: "live",
+    },
+    [createInMemoryMemoryPlugin(), m.plugin, s.plugin],
+  );
+  s.push("これお願い");
+  await drain2();
+  await agent.destroy();
+  return (
+    m.requests.find((r) => !r.system.includes("記憶係") && !r.system.includes("口を開くべきか"))
+      ?.system ?? ""
+  );
+}
+
+test("既定は今までどおり（書いていない個体の振る舞いを変えない）", async () => {
+  expect(await personaOf()).toContain("普通は3〜5行");
+});
+
+test("口数の少ない個体は短く答える", async () => {
+  const persona = await personaOf("brief");
+
+  expect(persona).toContain("1〜3行");
+  expect(persona).not.toContain("普通は3〜5行");
+});
+
+test("詳しく話す個体でも、前置きは増やさない", async () => {
+  const persona = await personaOf("detailed");
+
+  expect(persona).toContain("必要なだけ書いてよい");
+  // 長さの許可であって、前置きの許可ではない
+  expect(persona).toContain("結論から書く");
 });
