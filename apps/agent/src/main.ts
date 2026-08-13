@@ -9,6 +9,7 @@
  */
 
 import { createAgent } from "@edv4h/russell-core";
+import { createAlertsPlugin } from "@edv4h/russell-plugin-alerts";
 import { createPgAuditPlugin } from "@edv4h/russell-plugin-audit-pg";
 import { createNotionEquipmentPlugin } from "@edv4h/russell-plugin-equipment-notion";
 import { createPgKillSwitchPlugin } from "@edv4h/russell-plugin-killswitch-pg";
@@ -74,6 +75,9 @@ function assembleSpongePlugins(): RussellPlugin[] {
     ...(useNotion ? [createNotionEquipmentPlugin()] : []),
     modelPlugin(),
     useSlack ? createSlackSurfacePlugin() : createCliSurfacePlugin({ displayName: BOB.name }),
+    // **最後に置く。** 安全系イベントの購読なので、他のプラグインの setup 中に起きたものは
+    // 拾えない——それでも構わない。ここが拾いたいのは「動き出した後に壊れたとき」である。
+    createAlertsPlugin(),
   ];
 }
 

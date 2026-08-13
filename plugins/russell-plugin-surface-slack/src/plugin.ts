@@ -18,6 +18,7 @@
 
 import type {
   AgentContext,
+  AlertSink,
   ConversationCapability,
   DeliveryResult,
   InboundMessage,
@@ -27,7 +28,12 @@ import type {
   RussellPlugin,
   SettingsCapability,
 } from "@edv4h/russell-shared";
-import { CONVERSATION_SERVICE, KILL_SWITCH_SERVICE, SETTINGS_SERVICE } from "@edv4h/russell-shared";
+import {
+  ALERT_SERVICE,
+  CONVERSATION_SERVICE,
+  KILL_SWITCH_SERVICE,
+  SETTINGS_SERVICE,
+} from "@edv4h/russell-shared";
 import bolt from "@slack/bolt";
 import { findPendingMessages, pendingReply, withinWindow } from "./catchup.js";
 import { type SlackHistoryMessage, hasOwnMessage, toTurns } from "./conversation.js";
@@ -154,6 +160,19 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
         } catch {
           return false;
         }
+      }
+
+      // 運用への通知先（#25）。**管理チャンネルが無いなら提供しない**——
+      // 提供しておいて黙って捨てるより、無いことが分かる方がよい（通知側はログに出す）。
+      if (adminChannel) {
+        ctx.services.provide<AlertSink>(ALERT_SERVICE, {
+          async send(text: string) {
+            // 監査もモードも通さない。**壊れているときに使う経路**なので、
+            // 途中に関門を置くと、いちばん要るときに届かない（#25）。
+            // 宛先は管理チャンネル固定・本文は定型なので、会話が漏れることはない。
+            await app.client.chat.postMessage({ channel: adminChannel, text });
+          },
+        });
       }
 
       // コアが「手元に会話が無い」ときに呼ぶ（再起動後など）。
