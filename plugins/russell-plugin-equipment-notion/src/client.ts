@@ -14,8 +14,15 @@
  */
 
 import type { SourceResult } from "@edv4h/russell-shared";
-import { toBlocks } from "./markdown.js";
-import { type NotionPageRef, blocksToText, pageTitle, toPageRef } from "./render.js";
+import { toBlocks, toRichText } from "./markdown.js";
+import {
+  type NotionBlockRef,
+  type NotionPageRef,
+  blocksToText,
+  pageTitle,
+  toBlockRefs,
+  toPageRef,
+} from "./render.js";
 
 /** Notion のバージョンヘッダ。上げるときは動作確認とセットで。 */
 const NOTION_VERSION = "2022-06-28";
@@ -155,6 +162,50 @@ export class NotionClient {
         status: "complete",
         freshness: new Date().toISOString(),
         data: { id: input.pageId, title: "", url: "" },
+      };
+    } catch {
+      return { status: "failed", freshness: new Date().toISOString() };
+    }
+  }
+
+  /**
+   * ページの中身を、id つきで拾う（書き換えの下ごしらえ）。
+   *
+   * **読むためではなく、直す場所を決めるため**にある。`readPage` はテキストにしてしまい、
+   * どのブロックだったかが分からなくなる。
+   */
+  async listBlocks(pageId: string): Promise<NotionBlockRef[] | undefined> {
+    try {
+      const res = await this.request(
+        `/blocks/${encodeURIComponent(pageId)}/children?page_size=100`,
+        { method: "GET" },
+      );
+      if (!res.ok) return undefined;
+      const body = (await res.json()) as { results?: unknown[] };
+      return toBlockRefs(body.results ?? []);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * ブロック1件の中身を差し替える（`external_write`）。
+   *
+   * **種別は変えない。** 箇条書きは箇条書きのまま、見出しは見出しのまま、文言だけ直す。
+   * Notion の API でも種別の変更はできず、削除して入れ直す形になる——
+   * そこまでやると「編集」ではなく「作り直し」で、承認画面に出す差分も別物になる。
+   */
+  async updateBlockText(block: NotionBlockRef, text: string): Promise<SourceResult<NotionPageRef>> {
+    try {
+      const res = await this.request(`/blocks/${encodeURIComponent(block.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ [block.type]: { rich_text: toRichText(text) } }),
+      });
+      if (!res.ok) return { status: statusFor(res.status), freshness: new Date().toISOString() };
+      return {
+        status: "complete",
+        freshness: new Date().toISOString(),
+        data: { id: block.id, title: "", url: "" },
       };
     } catch {
       return { status: "failed", freshness: new Date().toISOString() };

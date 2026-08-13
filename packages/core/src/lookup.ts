@@ -77,6 +77,11 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
   "notion.append":
     "Notion のページに書き足す（新しいページを作らず、既にあるページの末尾へ）。" +
     '入力 {"pageId": "...", "body": "書き足す本文（Markdown）"}',
+  "notion.edit":
+    "Notion のページの**すでに書いてある1行を直す**。直したい行の文をそのまま find に入れる" +
+    "（id ではなく文で指す）。" +
+    '入力 {"pageId": "...", "find": "いま書いてある文", "replace": "直した文"}。' +
+    "同じ文が複数あると直せない。**消したい**ときは使えない（書き換えだけ）",
   deep_recall:
     '自分の書庫と日記を本文で検索する（普段の想起で出てこない古い記憶）。入力 {"query": "語"}',
 };
