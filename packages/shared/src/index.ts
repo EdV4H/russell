@@ -6,4 +6,5 @@ export type * from "./types/plugin.js";
 export type * from "./types/runtime.js";
 export { CONVERSATION_SERVICE } from "./types/conversation.js";
 export { KILL_SWITCH_SERVICE } from "./types/killswitch.js";
+export { ALERT_SERVICE } from "./types/plugin.js";
 export { MEMORY_SERVICE, SETTINGS_SERVICE } from "./types/runtime.js";

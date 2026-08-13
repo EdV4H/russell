@@ -176,6 +176,20 @@ export interface EventBus {
   emit<T = unknown>(event: string, payload: T): void;
 }
 
+/**
+ * 運用者へ1行流す口。**通信面が提供する**（Slack なら管理チャンネル）。
+ *
+ * 会話の宛先ではなく**運用の宛先**なので、通常の `send` とは別にしてある。
+ * 監査が書けないときにも使うため、`DeliveryResult` を返さない——
+ * 届かなかったことを気にして経路を増やすより、確実に投げ切る方がここでは正しい。
+ */
+export interface AlertSink {
+  send(text: string): Promise<void>;
+}
+
+/** services のキー。 */
+export const ALERT_SERVICE = "alertSink";
+
 // --- services（IoC。DB/pgvector・埋め込み・config_version ストア等） ---
 export interface ServiceRegistry {
   provide<T>(key: string, service: T): void;

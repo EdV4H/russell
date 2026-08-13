@@ -1,0 +1,27 @@
+{
+  "name": "@edv4h/russell-plugin-alerts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "安全側に倒れたことを運用者へ届ける。監査の停止・凍結状態の読み取り失敗・ターンの失敗などを、管理チャンネルへ1行で流す。",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@edv4h/russell-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
