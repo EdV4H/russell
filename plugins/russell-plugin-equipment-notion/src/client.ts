@@ -213,6 +213,45 @@ export class NotionClient {
   }
 
   /**
+   * 指定したブロックの**直後**に差し込む。
+   *
+   * 位置を保つための道具。書き換えでは「古いものを消して新しいものを入れる」のではなく、
+   * **入れてから消す**——途中で失敗したときに、重複は直せるが**消失は直せない**。
+   */
+  async insertAfter(
+    pageId: string,
+    afterBlockId: string,
+    markdown: string,
+  ): Promise<SourceResult<NotionPageRef>> {
+    try {
+      const res = await this.request(`/blocks/${encodeURIComponent(pageId)}/children`, {
+        method: "PATCH",
+        body: JSON.stringify({ children: toBlocks(markdown), after: afterBlockId }),
+      });
+      if (!res.ok) return { status: statusFor(res.status), freshness: new Date().toISOString() };
+      return {
+        status: "complete",
+        freshness: new Date().toISOString(),
+        data: { id: pageId, title: "", url: "" },
+      };
+    } catch {
+      return { status: "failed", freshness: new Date().toISOString() };
+    }
+  }
+
+  /** ブロックを1つ落とす（Notion 側では archive で、人はページ履歴から戻せる）。 */
+  async deleteBlock(blockId: string): Promise<boolean> {
+    try {
+      const res = await this.request(`/blocks/${encodeURIComponent(blockId)}`, {
+        method: "DELETE",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * ページの見出しだけを引く。**承認画面に「どこへ書くか」を出す**ために要る。
    * 引けなければ `undefined`——**id をそのまま見せる**（当てない）。
    */

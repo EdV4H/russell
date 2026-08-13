@@ -11,6 +11,7 @@
 
 import {
   findBlock,
+  findRange,
   toBlockRefs,
   toBlocks,
   toRichText,
@@ -154,4 +155,32 @@ test("本文を持たないブロックは、直す対象に出てこない", ()
   ]);
 
   expect(refs.map((r) => r.id)).toEqual(["p"]);
+});
+
+// --- まとめて直す（範囲で探す） ---
+
+test("複数行をまとめて指せる（連続した並びを探す）", () => {
+  expect(findRange(REFS, "資料を作る\n資料を配る")).toEqual({ start: 1, end: 2 });
+});
+
+test("1行だけなら、その1行", () => {
+  expect(findRange(REFS, "定例は金曜15時から")).toEqual({ start: 0, end: 0 });
+});
+
+test("**並びが崩れていたら当てにいかない**（飛び飛びは指さない）", () => {
+  // 1行目と3行目を指しても、間に別の行があるので範囲にならない
+  expect(findRange(REFS, "定例は金曜15時から\n資料を配る")).toEqual({ error: "none" });
+});
+
+test("同じ並びが複数あるときは直さない", () => {
+  const refs = [
+    { id: "a", type: "paragraph", text: "前置き" },
+    { id: "b", type: "paragraph", text: "同じ" },
+    { id: "c", type: "paragraph", text: "並び" },
+    { id: "d", type: "paragraph", text: "間" },
+    { id: "e", type: "paragraph", text: "同じ" },
+    { id: "f", type: "paragraph", text: "並び" },
+  ];
+
+  expect(findRange(refs, "同じ\n並び")).toEqual({ error: "ambiguous" });
 });
