@@ -293,7 +293,7 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
          */
         async pendingMessages({ since, limit }): Promise<InboundMessage[]> {
           // 探し方は catchup.ts（テストできる形に切ってある）。ここは実クライアントを渡すだけ。
-          const { found, skipped } = await findPendingMessages({
+          const { found, skipped, reasons } = await findPendingMessages({
             since,
             limit,
             botUserId: botUserIdRef.value,
@@ -321,7 +321,11 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
           });
           // **読めなかったことを黙らない。** 0件が「無い」なのか「見られなかった」なのかは別物
           if (skipped > 0) {
-            console.log(`[slack] 積み残しの確認: ${skipped}件の会話は読めませんでした（続行）`);
+            // **理由まで出す。** 「毎回1件読めない」が権限不足なのか消えたチャンネルなのかで、
+            // 直せるものかどうかが変わる（数だけだと見なかったことにするしかない）
+            console.log(
+              `[slack] 積み残しの確認: ${skipped}件の会話は読めませんでした（${reasons.join(", ")}／続行）`,
+            );
           }
           if (debug) console.log(`[slack] 積み残し ${found.length}件`);
           for (const m of found) textMemo.remember(m.messageId, m.text);

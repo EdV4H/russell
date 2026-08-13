@@ -102,12 +102,38 @@ export interface PendingSearchDeps {
  * （アーカイブ、消えたチャンネル、削除済みユーザーとの DM）。実際 `channel_not_found` で
  * 確認が丸ごと止まっていた。0件が「無い」なのか「見られなかった」なのかは別物なので、
  * 読めなかった数は必ず報告する。
+ *
+ * **理由も返す。** 数だけだと「毎回1件読めない」が権限不足なのか消えたチャンネルなのか
+ * 分からず、直せるものなのかどうかも判断できない（実際、毎回の起動で1件出続けていた）。
  */
+/**
+ * Slack の失敗を、直せるかどうかが分かる短い語にする。
+ *
+ * `missing_scope` は**こちらで直せる**（権限を足す）。`channel_not_found` は
+ * だいたい直せない（抜けた・消えた）。この区別が付かないと、毎回出る警告を
+ * 見なかったことにするしかなくなる。
+ */
+function slackReason(err: unknown): string {
+  const detail = err instanceof Error ? err.message : String(err);
+  const known = [
+    "missing_scope",
+    "not_in_channel",
+    "channel_not_found",
+    "is_archived",
+    "account_inactive",
+    "ratelimited",
+    "invalid_auth",
+  ].find((code) => detail.includes(code));
+  return known ?? "不明";
+}
+
 export async function findPendingMessages(
   deps: PendingSearchDeps,
-): Promise<{ found: InboundMessage[]; skipped: number }> {
+): Promise<{ found: InboundMessage[]; skipped: number; reasons: string[] }> {
   const found: InboundMessage[] = [];
   let skipped = 0;
+  /** 読めなかった理由（重複は畳む）。**本文ではないので監査にもログにも出してよい**。 */
+  const reasons = new Set<string>();
   const oldest = String(Math.floor(deps.since.getTime() / 1000));
 
   for (const convo of await deps.listConversations()) {
@@ -120,8 +146,9 @@ export async function findPendingMessages(
     let history: SlackHistoryMessage[];
     try {
       history = await deps.history(channel, oldest);
-    } catch {
+    } catch (err) {
       skipped++;
+      reasons.add(slackReason(err));
       continue;
     }
 
@@ -142,8 +169,9 @@ export async function findPendingMessages(
       let thread: SlackHistoryMessage[];
       try {
         thread = await deps.messages(contextId);
-      } catch {
+      } catch (err) {
         skipped++;
+        reasons.add(slackReason(err));
         continue;
       }
       const pending = pendingReply(thread, deps.botUserId);
@@ -166,5 +194,5 @@ export async function findPendingMessages(
       if (!convo.isDm) deps.onJoined?.(contextId);
     }
   }
-  return { found, skipped };
+  return { found, skipped, reasons: [...reasons] };
 }
