@@ -30,13 +30,20 @@ export interface LookupTool {
   name: string;
   /** モデルに見せる説明。何ができる道具かが伝わらないと選べない。 */
   description: string;
+  /** 実行の前に人の承認が要るか。**モデルにもそう伝える**（勝手に「やりました」と言わせない）。 */
+  needsApproval?: boolean;
 }
 
+/** 出してよい効果分類。**取り消せない変更は、モデルからは触らせない**。 */
+const OFFERABLE = new Set(["read", "external_write"]);
+
 /**
- * 調べものに出せる道具を選ぶ。**`read` だけ。**
+ * モデルに見せる道具を選ぶ。**`read` と `external_write` だけ。**
  *
- * 書き込み（`external_write` 以上）は HITL の設計が要る。読み取りに限れば、
- * 最悪の失敗は「余計なものを読んだ」で済む。
+ * 読み取りに限れば、最悪の失敗は「余計なものを読んだ」で済む。書き込みは
+ * **実行の前に人の承認が入る**（#113）ので出せるようになった——ただし
+ * `irreversible_write` は出さない。**取り消せないものを、モデルの求めに応じて
+ * 人に承認させる形にはしない**（押す側が取り返しのつかなさを毎回背負うことになる）。
  */
 export function lookupCatalog(
   equipment: EquipmentDefinition[],
@@ -46,11 +53,12 @@ export function lookupCatalog(
   const catalog: LookupTool[] = [];
   for (const eq of equipment) {
     for (const spec of eq.tools()) {
-      if (spec.effect !== "read") continue;
+      if (!OFFERABLE.has(spec.effect)) continue;
       if (!tools.has(spec.name)) continue;
       catalog.push({
         name: spec.name,
         description: descriptions[spec.name] ?? `${eq.id} の ${spec.name}`,
+        needsApproval: spec.effect !== "read",
       });
     }
   }
@@ -62,6 +70,9 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
   "notion.search": 'Notion を検索する。入力 {"query": "検索語", "limit": 5}',
   "notion.read_page":
     'Notion のページ本文を読む。notion.search の結果の id を使う。入力 {"pageId": "..."}',
+  "notion.create_page":
+    "Notion に**新しいページを1枚作る**（決められた場所の配下にだけ）。" +
+    '入力 {"title": "見出し", "body": "本文（空行で段落）"}',
   deep_recall:
     '自分の書庫と日記を本文で検索する（普段の想起で出てこない古い記憶）。入力 {"query": "語"}',
 };
@@ -79,7 +90,23 @@ ${list}
 
 - 調べなくても答えられるなら、道具を使わず普通に答えてください。
 - 「調べますね」と言いながら JSON を返さないのは最悪です。**調べるなら JSON、答えるなら文章**。
-- 道具は続けて使えます（検索 → 中身を読む、など）。ただし**必要な分だけ**にしてください。`;
+- 道具は続けて使えます（検索 → 中身を読む、など）。ただし**必要な分だけ**にしてください。${approvalNote(catalog)}`;
+}
+
+/**
+ * 承認が要る道具があるときの但し書き。
+ *
+ * **「やっておきました」と言わせない**のが目的。実際には人がボタンを押すまで何も起きず、
+ * 押されなければ起きないままである。そこを知らないモデルは、要求を出した時点で
+ * 完了したかのように書く（記憶の書き込みで実際に起きたのと同じ形）。
+ */
+function approvalNote(catalog: LookupTool[]): string {
+  const needs = catalog.filter((t) => t.needsApproval).map((t) => t.name);
+  if (needs.length === 0) return "";
+  return `
+- **${needs.join(" / ")} は、実行の前に人の承認が要ります。** あなたが要求すると、
+  その場に承認のボタンが出ます。**押されるまで何も起きません**し、押されなければ起きません。
+  「やっておきました」ではなく「承認をお願いします」と書いてください。`;
 }
 
 /**

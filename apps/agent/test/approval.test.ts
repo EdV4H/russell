@@ -231,3 +231,96 @@ test("知らない引換券は通さない（再起動後・二度押し）", ()
   expect(desk.close(nonce, { approved: true, by: "U_ME" })).toBeUndefined();
   expect(desk.close("知らない券", { approved: true, by: "U_ME" })).toBeUndefined();
 });
+
+// --- 会話から書く（調べものの経路に合流する） ---
+
+test("書く要求には承認の画面を出し、**中身をそのまま見せる**", async () => {
+  const asked: ApprovalRequest[] = [];
+  const ran: unknown[] = [];
+  const plugin: RussellPlugin = {
+    id: "ext",
+    name: "ext",
+    setup(ctx) {
+      ctx.policy.declareEffect("doc.create", "external_write");
+      ctx.equipment.register({
+        id: "doc",
+        mcpServer: {},
+        scopes: [],
+        dangerLevel: 0,
+        tools: () => [{ name: "doc.create", effect: "external_write" }],
+      });
+      ctx.tools.register("doc.create", {
+        name: "doc.create",
+        effect: "external_write",
+        async run(input: unknown) {
+          ran.push(input);
+          return { status: "succeeded" as const };
+        },
+      });
+    },
+  };
+  let sink: ((m: never) => void) | undefined;
+  const sent: string[] = [];
+  const surfacePlugin: RussellPlugin = {
+    id: "fake",
+    name: "fake",
+    setup(ctx) {
+      ctx.surfaces.register({
+        id: "fake",
+        start(s) {
+          sink = s as never;
+        },
+        async send(o) {
+          sent.push(o.text);
+          return { status: "succeeded" };
+        },
+        async requestApproval(req) {
+          asked.push(req);
+          return { approved: true, by: "U_ME" };
+        },
+      });
+    },
+  };
+  const model: RussellPlugin = {
+    id: "m",
+    name: "m",
+    setup(ctx) {
+      let n = 0;
+      ctx.models.register({
+        id: "echo",
+        async complete(req) {
+          if (req.system.includes("記憶係")) return { text: "{}" };
+          n += 1;
+          return n === 1
+            ? {
+                text: '{"lookup": {"tool": "doc.create", "input": {"title": "議事録", "body": "決まったこと"}}}',
+              }
+            : { text: "承認ありがとうございます。作りました" };
+        },
+      });
+    },
+  };
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), plugin, model, surfacePlugin],
+  );
+  (sink as (m: unknown) => void)({
+    surfaceId: "fake",
+    contextId: "t1",
+    author: "U_ME",
+    text: "議事録を作っておいて",
+    trustLabel: "untrusted",
+    isMention: true,
+    messageId: "m1",
+  });
+  for (let i = 0; i < 30; i++) await new Promise((r) => setTimeout(r, 0));
+
+  expect(asked).toHaveLength(1);
+  expect(asked[0]?.summary).toContain("議事録");
+  // **中身をそのまま見せる。** 要約を見せると、押す人は要約を承認することになる
+  expect(asked[0]?.previewText).toBe("決まったこと");
+  expect(asked[0]?.requestedBy).toBe("U_ME");
+  expect(ran).toHaveLength(1);
+
+  await agent.destroy();
+});

@@ -260,17 +260,34 @@ test("持っていない道具を名乗っても実行しない", async () => {
   await agent.destroy();
 });
 
-test("書き込みの装備は調べものに出てこない", async () => {
+test("**取り消せない変更は、モデルからは触らせない**", async () => {
+  // 押す側が取り返しのつかなさを毎回背負う形にしない。承認を挟んでも出さない
   const m = replies('{"lookup": {"tool": "notion.search", "input": {}}}', "ok");
   const s = surface();
-  const eq = fakeEquipment("external_write");
+  const eq = fakeEquipment("irreversible_write");
   const agent = await run([createInMemoryMemoryPlugin(), eq.plugin, m.plugin, s.plugin]);
-  s.push("書いといて");
+  s.push("消しといて");
   await drain();
 
   // 一覧に載らない＝人格プロンプトにも出ない＝名乗られても実行しない
   expect(m.requests[0]?.system).not.toContain("notion.search");
   expect(eq.calls).toEqual([]);
+  await agent.destroy();
+});
+
+test("書き込みの装備は出てくるが、承認が要ることも一緒に伝える", async () => {
+  // 伝えないと「やっておきました」と書く。実際には人が押すまで何も起きない
+  const m = replies("ok", "ok");
+  const s = surface();
+  const eq = fakeEquipment("external_write");
+  const agent = await run([createInMemoryMemoryPlugin(), eq.plugin, m.plugin, s.plugin]);
+  s.push("やあ");
+  await drain();
+
+  const persona = m.requests[0]?.system ?? "";
+  expect(persona).toContain("notion.search");
+  expect(persona).toContain("実行の前に人の承認が要ります");
+  expect(persona).toContain("押されるまで何も起きません");
   await agent.destroy();
 });
 

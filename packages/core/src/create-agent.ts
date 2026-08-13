@@ -504,6 +504,28 @@ ${length}
 - **確認は多くて2つ。** 質問攻めにしない。聞かなくても進められるなら、進めてから報告する。`;
   }
 
+  /**
+   * 承認の画面に出す内容を組み立てる。
+   *
+   * **人が読んで判断できる形にする。** 道具名と JSON だけを見せられても、
+   * 押してよいかは分からない。何をするのか（1行）と、書かれる中身（そのまま）を出す。
+   */
+  function approvalFor(
+    msg: InboundMessage,
+    request: { tool: string; input: Record<string, unknown> },
+  ): ApprovalContext {
+    const title = typeof request.input.title === "string" ? request.input.title : "";
+    const body = typeof request.input.body === "string" ? request.input.body : "";
+    return {
+      surfaceId: msg.surfaceId,
+      contextId: msg.contextId,
+      requestedBy: msg.author,
+      summary: title ? `「${title}」を作ります` : `${request.tool} を実行します`,
+      // 中身をそのまま見せる。**要約すると、押す人は要約を承認することになる**
+      previewText: body || JSON.stringify(request.input),
+    };
+  }
+
   /** temperament から人格プロンプトを生成する（§6.1）。 */
   function personaPrompt(): string {
     const t = config.temperament;
@@ -1239,8 +1261,15 @@ ${length}
 
           let result: unknown;
           try {
+            // **書く道具なら、人に聞いてから**（§12-2）。承認の画面に何を出すかはここで決める——
+            // 押す人が「何が書かれるか」を見られないと、判断しようがない。
+            //
+            // 中身はモデルが書いており、その材料は相手の発言（untrusted）である。
+            // **その来歴を消さない**（§12-3）。承認は、その来歴を人が引き受ける行為でもある。
+            const ask =
+              tools.get(allowed.tool)?.effect === "read" ? undefined : approvalFor(msg, allowed);
             // 引き金は相手の発言なので untrusted のまま Policy Gate を通す
-            result = await invokeTool(allowed.tool, allowed.input, msg.trustLabel);
+            result = await invokeTool(allowed.tool, allowed.input, msg.trustLabel, ask);
           } catch (err) {
             result = { status: "failed", detail: String(err) };
           }
