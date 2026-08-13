@@ -17,6 +17,7 @@
 import type {
   AgentContext,
   AgentRuntime,
+  ApprovalOutcome,
   AuditRegistry,
   ConversationCapability,
   EffectClass,
@@ -77,6 +78,30 @@ import {
   type SensitiveGuardConfig,
   inspectSensitive,
 } from "./sensitive-guard.js";
+
+/**
+ * 人の承認を待つ上限。過ぎたら**却下として扱う**（fail-closed）。
+ *
+ * 待ち続けないのは、返らない答えでターンが終わらなくなるから。諦めて通すのは論外なので、
+ * 「時間切れ＝却下」以外に取りようがない。10分は「気づいて押せる」下限として置いた値で、
+ * 実際に使ってみて調整する。
+ */
+const APPROVAL_TIMEOUT_MS = 10 * 60_000;
+
+/**
+ * 承認を誰にどこで聞くか。**コアは「人に聞く」までしか決めない**——
+ * 誰が押してよいかは通信面の話（Slack の user id を知っているのはあちら）。
+ */
+export interface ApprovalContext {
+  surfaceId: string;
+  contextId: string;
+  /** 依頼した人。通信面が「この人になら押させてよい」の判断に使う。 */
+  requestedBy?: string;
+  /** 何をしようとしているか（人が読む1行）。 */
+  summary: string;
+  /** 書き込む中身など、押す前に見たいもの。 */
+  previewText?: string;
+}
 
 /**
  * 凍結中（レベル1/2）に mention へ返す唯一の文。
@@ -155,7 +180,12 @@ export interface AgentHandle {
    *
    * @param trustLabel この実行を引き起こした入力の来歴。他者の発言起因なら `untrusted` のまま渡す（§12-3）。
    */
-  invokeTool(name: string, input: unknown, trustLabel?: TrustLabel): Promise<unknown>;
+  invokeTool(
+    name: string,
+    input: unknown,
+    trustLabel?: TrustLabel,
+    ask?: ApprovalContext,
+  ): Promise<unknown>;
   destroy(): Promise<void>;
 }
 
@@ -201,7 +231,10 @@ function createServiceRegistry(): ServiceRegistry {
 }
 
 /** Policy Gate の判定結果。deny のときは理由コードを持つ（監査に残すため）。 */
-type PolicyDecision = { allowed: true } | { allowed: false; reason: string };
+type PolicyDecision =
+  | { allowed: true }
+  /** `approvable` は「**人が承認すれば通せる**」の印。通してよい、ではない。 */
+  | { allowed: false; reason: string; approvable?: boolean };
 
 /**
  * Policy Gate の決定論的原値。
@@ -251,9 +284,10 @@ function createPolicyGate(runtime: AgentRuntime, audit: AuditRegistry) {
     // 監査が残せない状態で副作用を起こさない（fail-closed）。read は状態を変えないので許可。
     if (!audit.healthy()) return { allowed: false, reason: "audit_degraded" };
     if (effect === "internal_write") return { allowed: true };
-    // external_* / irreversible_write は HITL or スコープ付き事前承認が要る（P2 以降で実装）
-    // TODO(P2): 事前承認/HITL の突き合わせを実装。現状は安全側=deny。
-    return { allowed: false, reason: "requires_approval" };
+    // external_* / irreversible_write は**人の承認が要る**（§12-2）。
+    // ここでは「承認を取れば通せる」ことだけを返す。誰に聞くか・誰が押してよいかは
+    // 通信面の話なので、コアは持たない。
+    return { allowed: false, reason: "requires_approval", approvable: true };
   }
 
   return { registry, decide };
@@ -509,8 +543,16 @@ ${length}
     name: string,
     input: unknown,
     trustLabel: TrustLabel,
+    ask?: ApprovalContext,
   ): Promise<unknown> {
     const decision = await policyGate.decide(name);
+    // **人に聞けば通せるものは、聞く。** 聞けない構成（通信面が承認を持たない・
+    // 依頼の文脈が無い）では、今までどおり拒否する——**黙って通さない**のが原則で、
+    // 承認はその原則を緩めるのではなく、**人を1人挟む**ためのものである。
+    if (!decision.allowed && decision.approvable && ask) {
+      const granted = await requestApproval(name, ask, trustLabel);
+      if (granted) return await runTool(name, input, trustLabel);
+    }
     if (!decision.allowed) {
       await auditLog.registry.record({
         actor: runtime.agentId,
@@ -521,6 +563,11 @@ ${length}
       events.emit("policy:blocked", { tool: name, reason: decision.reason });
       throw new Error(`policy: tool "${name}" is not allowed (${decision.reason})`);
     }
+    return await runTool(name, input, trustLabel);
+  }
+
+  /** 判定を通った後の実行。承認経由でもここへ合流する（記録の形を1つに保つ）。 */
+  async function runTool(name: string, input: unknown, trustLabel: TrustLabel): Promise<unknown> {
     const tool = tools.get(name);
     if (!tool) throw new Error(`tool "${name}" not registered`);
     // 監査は「行為の前」に残す。落ちても副作用だけが残る窓を作らないため。
@@ -548,6 +595,74 @@ ${length}
       });
       throw err;
     }
+  }
+
+  /**
+   * 人に聞く（HITL, §12-2）。**通らなかったときは通らないまま**にする。
+   *
+   * 期限を切ってあるのは、**答えが返らないときに通してしまわない**ため。
+   * 待ち続けるとターンが終わらず、諦めて通すのは fail-closed の逆である。
+   */
+  async function requestApproval(
+    name: string,
+    ask: ApprovalContext,
+    trustLabel: TrustLabel,
+  ): Promise<boolean> {
+    const surface = surfaces.get(ask.surfaceId);
+    const tool = tools.get(name);
+    if (!surface?.requestApproval || !tool) return false;
+
+    const expiresAt = new Date(Date.now() + APPROVAL_TIMEOUT_MS).toISOString();
+    // **聞いたことを先に残す。** 承認が取れたかどうかに関わらず、聞いた事実は残る
+    const audited = await auditLog.registry.record({
+      actor: runtime.agentId,
+      action: "approval.requested",
+      payload: { tool: name, effect: tool.effect, contextId: ask.contextId },
+      trustLabel,
+    });
+    if (!audited) return false;
+
+    let outcome: ApprovalOutcome;
+    try {
+      outcome = await Promise.race([
+        surface.requestApproval({
+          contextId: ask.contextId,
+          summary: ask.summary,
+          previewText: ask.previewText,
+          tool: name,
+          effect: tool.effect,
+          requestedBy: ask.requestedBy,
+          expiresAt,
+        }),
+        new Promise<ApprovalOutcome>((resolve) =>
+          setTimeout(
+            () => resolve({ approved: false, reason: "timeout" }),
+            APPROVAL_TIMEOUT_MS,
+          ).unref?.(),
+        ),
+      ]);
+    } catch (err) {
+      // 聞けなかったのは「承認されていない」と同じ（fail-closed）
+      outcome = { approved: false, reason: String(err) };
+    }
+
+    await auditLog.registry.record({
+      actor: outcome.by ?? "unknown",
+      action: "approval.decided",
+      payload: {
+        tool: name,
+        approved: outcome.approved,
+        // **理由の本文は残さない。** 人が自由に書ける欄なので、何が入るか分からない（A1-5）
+        hasReason: Boolean(outcome.reason),
+      },
+      trustLabel: "trusted",
+    });
+    events.emit("approval:decided", {
+      tool: name,
+      approved: outcome.approved,
+      contextId: ask.contextId,
+    });
+    return outcome.approved;
   }
 
   /**
@@ -1355,8 +1470,13 @@ ${length}
 
   return {
     ctx,
-    async invokeTool(name: string, input: unknown, trustLabel: TrustLabel = "untrusted") {
-      return await invokeTool(name, input, trustLabel);
+    async invokeTool(
+      name: string,
+      input: unknown,
+      trustLabel: TrustLabel = "untrusted",
+      ask?: ApprovalContext,
+    ) {
+      return await invokeTool(name, input, trustLabel, ask);
     },
     async destroy() {
       if (catchupTimer) clearInterval(catchupTimer);
