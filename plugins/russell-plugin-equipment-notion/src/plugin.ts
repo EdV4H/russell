@@ -17,7 +17,7 @@
 
 import type { AgentContext, RussellPlugin, SourceResult } from "@edv4h/russell-shared";
 import { type FetchLike, NotionClient, type NotionPageContent } from "./client.js";
-import { findBlock } from "./render.js";
+import { findRange } from "./render.js";
 import type { NotionPageRef } from "./render.js";
 
 export interface NotionEquipmentOptions {
@@ -193,6 +193,9 @@ export function createNotionEquipmentPlugin(options: NotionEquipmentOptions = {}
       /**
        * すでに書いてあるものを直す。**文で場所を指す**（id をモデルに扱わせない）。
        *
+       * `find` は**複数行を指せる**。1行ずつしか直せないのでは道具として狭く、
+       * 「この節を書き直して」は普通の頼み方である。
+       *
        * 追記と違い、**何かが消える**。承認画面には「消える文」と「入る文」を並べて出す——
        * 入る文だけでは、押す人は何が失われるか分からない。
        */
@@ -202,21 +205,29 @@ export function createNotionEquipmentPlugin(options: NotionEquipmentOptions = {}
         async describe(input: { pageId?: string; find?: string; replace?: string }) {
           const pageId = (input?.pageId ?? "").trim();
           const blocks = pageId ? await client.listBlocks(pageId) : undefined;
-          const hit = blocks ? findBlock(blocks, input?.find ?? "") : undefined;
+          const range = blocks ? findRange(blocks, input?.find ?? "") : undefined;
           const at = pageId ? `〈${await where(pageId)}〉` : "（ページの指定なし）";
-          if (!hit || "error" in hit) {
+          if (!range || "error" in range) {
             // **見つからないことも、押す前に見せる。** 押してから失敗するより良い
             const why =
-              hit && hit.error === "ambiguous" ? "同じ文が複数あります" : "見つかりません";
+              range && range.error === "ambiguous" ? "同じ並びが複数あります" : "見つかりません";
             return {
               summary: `Notion の ${at} を直します（${why}）`,
               preview: input?.replace ?? "",
             };
           }
+          const before = (blocks ?? []).slice(range.start, range.end + 1);
+          const lines = before.length;
           return {
-            summary: `Notion の ${at} の1行を直します`,
-            // **消える文と入る文を並べる。** 入る文だけでは何が失われるか分からない
-            preview: `− ${hit.found.text}\n＋ ${(input?.replace ?? "").trim()}`,
+            summary: `Notion の ${at} の${lines > 1 ? `${lines}行` : "1行"}を直します`,
+            // **消える分と入る分を並べる。** 入る文だけでは何が失われるか分からない
+            preview: [
+              ...before.map((b) => `− ${b.text}`),
+              ...(input?.replace ?? "")
+                .trim()
+                .split("\n")
+                .map((l) => `＋ ${l}`),
+            ].join("\n"),
           };
         },
         async run(input: { pageId: string; find: string; replace: string }): Promise<
@@ -231,11 +242,29 @@ export function createNotionEquipmentPlugin(options: NotionEquipmentOptions = {}
           if (!blocks) return untrusted({ status: "failed", freshness: new Date().toISOString() });
           // **承認した後に、もう一度同じ文で探す。** その間に誰かが直していたら見つからず、
           // 書き換えは起きない（承認したときと違うものを上書きしない）
-          const hit = findBlock(blocks, input?.find ?? "");
-          if ("error" in hit) {
+          const range = findRange(blocks, input?.find ?? "");
+          if ("error" in range) {
             return untrusted({ status: "failed", freshness: new Date().toISOString() });
           }
-          return untrusted(await client.updateBlockText(hit.found, replace));
+          const target = blocks.slice(range.start, range.end + 1);
+          // biome-ignore lint/style/noNonNullAssertion: range は範囲内を指している
+          const last = target.at(-1)!;
+
+          // **入れてから消す。** 逆にすると、途中で失敗したときに**消えたまま**になる。
+          // 重複は人が直せるが、消失は直せない。
+          const inserted = await client.insertAfter(pageId, last.id, replace);
+          if (inserted.status !== "complete") return untrusted(inserted);
+
+          let removed = 0;
+          for (const block of target) {
+            if (await client.deleteBlock(block.id)) removed++;
+          }
+          // 消し残しがあれば**完全とは言わない**（古い行が残っている）
+          return untrusted({
+            status: removed === target.length ? "complete" : "partial",
+            freshness: new Date().toISOString(),
+            data: { id: pageId, title: "", url: "" },
+          });
         },
       });
 

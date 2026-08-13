@@ -136,6 +136,44 @@ export function toBlockRefs(blocks: unknown[]): NotionBlockRef[] {
 }
 
 /**
+ * 書き換える範囲を、文で探す。**複数行を指せる**。
+ *
+ * 1行ずつしか直せないのでは、道具として狭い——「この節を書き直して」は普通の頼み方である。
+ * `find` に複数行を渡すと、**連続して並んでいるブロックの並び**を探す。
+ *
+ * 見つからない・複数当たるときは**書き換えない**（1行のときと同じ）。
+ */
+export function findRange(
+  refs: NotionBlockRef[],
+  find: string,
+): { start: number; end: number } | { error: "none" | "ambiguous" } {
+  const needles = find
+    .split("\n")
+    .map(normalize)
+    .filter((l) => l !== "");
+  if (needles.length === 0) return { error: "none" };
+  if (needles.length === 1) {
+    const one = findBlock(refs, find);
+    if ("error" in one) return one;
+    const at = refs.indexOf(one.found);
+    return { start: at, end: at };
+  }
+
+  const hits: { start: number; end: number }[] = [];
+  for (let i = 0; i + needles.length <= refs.length; i++) {
+    const matched = needles.every((needle, k) => {
+      const text = normalize(refs[i + k]?.text ?? "");
+      return text === needle || text.includes(needle);
+    });
+    if (matched) hits.push({ start: i, end: i + needles.length - 1 });
+  }
+  if (hits.length === 0) return { error: "none" };
+  if (hits.length > 1) return { error: "ambiguous" };
+  // biome-ignore lint/style/noNonNullAssertion: 直前に1件だけと確かめている
+  return hits[0]!;
+}
+
+/**
  * 書き換える1件を、文で探す。**モデルに id を扱わせない**——
  * 「この文をこう直す」は人の言い方で、id の受け渡しは間違いが起きるだけである。
  *

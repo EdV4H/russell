@@ -348,6 +348,60 @@ test("直す場所が決まらないことも、押す前に見せる", async ()
   await agent.destroy();
 });
 
+test("**まとめて直すときは、入れてから消す**（途中で失敗しても消失しない）", async () => {
+  const { agent, calls } = await withNotion({
+    "/blocks/page-1/children": {
+      body: {
+        results: [
+          { id: "b1", type: "paragraph", paragraph: { rich_text: [{ plain_text: "古い1行目" }] } },
+          { id: "b2", type: "paragraph", paragraph: { rich_text: [{ plain_text: "古い2行目" }] } },
+        ],
+      },
+    },
+    "/blocks/b1": { body: {} },
+    "/blocks/b2": { body: {} },
+  });
+
+  const result = (await agent.ctx.tools.get("notion.edit")?.run({
+    pageId: "page-1",
+    find: "古い1行目\n古い2行目",
+    replace: "## 新しい見出し\n新しい本文",
+  })) as { status: string };
+
+  expect(result.status).toBe("complete");
+  // 差し込みが先。**消してから入れると、途中で失敗したときに消えたままになる**
+  const order = calls.map((c) => c.url);
+  const insertAt = order.findIndex((u) => u.includes("/children"), 1);
+  const deleteAt = order.findIndex((u) => u.endsWith("/blocks/b1"));
+  expect(insertAt).toBeLessThan(deleteAt);
+  // 古い行は2つとも消える
+  expect(order.filter((u) => u.endsWith("/blocks/b1") || u.endsWith("/blocks/b2"))).toHaveLength(2);
+
+  await agent.destroy();
+});
+
+test("消し残しがあれば、完全とは言わない", async () => {
+  const { agent } = await withNotion({
+    "/blocks/page-1/children": {
+      body: {
+        results: [
+          { id: "b1", type: "paragraph", paragraph: { rich_text: [{ plain_text: "古い行" }] } },
+        ],
+      },
+    },
+    // /blocks/b1 への DELETE は 404（消せない）
+  });
+
+  const result = (await agent.ctx.tools
+    .get("notion.edit")
+    ?.run({ pageId: "page-1", find: "古い行", replace: "新しい行" })) as { status: string };
+
+  // 古い行が残っているので complete ではない
+  expect(result.status).toBe("partial");
+
+  await agent.destroy();
+});
+
 test("承認の後にもう一度探し、変わっていたら書き換えない", async () => {
   const { agent } = await withNotion({
     "/blocks/page-1/children": { body: { results: [] } }, // 承認の間に消えた/直された
