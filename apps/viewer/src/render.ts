@@ -42,6 +42,11 @@ export const BOXES: Box[] = [
     description: "全アクション。追記専用・本文は入らない（§3.1）",
   },
   { path: "/stops", title: "キルスイッチ", description: "凍結状態（§12-4）" },
+  {
+    path: "/agent",
+    title: "個体",
+    description: "いま何で動いているか。気質・モード・道具（§6.1）",
+  },
 ];
 
 export function escapeHtml(value: unknown): string {
@@ -75,6 +80,19 @@ export function renderTable(columns: string[], rows: Record<string, unknown>[]):
   return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
+/**
+ * 名前と値の並び。表にすると1行しか無いのに横に長くなるので、こちらにしている。
+ *
+ * **値が無いことも出す**（`—`）。空欄と「まだ動いていない」は違う。
+ */
+export function renderDefs(pairs: [string, unknown][]): string {
+  if (pairs.length === 0) return "<p class=empty>まだ何も入っていません。</p>";
+  const rows = pairs
+    .map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${formatCell(v)}</dd></div>`)
+    .join("");
+  return `<dl class=defs>${rows}</dl>`;
+}
+
 const STYLE = `
 :root { color-scheme: light dark; --line:#8883; --muted:#8888; }
 body { font: 14px/1.7 system-ui, sans-serif; margin: 0; padding: 0 24px 64px; }
@@ -95,6 +113,10 @@ footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line);
 .counts b { font-size: 22px; font-weight: 600; display: block; }
 nav.agents { margin-top: 8px; font-size: 13px; }
 nav.agents span { color: var(--muted); margin-right: 4px; }
+dl.defs { margin: 16px 0 0; }
+dl.defs > div { display: flex; gap: 16px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+dl.defs dt { flex: 0 0 12em; color: var(--muted); font-size: 13px; margin: 0; }
+dl.defs dd { margin: 0; max-width: 60ch; overflow-wrap: anywhere; }
 `;
 
 /**
