@@ -112,6 +112,9 @@ importers:
       '@edv4h/russell-core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@edv4h/russell-migrate':
+        specifier: workspace:*
+        version: link:../../packages/migrate
       '@edv4h/russell-plugin-audit-pg':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-audit-pg

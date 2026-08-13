@@ -10,8 +10,13 @@
  */
 
 import type { RunStatus } from "@edv4h/russell-core";
+import { type MigrationSet, assertSchemaReady } from "@edv4h/russell-migrate";
+import { AUDIT_MIGRATIONS } from "@edv4h/russell-plugin-audit-pg";
 import { appendAuditEvent, beat, takeStale } from "@edv4h/russell-plugin-audit-pg";
+import { KILLSWITCH_MIGRATIONS } from "@edv4h/russell-plugin-killswitch-pg";
 import { isFrozen } from "@edv4h/russell-plugin-killswitch-pg";
+import { MEMORY_MIGRATIONS } from "@edv4h/russell-plugin-memory-pg";
+import { ROUTINES_MIGRATIONS } from "@edv4h/russell-plugin-routines-pg";
 import {
   claimRun,
   dueOccurrences,
@@ -19,6 +24,7 @@ import {
   heartbeat,
   loadRoutines,
 } from "@edv4h/russell-plugin-routines-pg";
+import { SETTINGS_MIGRATIONS } from "@edv4h/russell-plugin-settings-pg";
 import { createSlackPoster } from "@edv4h/russell-plugin-surface-slack";
 import pg from "pg";
 import { runJournalRoutine } from "./journal-routine.js";
@@ -118,6 +124,15 @@ async function tick(pool: pg.Pool, agentId: string): Promise<void> {
   }
 }
 
+/** この構成で使うテーブル群。**agent の migrate.ts と同じ並び**（片方だけ増えると気づけない）。 */
+const SETS: MigrationSet[] = [
+  AUDIT_MIGRATIONS,
+  KILLSWITCH_MIGRATIONS,
+  MEMORY_MIGRATIONS,
+  ROUTINES_MIGRATIONS,
+  SETTINGS_MIGRATIONS,
+];
+
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) {
     console.error("[dispatch] DATABASE_URL が未設定です。");
@@ -127,6 +142,17 @@ async function main(): Promise<void> {
   const watch = process.argv.includes("--watch");
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   pool.on("error", (err) => console.error("[dispatch] Postgres 接続エラー:", err.message));
+
+  // **スキーマが揃っているか先に確かめる。** 揃っていなければ `relation does not exist` が
+  // ルーチンごとに出るだけで、何をすればよいか分からない（サーバーではログしか見えない）。
+  // アプリと同じく DDL は流さない——確かめるだけ（§11）。
+  try {
+    await assertSchemaReady(pool, SETS);
+  } catch (err) {
+    console.error(`[dispatch] ${err instanceof Error ? err.message : String(err)}`);
+    await pool.end();
+    process.exit(1);
+  }
 
   try {
     await tick(pool, agentId);
