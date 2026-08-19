@@ -81,6 +81,50 @@ export function withinWindow(ts: string | undefined, since: Date): boolean {
   return seconds * 1000 >= since.getTime();
 }
 
+/**
+ * やりとりの単位を、チャンネルの履歴から見つける。
+ *
+ * **2つ拾う。** どちらも「返事を待っている人がいる」形なのに、片方しか見ていなかった。
+ *
+ * 1. **スレッド** — 自分が関与している続き。**親が窓の外でも、返信が窓の中なら拾う**
+ *    （`latest_reply` を見る）。親の時刻で切ると、**古いスレッドへの新しい返信**が
+ *    永久に拾えない——返信し忘れの本命がそこなのに
+ * 2. **チャンネル直下の名指し** — `@Bob …` とだけ書かれた発言。スレッドではないので
+ *    1 では見つからない。実際、これで**2時間半前の呼びかけを取りこぼした**
+ *
+ * 直下の発言を**名指しのときだけ**拾うのは、通常の追従と同じ線引き（§13）。
+ * 名指しでない雑談まで拾うと「全部読んでいる」になる。
+ */
+export function findContexts(
+  channel: string,
+  history: SlackHistoryMessage[],
+  since: Date,
+  botUserId?: string,
+): string[] {
+  const contexts = new Set<string>();
+  for (const m of history) {
+    if (m.subtype) continue;
+    // スレッド（親・返信のどちらから来ても根で畳まれる）
+    if (m.thread_ts) {
+      // **最後の動きで判断する。** 親の時刻ではない
+      if (withinWindow(m.latest_reply ?? m.ts, since)) contexts.add(`${channel}:${m.thread_ts}`);
+      continue;
+    }
+    // チャンネル直下。**名指しだけ**拾う（呼ばれたものには答える）
+    const addressed = botUserId ? (m.text ?? "").includes(`<@${botUserId}>`) : false;
+    if (addressed && withinWindow(m.ts, since)) contexts.add(`${channel}:${m.ts}`);
+  }
+  return [...contexts];
+}
+
+/**
+ * スレッドを見つけるためにさかのぼる長さ。**返信の窓とは別物**。
+ *
+ * 「3日前に始まったスレッドに、さっき返信が来た」を拾うために要る。取得件数は
+ * `MAX_HISTORY` で頭打ちなので、ここを広げても API の負荷は変わらない。
+ */
+const THREAD_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
+
 /** 探すのに必要なものだけ。**実クライアントを持ち込まない**ので、そのままテストできる。 */
 export interface PendingSearchDeps {
   since: Date;
@@ -134,7 +178,10 @@ export async function findPendingMessages(
   let skipped = 0;
   /** 読めなかった理由（重複は畳む）。**本文ではないので監査にもログにも出してよい**。 */
   const reasons = new Set<string>();
-  const oldest = String(Math.floor(deps.since.getTime() / 1000));
+  // **スレッドを見つける窓は、返信の窓より広く取る。** 親が古いスレッドは、
+  // 窓を親の時刻で切ると一生現れない。拾うかどうかは `findContexts` が
+  // 最後の動きで判断するので、ここを広げても古い話に返信し始めることはない。
+  const oldest = String(Math.floor((deps.since.getTime() - THREAD_LOOKBACK_MS) / 1000));
 
   for (const convo of await deps.listConversations()) {
     if (found.length >= deps.limit) break;
@@ -152,17 +199,10 @@ export async function findPendingMessages(
       continue;
     }
 
-    // やりとりの単位。DM はチャンネル直下、チャンネルはスレッド単位（ADR 0002）
+    // やりとりの単位。DM はチャンネル直下、チャンネルはスレッドと**直下の名指し**（ADR 0002）
     const contexts = convo.isDm
       ? [`${channel}:`]
-      : [
-          ...new Set(
-            history
-              // biome-ignore lint/suspicious/noExplicitAny: history の生要素。thread_ts は型に無い
-              .map((m) => (m as any).thread_ts as string | undefined)
-              .filter((t): t is string => Boolean(t)),
-          ),
-        ].map((t) => `${channel}:${t}`);
+      : findContexts(channel, history, deps.since, deps.botUserId);
 
     for (const contextId of contexts) {
       if (found.length >= deps.limit) break;

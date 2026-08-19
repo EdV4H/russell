@@ -13,6 +13,7 @@ import { createAgent } from "@edv4h/russell-core";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import {
   type PendingSearchDeps,
+  findContexts,
   findPendingMessages,
   pendingReply,
   withinWindow,
@@ -270,6 +271,8 @@ test("pendingMessages を持たない通信面は素通りする", async () => {
 
 const now = () => new Date();
 const ts = (minutesAgo: number) => String((Date.now() - minutesAgo * 60_000) / 1000);
+/** 既定の窓（12時間前）。 */
+const since = () => new Date(Date.now() - 12 * 60 * 60 * 1000);
 
 /** 読める会話と、読めない会話を混ぜた偽の Slack。 */
 function fakeSlack(over: Partial<PendingSearchDeps> = {}): PendingSearchDeps {
@@ -420,4 +423,90 @@ test("上限で打ち切る", async () => {
     }),
   );
   expect(found).toHaveLength(1);
+});
+
+// --- どこを探すか（拾う場所の抜け） ---
+
+test("**チャンネル直下の名指しを拾う**（スレッドではないので、これまで見えていなかった）", () => {
+  // 実際に取りこぼした形: 2時間半前の `@Bob …` が「積み残し 0件」になった
+  const contexts = findContexts(
+    "C1",
+    [{ user: "U1", text: "<@UBOB> これ見てもらえる？", ts: ts(1) }],
+    since(),
+    "UBOB",
+  );
+
+  expect(contexts).toEqual([`C1:${ts(1)}`]);
+});
+
+test("直下の雑談は拾わない（名指しだけ）", () => {
+  // 全部拾うと「チャンネルを全部読んでいる」になる（通常の追従と同じ線引き）
+  const contexts = findContexts(
+    "C1",
+    [{ user: "U1", text: "今日は暑いね", ts: ts(1) }],
+    since(),
+    "UBOB",
+  );
+
+  expect(contexts).toEqual([]);
+});
+
+test("**親が古くても、返信が新しければ拾う**", () => {
+  // 返信し忘れの本命がここ。親の時刻で切ると一生拾えない
+  const parent = ts(240); // 10日前に始まったスレッド
+  const contexts = findContexts(
+    "C1",
+    [
+      {
+        user: "U1",
+        text: "長く続いている相談",
+        ts: parent,
+        thread_ts: parent,
+        latest_reply: ts(1),
+      },
+    ],
+    since(),
+    "UBOB",
+  );
+
+  expect(contexts).toEqual([`C1:${parent}`]);
+});
+
+test("動きが止まって久しいスレッドは拾わない", () => {
+  const parent = ts(240);
+  const contexts = findContexts(
+    "C1",
+    // 最後の返信が20時間前＝窓（12時間）の外
+    [{ user: "U1", text: "終わった話", ts: parent, thread_ts: parent, latest_reply: ts(20 * 60) }],
+    since(),
+    "UBOB",
+  );
+
+  expect(contexts).toEqual([]);
+});
+
+test("同じスレッドの複数の発言は、根で1つに畳む", () => {
+  const parent = ts(3);
+  const contexts = findContexts(
+    "C1",
+    [
+      { user: "U1", text: "親", ts: parent, thread_ts: parent, latest_reply: ts(1) },
+      { user: "U2", text: "返信", ts: ts(1), thread_ts: parent },
+    ],
+    since(),
+    "UBOB",
+  );
+
+  expect(contexts).toEqual([`C1:${parent}`]);
+});
+
+test("参加通知などは数えない", () => {
+  const contexts = findContexts(
+    "C1",
+    [{ user: "U1", text: "<@UBOB> さんが参加しました", ts: ts(1), subtype: "channel_join" }],
+    since(),
+    "UBOB",
+  );
+
+  expect(contexts).toEqual([]);
 });
