@@ -429,14 +429,15 @@ test("上限で打ち切る", async () => {
 
 test("**チャンネル直下の名指しを拾う**（スレッドではないので、これまで見えていなかった）", () => {
   // 実際に取りこぼした形: 2時間半前の `@Bob …` が「積み残し 0件」になった
+  const at = ts(1);
   const contexts = findContexts(
     "C1",
-    [{ user: "U1", text: "<@UBOB> これ見てもらえる？", ts: ts(1) }],
+    [{ user: "U1", text: "<@UBOB> これ見てもらえる？", ts: at }],
     since(),
     "UBOB",
   );
 
-  expect(contexts).toEqual([`C1:${ts(1)}`]);
+  expect(contexts).toEqual([`C1:${at}`]);
 });
 
 test("直下の雑談は拾わない（名指しだけ）", () => {
@@ -509,4 +510,19 @@ test("参加通知などは数えない", () => {
   );
 
   expect(contexts).toEqual([]);
+});
+
+test("**自分が誰か分からないまま探さない**（黙って0件と言わせない）", async () => {
+  const result = await findPendingMessages(
+    fakeSlack({
+      botUserId: undefined, // 起動直後、イベントがまだ届いていない状態
+      async history() {
+        return [{ user: "U1", text: "<@UBOB> これ見てもらえる？", ts: ts(1) }];
+      },
+    }),
+  );
+
+  // 名指しの判定ができない。**探した結果0件**と**探せなかった**は別物なので、理由を返す
+  expect(result.found).toEqual([]);
+  expect(result.reasons).toEqual(["自分の id が分からない"]);
 });
