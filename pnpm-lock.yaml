@@ -41,6 +41,9 @@ importers:
       '@edv4h/russell-plugin-killswitch-pg':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-killswitch-pg
+      '@edv4h/russell-plugin-meeting':
+        specifier: workspace:*
+        version: link:../../plugins/russell-plugin-meeting
       '@edv4h/russell-plugin-memory-inmem':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-memory-inmem
@@ -267,6 +270,19 @@ importers:
       '@types/pg':
         specifier: ^8.11.0
         version: 8.20.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  plugins/russell-plugin-meeting:
+    dependencies:
+      '@edv4h/russell-shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
