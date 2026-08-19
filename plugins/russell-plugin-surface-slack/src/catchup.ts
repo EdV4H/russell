@@ -181,6 +181,12 @@ export async function findPendingMessages(
   // **スレッドを見つける窓は、返信の窓より広く取る。** 親が古いスレッドは、
   // 窓を親の時刻で切ると一生現れない。拾うかどうかは `findContexts` が
   // 最後の動きで判断するので、ここを広げても古い話に返信し始めることはない。
+  // **自分が誰か分からないまま探さない。** 名指しの判定ができないので、
+  // 静かに「0件」を報告することになる（実際にそれで取りこぼした）。
+  // 数だけ合っていて中身が欠けている状態を、黙って通さない。
+  if (!deps.botUserId) {
+    return { found: [], skipped: 0, reasons: ["自分の id が分からない"] };
+  }
   const oldest = String(Math.floor((deps.since.getTime() - THREAD_LOOKBACK_MS) / 1000));
 
   for (const convo of await deps.listConversations()) {

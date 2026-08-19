@@ -125,7 +125,15 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
       const desk = createApprovalDesk();
       /** 承認を求めた投稿の ts（決まったら書き換えるため）。 */
       const posted = new Map<string, string>();
-      /** listener の context からしか取れないので、最初に見たものを控えて capability から使う。 */
+      /**
+       * 自分の Slack user id。**起動時に聞きに行く**（`auth.test`）。
+       *
+       * 以前は listener の context からしか取っていなかった。つまり**最初のイベントが
+       * 届くまで自分が誰か分からない**状態で、積み残しの確認はそれより先に走る——
+       * 名指しの判定には自分の id が要るので、`<@Bob>` を含む発言でも
+       * 「名指しされていない」と扱われていた。**確認がいちばん要る再起動直後に、
+       * 名指しの検出だけが死んでいた**（実際に取りこぼした）。
+       */
       const botUserIdRef: { value?: string } = {};
 
       /** 参加していないと分かったスレッド。毎回 API を叩かないための否定キャッシュ。 */
@@ -346,6 +354,19 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
                   .catch(() => {});
               }
             });
+          }
+          // **自分が誰かを、動き出す前に確かめる。** イベント待ちにすると、
+          // 起動直後の積み残しの確認が「名指し」を判定できない。
+          // 失敗しても止めない——会話は最初のイベントで id が入れば従来どおり動く。
+          try {
+            const me = await app.client.auth.test();
+            botUserIdRef.value ??= typeof me.user_id === "string" ? me.user_id : undefined;
+          } catch (err) {
+            console.warn(
+              `[slack] 自分の id を確かめられませんでした（積み残しの名指し判定が効きません）: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
           }
           await app.start();
         },
