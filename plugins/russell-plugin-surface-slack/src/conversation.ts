@@ -18,6 +18,10 @@ export interface SlackHistoryMessage {
   subtype?: string;
   text?: string;
   ts?: string;
+  /** スレッドの根。**親自身にも入る**（親は `thread_ts === ts`）。 */
+  thread_ts?: string;
+  /** そのスレッドの最新の返信。**親が古くても、ここが新しければ会話は生きている**。 */
+  latest_reply?: string;
 }
 
 /** 何発言まで文脈として使うか。コアの短期記憶と同じ長さに揃える。 */
