@@ -11,6 +11,7 @@
 import { createAgent } from "@edv4h/russell-core";
 import { createAlertsPlugin } from "@edv4h/russell-plugin-alerts";
 import { createPgAuditPlugin } from "@edv4h/russell-plugin-audit-pg";
+import { createGoogleEquipmentPlugin } from "@edv4h/russell-plugin-equipment-google";
 import { createNotionEquipmentPlugin } from "@edv4h/russell-plugin-equipment-notion";
 import { createPgKillSwitchPlugin } from "@edv4h/russell-plugin-killswitch-pg";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
@@ -73,6 +74,8 @@ function assembleSpongePlugins(): RussellPlugin[] {
     ...(usePg ? [createPgAuditPlugin(), createPgKillSwitchPlugin(), createPgSettingsPlugin()] : []),
     usePg ? createPgMemoryPlugin() : createInMemoryMemoryPlugin(),
     ...(useNotion ? [createNotionEquipmentPlugin()] : []),
+    // 鍵が揃っていなければ、プラグイン側が自分で降りる（未支給, §9.2）
+    createGoogleEquipmentPlugin(),
     modelPlugin(),
     useSlack ? createSlackSurfacePlugin() : createCliSurfacePlugin({ displayName: BOB.name }),
     // **最後に置く。** 安全系イベントの購読なので、他のプラグインの setup 中に起きたものは

@@ -35,6 +35,9 @@ importers:
       '@edv4h/russell-plugin-audit-pg':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-audit-pg
+      '@edv4h/russell-plugin-equipment-google':
+        specifier: workspace:*
+        version: link:../../plugins/russell-plugin-equipment-google
       '@edv4h/russell-plugin-equipment-notion':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-equipment-notion
@@ -232,6 +235,19 @@ importers:
       '@types/pg':
         specifier: ^8.11.0
         version: 8.20.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  plugins/russell-plugin-equipment-google:
+    dependencies:
+      '@edv4h/russell-shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
