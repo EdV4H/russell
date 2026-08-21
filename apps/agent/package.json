@@ -16,6 +16,7 @@
     "@edv4h/russell-migrate": "workspace:*",
     "@edv4h/russell-plugin-alerts": "workspace:*",
     "@edv4h/russell-plugin-audit-pg": "workspace:*",
+    "@edv4h/russell-plugin-equipment-google": "workspace:*",
     "@edv4h/russell-plugin-equipment-notion": "workspace:*",
     "@edv4h/russell-plugin-killswitch-pg": "workspace:*",
     "@edv4h/russell-plugin-meeting": "workspace:*",

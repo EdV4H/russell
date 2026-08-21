@@ -104,6 +104,12 @@
 - [ ] （任意）`NOTION_PARENT_PAGE_ID` に、場所を指定されなかったときの作成先を設定。
       **制限ではなく既定**——書ける範囲は Notion 側の共有設定が決める。
       どこへ書くかは承認画面に名前で出る（#113）
+- [ ] （任意）Google を読ませるなら、GCP プロジェクト `russell-bob-atrae` の
+      **Internal** な OAuth クライアント（デスクトップ アプリ）を作り、
+      `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` を設定。そのうえで
+      `pnpm --filter @edv4h/russell-worker google-auth` を**その個体のアカウントで**同意し、
+      出てきた `GOOGLE_REFRESH_TOKEN` を設定する。
+      **クライアントは全個体で共有、リフレッシュトークンは個体ごと**（身元はアカウント側にある）
 - [ ] DB ロールは**アプリ用ロールのみ**最小権限で発行（§12-6）
 
 > [!IMPORTANT] **決定（2026-07-24）: デプロイ先の Secret Manager で保管（GCP Secret Manager / Fly secrets 等・ローテーション可）、`RUSSELL_KILL` だけは方式によらず env/シグナル経路で別持ち（fail-closed, §12-7）。** リポに平文を置かない・開発/本番で別値。プラットフォーム非依存のため「Secret Manager から起動時に env へ注入」する薄い adapter にし、どのホストでも同じ読み出し口にする。DB ロールはアプリ用のみ最小権限（§12-6）。
