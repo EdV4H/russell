@@ -14,7 +14,9 @@
     "detach-self": "node --env-file-if-exists=../../.env dist/detach-self.js",
     "google-auth": "node --env-file-if-exists=../../.env dist/google-auth.js",
     "dispatch": "node --env-file-if-exists=../../.env dist/dispatch.js",
-    "archive-events": "node --env-file-if-exists=../../.env dist/archive-events.js"
+    "archive-events": "node --env-file-if-exists=../../.env dist/archive-events.js",
+    "backup": "node --env-file-if-exists=../../.env dist/backup-cli.js",
+    "restore": "node --env-file-if-exists=../../.env dist/restore-cli.js"
   },
   "dependencies": {
     "@edv4h/russell-core": "workspace:*",
@@ -41,6 +43,16 @@
       "source": "./src/model.ts",
       "types": "./dist/model.d.ts",
       "import": "./dist/model.js"
+    },
+    "./backup": {
+      "source": "./src/backup.ts",
+      "types": "./dist/backup.d.ts",
+      "import": "./dist/backup.js"
+    },
+    "./restore": {
+      "source": "./src/restore.ts",
+      "types": "./dist/restore.d.ts",
+      "import": "./dist/restore.js"
     }
   }
 }
