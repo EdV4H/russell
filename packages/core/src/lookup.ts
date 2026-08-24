@@ -83,6 +83,13 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
     "その並びが replace（Markdown）に置き換わる。行数が変わってもよい。" +
     '入力 {"pageId": "...", "find": "いま書いてある文（複数行可）", "replace": "直した本文"}。' +
     "同じ並びが複数あると直せない。**消すだけ**には使えない（書き換え専用）",
+  "drive.search":
+    "Google Drive で**共有されている文書**を探す（会議の文字起こしもここに出る）。" +
+    "名前で引くので、会議名や日付を入れる。" +
+    '入力 {"query": "検索語", "limit": 5}',
+  "drive.read":
+    "Google ドキュメントの本文を読む。drive.search の結果の id か、**共有された URL をそのまま**渡す。" +
+    '入力 {"fileId": "id または https://docs.google.com/document/d/..."}',
   deep_recall:
     '自分の書庫と日記を本文で検索する（普段の想起で出てこない古い記憶）。入力 {"query": "語"}',
 };

@@ -1,0 +1,27 @@
+{
+  "name": "@edv4h/russell-plugin-equipment-google",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "装備: Google Drive / ドキュメントを読む。共有されたものだけが見える（会議の文字起こしもここに出る）。読み取り専用。",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@edv4h/russell-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
