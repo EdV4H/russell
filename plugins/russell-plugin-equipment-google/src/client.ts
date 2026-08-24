@@ -53,9 +53,28 @@ export function fileIdFrom(input: string): string {
   return text;
 }
 
-const failed = (): SourceResult<never> => ({
+/**
+ * HTTP のステータスを、扱いの違う結果へ写す。
+ *
+ * **権限が無いのと、壊れているのは別**。同じ `failed` に潰すと、
+ * 「共有されていない」のか「トークンが切れた」のかが分からなくなる。
+ */
+function statusFor(httpStatus: number): SourceResult["status"] {
+  if (httpStatus === 401 || httpStatus === 403) return "unauthorized";
+  return "failed";
+}
+
+/** 取れなかった。**理由の手がかりは残す**（本文は入れない）。 */
+const failed = (detail?: string): SourceResult<never> => ({
   status: "failed",
   freshness: new Date().toISOString(),
+  ...(detail ? { detail } : {}),
+});
+
+const fromResponse = (res: Response): SourceResult<never> => ({
+  status: statusFor(res.status),
+  freshness: new Date().toISOString(),
+  detail: `HTTP ${res.status}`,
 });
 
 export class GoogleClient {
@@ -112,7 +131,9 @@ export class GoogleClient {
     const url = `${DRIVE}/files?${params.toString()}`;
 
     const res = await this.request(url);
-    if (!res || !res.ok) return failed();
+    // トークンが取れないのと、API が断るのは別物として返す
+    if (!res) return failed("認証できませんでした");
+    if (!res.ok) return fromResponse(res);
     const body = (await res.json()) as {
       files?: { id?: string; name?: string; modifiedTime?: string; webViewLink?: string }[];
     };
@@ -135,7 +156,8 @@ export class GoogleClient {
     });
     const metaUrl = `${DRIVE}/files/${encodeURIComponent(fileId)}?${metaParams.toString()}`;
     const meta = await this.request(metaUrl);
-    if (!meta || !meta.ok) return failed();
+    if (!meta) return failed("認証できませんでした");
+    if (!meta.ok) return fromResponse(meta);
     const file = (await meta.json()) as {
       id?: string;
       name?: string;
@@ -151,6 +173,7 @@ export class GoogleClient {
       return {
         status: "partial",
         freshness: new Date().toISOString(),
+        detail: body ? `本文が読めません（HTTP ${body.status}）` : "認証できませんでした",
         data: {
           id: file.id ?? fileId,
           name: file.name ?? "",

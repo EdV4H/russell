@@ -169,6 +169,35 @@ test("**見出しは取れたが本文が読めないときは、完全とは言
   await agent.destroy();
 });
 
+test("**共有されていないものは「権限が無い」と分かる形で返す**", async () => {
+  const { agent } = await withGoogle({ "/drive/v3/files/doc-1?": { status: 403, body: {} } });
+
+  const result = (await agent.invokeTool("drive.read", { fileId: "doc-1" })) as {
+    status: string;
+    detail?: string;
+  };
+
+  // 「壊れている」と「共有されていない」を同じ failed に潰さない
+  expect(result.status).toBe("unauthorized");
+  expect(result.detail).toContain("403");
+
+  await agent.destroy();
+});
+
+test("存在しないものは、権限の問題と区別できる", async () => {
+  const { agent } = await withGoogle({ "/drive/v3/files/doc-1?": { status: 404, body: {} } });
+
+  const result = (await agent.invokeTool("drive.read", { fileId: "doc-1" })) as {
+    status: string;
+    detail?: string;
+  };
+
+  expect(result.status).toBe("failed");
+  expect(result.detail).toContain("404");
+
+  await agent.destroy();
+});
+
 test("**認証できないことを「0件」と言わない**", async () => {
   const { agent } = await withGoogle({
     "oauth2.googleapis.com/token": { status: 400, body: { error: "invalid_grant" } },
