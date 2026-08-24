@@ -11,9 +11,15 @@
  */
 
 import { assertAutoMigrateAllowed, assertSchemaReady, runMigrations } from "@edv4h/russell-migrate";
-import type { AgentContext, AuditEvent, RussellPlugin } from "@edv4h/russell-shared";
+import {
+  type AgentContext,
+  type AuditEvent,
+  PRESENCE_SERVICE,
+  type PresenceCapability,
+  type RussellPlugin,
+} from "@edv4h/russell-shared";
 import pg from "pg";
-import { beat } from "./heartbeat.js";
+import { beat, lastBeat } from "./heartbeat.js";
 import { AUDIT_MIGRATIONS } from "./migrations.js";
 
 export interface PgAuditOptions {
@@ -61,6 +67,14 @@ export function createPgAuditPlugin(options: PgAuditOptions = {}): RussellPlugin
        * 打つのは自分、**見るのは dispatcher**（監視するものが自分自身を監視できないため）。
        */
       const agentId = ctx.runtime.agentId;
+      /**
+       * **打つ前に読む**（#124）。死活の記録は1行を上書きしていくので、打ってから読むと
+       * 「たった今」しか返らない。前回いつまで動いていたかは、ここでしか取れない。
+       */
+      const previouslySeenAt = await lastBeat(pool, agentId, "agent");
+      ctx.services.provide<PresenceCapability>(PRESENCE_SERVICE, {
+        lastSeenAt: () => previouslySeenAt,
+      });
       await beat(pool, agentId, "agent").catch(() => {});
       const beatTimer = setInterval(
         () => {
