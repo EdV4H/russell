@@ -32,7 +32,10 @@ function fakeGoogle(routes: Record<string, { status?: number; body: unknown; tex
         status: 200,
       });
     }
-    const key = Object.keys(routes).find((k) => url.includes(k));
+    // 検索式まで含めて照合する。`name contains` と `fullText contains` は
+    // 同じ `/files?` なので、URL の一部だけでは撃ち分けられない
+    const decoded = decodeURIComponent(url.replace(/\+/g, " "));
+    const key = Object.keys(routes).find((k) => url.includes(k) || decoded.includes(k));
     const route = key ? routes[key] : undefined;
     if (!route) return new Response("not found", { status: 404 });
     if (route.text !== undefined) {
@@ -252,6 +255,103 @@ test("URL で渡しても、その文書を読みにいく", async () => {
   expect(result.data.name).toBe("設計メモ");
   // URL のまま投げていない（それだと 404 になる）
   expect(calls.some((c) => c.includes("/files/doc-1?"))).toBe(true);
+
+  await agent.destroy();
+});
+
+/**
+ * 名前で当たらないときの落ち方。
+ *
+ * 実際に取りこぼした——議事録の名前は「Meet: 〈会議名〉 - 日付 - Gemini によるメモ」のように
+ * 機械が付けるので、人が覚えている呼び名と一致しない。かといって最初から全文検索にすると
+ * 会議の文字起こしに当たりすぎる。**順番**で両方を立てているので、その順番を確かめる。
+ */
+
+test("名前で当たったら、本文までは見に行かない", async () => {
+  const { agent, calls } = await withGoogle({ "name contains": FILES });
+
+  const result = (await agent.invokeTool("drive.search", { query: "定例" })) as {
+    status: string;
+    data: { matchedBy?: string }[];
+  };
+
+  expect(result.status).toBe("complete");
+  expect(result.data[0]?.matchedBy).toBe("name");
+  // **当たりすぎの弊害はここで止まる**——名前で足りているのに本文を引かない
+  const decoded = calls.map((c) => decodeURIComponent(c.replace(/\+/g, " ")));
+  expect(decoded.some((c) => c.includes("fullText contains"))).toBe(false);
+
+  await agent.destroy();
+});
+
+test("**名前で0件なら、本文で探し直す**", async () => {
+  const { agent } = await withGoogle({
+    "name contains": { body: { files: [] } },
+    "fullText contains": FILES,
+  });
+
+  const result = (await agent.invokeTool("drive.search", { query: "Session Room" })) as {
+    status: string;
+    data: { id: string; matchedBy?: string }[];
+  };
+
+  expect(result.status).toBe("complete");
+  expect(result.data[0]?.id).toBe("doc-1");
+  // どちらで当たったかを残す。**「名前には無い」と言えるかどうかで、人の納得が変わる**
+  expect(result.data[0]?.matchedBy).toBe("text");
+
+  await agent.destroy();
+});
+
+test("どちらでも出なければ、素直に0件", async () => {
+  const { agent } = await withGoogle({
+    "name contains": { body: { files: [] } },
+    "fullText contains": { body: { files: [] } },
+  });
+
+  const result = (await agent.invokeTool("drive.search", { query: "無い会議" })) as {
+    status: string;
+    data: unknown[];
+  };
+
+  expect(result.status).toBe("complete");
+  expect(result.data).toEqual([]);
+
+  await agent.destroy();
+});
+
+test("**本文の探し直しに失敗したら、0件と言い切らない**", async () => {
+  const { agent } = await withGoogle({
+    "name contains": { body: { files: [] } },
+    "fullText contains": { status: 500, body: {} },
+  });
+
+  const result = (await agent.invokeTool("drive.search", { query: "定例" })) as {
+    status: string;
+    data: unknown[];
+    detail?: string;
+  };
+
+  // 名前は0件と言い切れるが、本文は確かめられていない。**全部を見たとは言わない**
+  expect(result.status).toBe("partial");
+  expect(result.data).toEqual([]);
+  expect(result.detail).toContain("500");
+
+  await agent.destroy();
+});
+
+test("名前の検索そのものが断られたら、本文へは進まない", async () => {
+  const { agent, calls } = await withGoogle({
+    "name contains": { status: 401, body: {} },
+    "fullText contains": FILES,
+  });
+
+  const result = (await agent.invokeTool("drive.search", { query: "定例" })) as { status: string };
+
+  // 認証が切れているのに本文で引き直しても同じ。**「探せなかった」をそのまま返す**
+  expect(result.status).toBe("unauthorized");
+  const decoded = calls.map((c) => decodeURIComponent(c.replace(/\+/g, " ")));
+  expect(decoded.some((c) => c.includes("fullText contains"))).toBe(false);
 
   await agent.destroy();
 });
