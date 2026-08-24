@@ -46,6 +46,16 @@ export interface MemoryDecision {
    * 何を書かないかを判定プロンプトで強く縛っている。
    */
   people?: { name: string; note: string; aliases: string[] }[];
+  /**
+   * 会議の記録から拾った**決まったこと**（本棚へ）。
+   *
+   * 議事録や文字起こしは長く、他人が書いたものである（`untrusted`）。丸ごと残すと
+   * 想起のたびに混ざってくるので、**残すのは決定と持ち帰りだけ**と決めた。細部が要る
+   * ときは元の文書を読み直せばよい——出どころを添えてあるのはそのためである。
+   */
+  decisions?: { text: string; title: string; source?: string }[];
+  /** 上限で落とした決定があったか。無ければ undefined。 */
+  decisionOverflow?: TermOverflow;
   /** 引き受けた作業（ADR 0009）。 */
   todos?: { content: string; waitingFor?: string }[];
   /** 終わった作業の id。 */
@@ -58,6 +68,7 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
 {"note": string|null, "shelf": string|null, "title": string|null, "forget": string|null,
  "terms": [{"name": string, "definition": string, "aliases": [string]}],
  "people": [{"name": string, "note": string, "aliases": [string]}],
+ "decisions": [{"title": string, "text": string, "source": string|null}],
  "todos": [{"content": string, "waiting_for": string|null}],
  "done": [number]}
 
@@ -68,6 +79,11 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
   文の先頭を切り出したものにしない。shelf が null なら null。
 - people: 一緒に働く人について**新しく分かった事実**（0〜5件）。個人カルテに載る。
   aliases には呼び名・略称を入れる（「丸山さん」に対する「マルさん」など）。
+- decisions: **会議の記録で決まったこと**（0〜7件）。本棚に残る。
+  読んだものが議事録・文字起こし・会議の要約なら、そこで**決まったこと**を拾う。
+  title は 20文字前後の見出し、text は1〜2文、source には**どの会議・どの文書か**を書く
+  （文書名や URL。後で読み直せるように）。
+  **会議の記録でなければ空にする。** 普通の資料や会話からは拾わない。
 - todos: **あなたが引き受けた作業**（0〜5件）。「〜しておきます」と言った、頼まれて受けた、
   資料を読んで「やる」と決めた、など。waiting_for は**相手の返事待ちのとき**その相手（それ以外は null）。
 - done: **終わった作業の id**。「すでに抱えている作業」の一覧を渡してあるので、
@@ -96,6 +112,12 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
   用語集は「語を並べてから埋めていく」もので、意味が確定するまで待つと何も載らない。
   ただし **definition には分かっている範囲だけ**を書く。推測で埋めず、分からないなら
   「企画書に登場。中身は未確認」のように**分からないことを書く**（後で聞いて更新できる）。
+- **会議の記録は、原文を残さない。** 議事録や文字起こしの本文を note や shelf へ写さない。
+  残すのは decisions（決まったこと）と todos（持ち帰り）だけでよい。細部が要るときは
+  元の文書を読み直せる——だから source に出どころを書く。
+- **決まっていないことを決定にしない。** 「検討する」「持ち帰る」「〜の方向で」は決定ではない。
+  自分が動くものなら todos、そうでなければ何も残さない。
+  誰が言ったかではなく、**何が決まったか**を書く。
 - **読んだものがあるときは、そこからも拾う。** 資料の中で説明されている用語・決まったことは、
   相手が口で言っていなくても対象になる（読んだのに覚えないのは不自然）。
   ただし基準は同じで、**資料に書いてあるという理由だけでは書き留めない**。
@@ -103,6 +125,8 @@ const INSTRUCTIONS = `あなたは同僚エージェントの記憶係です。�
 作業について:
 - **自分が動くこと**だけを書く。相手がやることは書かない（それは相手の作業）。
 - 「〜しておきます」「確認します」「読んでおきます」は引き受けたということ。**必ず拾う**。
+- **会議の記録に自分の持ち帰りが書いてあれば拾う。** その場にいなくても、記録に
+  自分の名前で残っているなら引き受けたということ。
 - 相手の回答待ちなら waiting_for にその人を入れる。**待っていること自体を忘れない**ため。
 - すでに抱えている作業と同じものは**作らない**。終わったなら done に id を返す。
 
@@ -255,6 +279,12 @@ export function parseDecision(text: string): MemoryDecision {
   const terms = parseTerms(raw.terms);
   const requested = Array.isArray(raw.terms) ? raw.terms.length : raw.terms ? 1 : 0;
   const people = parsePeople(raw.people);
+  const decisions = parseDecisions(raw.decisions);
+  const decisionsAsked = Array.isArray(raw.decisions)
+    ? raw.decisions.length
+    : raw.decisions
+      ? 1
+      : 0;
   const todos = parseTodos(raw.todos);
   const done = (Array.isArray(raw.done) ? raw.done : [])
     .map((d) => (typeof d === "number" ? d : Number(d)))
@@ -268,6 +298,11 @@ export function parseDecision(text: string): MemoryDecision {
   // 上限で落とした分を記録する。**silent truncation を作らない**（この設計が繰り返し踏んだ罠）
   if (requested > terms.length) decision.termOverflow = { requested, saved: terms.length };
   if (people.length > 0) decision.people = people;
+  if (decisions.length > 0) decision.decisions = decisions;
+  // 落とした分は数える。**黙って捨てない**（用語で同じ罠を踏んでいる）
+  if (decisionsAsked > decisions.length) {
+    decision.decisionOverflow = { requested: decisionsAsked, saved: decisions.length };
+  }
   if (todos.length > 0) decision.todos = todos;
   if (done.length > 0) decision.done = [...new Set(done)];
   return decision;
@@ -314,6 +349,38 @@ function parseTerms(value: unknown): NonNullable<MemoryDecision["terms"]> {
   return terms;
 }
 
+/**
+ * 1ターンに載せる決定の上限。会議1本で7件も決まれば十分で、それ以上は
+ * たいてい「決まっていないこと」を決定として拾っている。
+ */
+const MAX_DECISIONS_PER_TURN = 7;
+
+/**
+ * 決まったことを読む。**見出しと中身の両方が要る。**
+ *
+ * 見出しだけでは本棚を眺めても何が決まったのか分からず、中身だけでは索引にならない。
+ * 出どころは無くても採る——**書いていないより、出どころ無しでも残っている方がよい**。
+ */
+function parseDecisions(value: unknown): NonNullable<MemoryDecision["decisions"]> {
+  const items = Array.isArray(value) ? value : [value];
+  const decisions: NonNullable<MemoryDecision["decisions"]> = [];
+  const seen = new Set<string>();
+
+  for (const item of items) {
+    if (decisions.length >= MAX_DECISIONS_PER_TURN) break;
+    if (typeof item !== "object" || item === null) continue;
+    const raw = item as Record<string, unknown>;
+    const title = meaningful(raw.title);
+    const text = meaningful(raw.text);
+    if (!title || !text) continue;
+    if (seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    const source = meaningful(raw.source);
+    decisions.push({ title, text, ...(source ? { source } : {}) });
+  }
+  return decisions;
+}
+
 /** 何か書き留めることがあるか。 */
 export function isEmptyDecision(decision: MemoryDecision): boolean {
   return (
@@ -322,6 +389,7 @@ export function isEmptyDecision(decision: MemoryDecision): boolean {
     !decision.forget &&
     !decision.terms?.length &&
     !decision.people?.length &&
+    !decision.decisions?.length &&
     !decision.todos?.length &&
     !decision.done?.length
   );

@@ -864,6 +864,35 @@ ${length}
         );
         events.emit("memory:shelved", { contextId: msg.contextId });
       }
+      // **会議で決まったことは本棚へ。** 議事録そのものは残さない（判定プロンプトで縛ってある）——
+      // 他人が書いた長文を `untrusted` のまま溜めると、想起のたびに混ざってくる。
+      // 残すのは決定と持ち帰りだけにして、細部が要るときは出どころから読み直す。
+      for (const made of decision.decisions ?? []) {
+        const marks = await markSensitive(`${made.title}\n${made.text}`, "shelf.add", msg);
+        await invokeTool(
+          "shelf.add",
+          {
+            // **出どころを本文に添える。** これが無いと「誰かがそう決めたらしい」だけが残り、
+            // 後から確かめようがない（確かめられない決定は、決定として使えない）
+            source: made.source ?? msg.contextId,
+            card: made.source ? `${made.text}\n\n出どころ: ${made.source}` : made.text,
+            title: made.title,
+            sensitive: marks,
+          },
+          msg.trustLabel,
+        );
+        events.emit("memory:decided", { contextId: msg.contextId, title: made.title });
+      }
+      if (decision.decisionOverflow) {
+        // 件数だけ。本文は入れない（A1-5）
+        await auditLog.registry.record({
+          actor: runtime.agentId,
+          action: "memory.decisions_truncated",
+          payload: { contextId: msg.contextId, ...decision.decisionOverflow },
+          trustLabel: msg.trustLabel,
+        });
+        events.emit("memory:decisions-truncated", decision.decisionOverflow);
+      }
       if (decision.termOverflow) {
         // 何件落としたかを残す。件数だけで本文は入れない（A1-5）
         await auditLog.registry.record({
