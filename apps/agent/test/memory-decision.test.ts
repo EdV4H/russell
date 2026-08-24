@@ -98,14 +98,13 @@ async function run(decision: string, text: string) {
   );
   s.push(text);
   await drain();
-  const tools = agent.ctx.audit
-    .recent()
-    .filter((e) => e.action === "tool.invoked")
-    .map((e) => e.payload.tool);
+  const events = agent.ctx.audit.recent();
+  const tools = events.filter((e) => e.action === "tool.invoked").map((e) => e.payload.tool);
+  const actions = events.map((e) => e.action);
   // 監査には本文を残さない（A1-5）ので、何が書かれたかは記憶そのものから読む。
   const recalled = await agent.ctx.services.get<MemoryCapability>(MEMORY_SERVICE)?.recall("t1");
   await agent.destroy();
-  return { tools, sent: s.sent, reacted: s.reacted, requests: m.requests, recalled };
+  return { tools, actions, sent: s.sent, reacted: s.reacted, requests: m.requests, recalled };
 }
 
 test("モデルが決めた内容を書き留める（明示的な依頼が無くても）", async () => {
@@ -270,4 +269,110 @@ test("判定の指示に DO-NOT-WRITE が入っている（二層の一次側）
 
   expect(decision?.system).toContain("個人の能力評価・人物評");
   expect(decision?.system).toContain("公開される前提で書くこと");
+});
+
+/**
+ * 会議の下流。読んだ議事録から**決まったことと持ち帰りだけ**を残す。
+ *
+ * 原文を残さないのは意図的である。議事録は長く、他人が書いたもの（`untrusted`）なので、
+ * 丸ごと溜めると想起のたびに混ざってくる。細部が要るときは出どころから読み直せばよい。
+ */
+
+test("会議で決まったことは本棚へ残る（出どころ付きで）", async () => {
+  const { tools, recalled } = await run(
+    JSON.stringify({
+      note: null,
+      shelf: null,
+      decisions: [
+        {
+          title: "配信は来週へ延期",
+          text: "配信は来週へ延期する。理由は素材の差し替え待ち。",
+          source: "定例 - 文字起こし https://docs.google.com/document/d/x",
+        },
+      ],
+    }),
+    "この議事録読んでおいて",
+  );
+
+  expect(tools).toContain("shelf.add");
+  const book = recalled?.books.find((b) => b.title === "配信は来週へ延期");
+  expect(book).toBeDefined();
+  // **確かめられない決定は、決定として使えない。** 出どころを本文に添える
+  expect(book?.card).toContain("出どころ");
+  expect(book?.card).toContain("docs.google.com");
+});
+
+test("出どころが無くても捨てない（書いていないよりはよい）", async () => {
+  const { tools, recalled } = await run(
+    JSON.stringify({
+      decisions: [{ title: "会場は本社に決定", text: "会場は本社。", source: null }],
+    }),
+    "決まったことある？",
+  );
+
+  expect(tools).toContain("shelf.add");
+  expect(recalled?.books.some((b) => b.title === "会場は本社に決定")).toBe(true);
+});
+
+test("**見出しか中身のどちらかが欠けていれば載せない**", async () => {
+  const { tools } = await run(
+    JSON.stringify({
+      decisions: [
+        { title: "見出しだけ", text: null },
+        { text: "中身だけ", title: null },
+      ],
+    }),
+    "議事録です",
+  );
+
+  // 見出しだけでは棚を眺めても分からず、中身だけでは索引にならない
+  expect(tools).not.toContain("shelf.add");
+});
+
+test("同じ見出しの決定は1つにまとめる", async () => {
+  const { tools } = await run(
+    JSON.stringify({
+      decisions: [
+        { title: "配信は来週へ", text: "延期する。" },
+        { title: "配信は来週へ", text: "延期することになった。" },
+      ],
+    }),
+    "議事録です",
+  );
+
+  expect(tools.filter((t) => t === "shelf.add")).toHaveLength(1);
+});
+
+test("**上限で落とした決定は、件数を監査に残す**（黙って捨てない）", async () => {
+  const decisions = Array.from({ length: 9 }, (_, i) => ({
+    title: `決定${i}`,
+    text: `${i} 番目に決まったこと。`,
+  }));
+  const { tools, actions } = await run(JSON.stringify({ decisions }), "長い議事録です");
+
+  expect(tools.filter((t) => t === "shelf.add")).toHaveLength(7);
+  // **落としたことが記録に出る。** 用語で同じ罠を踏んでいる（5件だけ黙って保存された）
+  expect(actions).toContain("memory.decisions_truncated");
+});
+
+test("持ち帰りは作業として残る（決定とは別の置き場）", async () => {
+  const { tools } = await run(
+    JSON.stringify({
+      decisions: [{ title: "配信は来週へ", text: "延期する。" }],
+      todos: [{ content: "素材の差し替えを確認する", waiting_for: null }],
+    }),
+    "議事録です",
+  );
+
+  expect(tools).toContain("shelf.add");
+  expect(tools).toContain("todo.add");
+});
+
+test("判定の指示が「原文を残すな」と言っている", async () => {
+  const { requests } = await run('{"note":null}', "議事録です");
+  const judge = requests.find((r) => r.system.includes("記憶係"));
+
+  // ここが消えると、議事録の本文がそのままメモへ写る（残す物を決めた意味が無くなる）
+  expect(judge?.system).toContain("原文を残さない");
+  expect(judge?.system).toContain("決まっていないことを決定にしない");
 });
