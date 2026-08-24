@@ -379,3 +379,19 @@ test("台帳の並び順が違っても、同じものは同じと見る", () =>
     ),
   ).toEqual(["audit/0001", "memory/0002"]);
 });
+
+/**
+ * 関門の基準点。**cwd から求めると、置き場所を守れない。**
+ *
+ * `pnpm --filter … backup` は cwd をパッケージの中にする。cwd を根だと思い込むと、
+ * 「リポジトリの中には置かせない」がパッケージの中しか見なくなり、docs/ などへ書けてしまう。
+ */
+test("**関門の基準がずれると、リポジトリの中へ書けてしまう**", () => {
+  const repo = "/repo";
+  const packageDir = "/repo/apps/worker"; // pnpm --filter のときの cwd
+
+  // 正しい基準（根）なら止まる
+  expect(() => assertSafeDestination("/repo/docs/bk", repo)).toThrow(/リポジトリ/);
+  // cwd を基準にしてしまうと通ってしまう——この差が守れているかどうかである
+  expect(() => assertSafeDestination("/repo/docs/bk", packageDir)).not.toThrow();
+});

@@ -8,8 +8,22 @@
  * 機微情報の印が付いた行があり、`git add .` の射程に入る場所へは置かせない。
  */
 
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defaultDestination, runBackup } from "./backup.js";
+
+/**
+ * リポジトリの根。**cwd から求めない。**
+ *
+ * `pnpm --filter … backup` は cwd をパッケージの中（`apps/worker`）にする。cwd を根だと
+ * 思い込むと、「リポジトリの中には置かせない」という関門が `apps/worker` の中だけしか
+ * 見なくなり、`docs/` などへ書けてしまう。**自分がどこに置かれているか**から数える。
+ *
+ * `apps/worker/dist/backup-cli.js` → 3つ上が根。
+ */
+function repoRoot(): string {
+  return resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+}
 
 function flag(name: string): string | undefined {
   const i = process.argv.indexOf(name);
@@ -34,8 +48,7 @@ async function main(): Promise<void> {
     databaseUrl,
     dest,
     keep,
-    // リポジトリの中かどうかを見るための基準。dist から2つ上がパッケージ、さらに2つ上が根
-    repoRoot: resolve(process.cwd()),
+    repoRoot: repoRoot(),
     log: (m) => console.log(m),
   });
 
