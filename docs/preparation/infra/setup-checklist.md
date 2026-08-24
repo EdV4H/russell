@@ -95,6 +95,9 @@
 - [x] **キルスイッチの env 別経路を確保**（§12-4/§12-7）: DB 障害時にも効くよう、全体停止フラグは環境変数で持つ（Secret Manager 依存にしない）→ [`../operations/kill-switch.md`](../operations/kill-switch.md) / 実装は [`../../reference/35-killswitch.md`](../../reference/35-killswitch.md)。`RUSSELL_KILL=1` は DB を読まずに完全沈黙する（シグナル経路は未実装）
 - [ ] **`RUSSELL_KILL_OPERATORS` に解除権限者の Slack user id を設定**（§12-4）: 未設定だと `/russell start`（解除）が誰にも実行できない。権限者は [`../operations/ownership-and-approval.md`](../operations/ownership-and-approval.md) の担当者ロスターと一致させる
 - [ ] `RUSSELL_ADMIN_CHANNEL` に #russell-管理 のチャンネル ID を設定（キルスイッチ発動・解除の自動記録先）
+- [ ] ビューアを**外へ出すなら** `RUSSELL_VIEWER_TOKEN`（16文字以上）を設定。
+      未設定のまま `RUSSELL_VIEWER_HOST` を外向きにすると**起動しない**（#81）。
+      なお守れるのは「運用者が見る」までで、**チーム全員に見せるのは別の判断**（下記）
 - [ ] （任意）`RUSSELL_ALERT_CHANNEL` に、安全側に倒れたことを流す先を設定（#25）。
       **管理チャンネルと分けてある**——発動記録は「人がやった1回」だが、通知は**壊れている間ずっと出る**。
       未設定ならプロセスログにだけ出る
