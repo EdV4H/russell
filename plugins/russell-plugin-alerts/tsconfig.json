@@ -1,9 +1,4 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist"
-  },
-  "include": ["src"],
+  "extends": "@edv4h/russell-tsconfig/base.json",
   "references": [{ "path": "../../packages/shared" }]
 }

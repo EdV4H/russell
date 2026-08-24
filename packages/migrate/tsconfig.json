@@ -1,9 +1,6 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "@edv4h/russell-tsconfig/base.json",
   "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist",
     "types": ["node"]
-  },
-  "include": ["src"]
+  }
 }
