@@ -12,12 +12,17 @@ const DRIVE = "https://www.googleapis.com/drive/v3";
 /** Google ドキュメント。会議の文字起こしもこの形で保存される。 */
 const DOC_MIME = "application/vnd.google-apps.document";
 
+/** どうやって当たったか。名前で出なかったことは、**人に伝える価値がある**。 */
+export type DriveMatch = "name" | "text";
+
 export interface DriveFile {
   id: string;
   name: string;
   /** 最終更新（ISO8601）。**どれが新しいか**が分からないと選べない。 */
   modifiedAt?: string;
   url?: string;
+  /** 名前で当たったのか、本文で当たったのか。 */
+  matchedBy?: DriveMatch;
 }
 
 export interface DriveDocument extends DriveFile {
@@ -77,6 +82,15 @@ const fromResponse = (res: Response): SourceResult<never> => ({
   detail: `HTTP ${res.status}`,
 });
 
+/** どちらで当たったかを結果に残す。**これが無いと「無い」と「名前に無い」が同じに見える。** */
+const stamp = (
+  result: SourceResult<DriveFile[]>,
+  matchedBy: DriveMatch,
+): SourceResult<DriveFile[]> => ({
+  ...result,
+  data: (result.data ?? []).map((f) => ({ ...f, matchedBy })),
+});
+
 export class GoogleClient {
   private readonly auth: GoogleAuth;
   private readonly fetchImpl: FetchLike;
@@ -106,18 +120,43 @@ export class GoogleClient {
   }
 
   /**
-   * 共有されている Google ドキュメントを探す。
+   * 共有されている Google ドキュメントを探す。**名前で当て、駄目なら本文へ降りる。**
    *
-   * **名前で引く。** 全文検索（`fullText`）も可能だが、**会議の文字起こしは本文が長く、
-   * 語が当たりやすすぎる**——「先週の定例」を探したいのに、雑談で同じ語が出た別の文書が
-   * 上位に来る。まず名前で当て、足りなければ人に聞く方が確実である。
+   * 最初は名前だけで引いていた。理由があって——全文検索は**会議の文字起こしに当たりすぎる**。
+   * 本文が長いので、「先週の定例」を探したいのに雑談で同じ語が出た別の文書が並ぶ。
+   *
+   * ただし実際に使ってみると、**名前だけでは取りこぼした**。議事録の名前は
+   * 「Meet: 〈会議名〉 - 日付 - Gemini によるメモ」のように機械が付けるので、
+   * 人が覚えている呼び名とは一致しない。
+   *
+   * そこで順番を付けた。**名前で1件でも出たらそれを返す**（当たりすぎの弊害はここで止まる）。
+   * 0件のときだけ本文で引き直す。どちらで当たったかは `matchedBy` に残す——
+   * 「名前では出ませんでしたが、本文に出てきます」と言えるかどうかで、人の納得が変わる。
    */
   async search(query: string, limit = 5): Promise<SourceResult<DriveFile[]>> {
-    const q = [
-      `name contains '${escapeQuery(query)}'`,
-      `mimeType = '${DOC_MIME}'`,
-      "trashed = false",
-    ].join(" and ");
+    const term = escapeQuery(query);
+
+    const byName = await this.find(`name contains '${term}'`, limit);
+    if (byName.status !== "complete") return byName; // 探せなかった。0件と言わない
+    if (byName.data && byName.data.length > 0) return stamp(byName, "name");
+
+    // 名前では出なかった。**ここで初めて本文を見る。**
+    const byText = await this.find(`fullText contains '${term}'`, limit);
+    if (byText.status !== "complete") {
+      // 名前は 0件と言い切れるが、本文は確かめられていない。**全部を見たとは言わない**
+      return {
+        status: "partial",
+        freshness: new Date().toISOString(),
+        detail: `名前では0件。本文での探し直しに失敗しました（${byText.detail ?? "理由不明"}）`,
+        data: [],
+      };
+    }
+    return stamp(byText, "text");
+  }
+
+  /** 検索式ひとつ分。ここは条件が違うだけで、あとは同じ。 */
+  private async find(condition: string, limit: number): Promise<SourceResult<DriveFile[]>> {
+    const q = [condition, `mimeType = '${DOC_MIME}'`, "trashed = false"].join(" and ");
     const params = new URLSearchParams({
       q,
       pageSize: String(Math.min(Math.max(limit, 1), 20)),
@@ -128,9 +167,8 @@ export class GoogleClient {
       supportsAllDrives: "true",
       includeItemsFromAllDrives: "true",
     });
-    const url = `${DRIVE}/files?${params.toString()}`;
 
-    const res = await this.request(url);
+    const res = await this.request(`${DRIVE}/files?${params.toString()}`);
     // トークンが取れないのと、API が断るのは別物として返す
     if (!res) return failed("認証できませんでした");
     if (!res.ok) return fromResponse(res);
