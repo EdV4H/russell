@@ -66,15 +66,35 @@ test("正常な応答は本文だけを返す", () => {
   expect(readResult(ok())).toBe("こんにちは。");
 });
 
-test("ツールが動いた形跡があれば中止する（隔離が破れたら止まる）", () => {
-  // ターンが増える = 途中でツールが実行された
+test("**動いた**形跡があれば中止する（隔離が破れたら止まる）", () => {
+  // 拒否が1件も無いのにターンが増えている = 何かが通った
   expect(() => readResult(ok({ num_turns: 3 }))).toThrow(/隔離/);
-  // 拒否された = 使おうとはした（設定が想定と違う）
-  expect(() => readResult(ok({ permission_denials: [{ tool: "Bash" }] }))).toThrow(/隔離/);
   // サーバ側ツールが実際に走った
   expect(() => readResult(ok({ usage: { server_tool_use: { web_search_requests: 1 } } }))).toThrow(
     /隔離/,
   );
+});
+
+test("**試みて拒否されただけなら、答えを捨てない**（隔離は働いている）", () => {
+  // 以前はここで中止していたので、防ぎ切ったのに「うまく応答できませんでした」になっていた。
+  // 拒否は副作用が起きていない証拠で、答えは使える
+  expect(readResult(ok({ permission_denials: [{ tool_name: "WebSearch" }] }))).toBe("こんにちは。");
+  // 拒否に伴ってターンが増えるのは自然（試行そのものがターンを消費する）
+  expect(readResult(ok({ num_turns: 3, permission_denials: [{ tool_name: "WebSearch" }] }))).toBe(
+    "こんにちは。",
+  );
+});
+
+test("拒否されても、サーバ側ツールが走っていれば中止する", () => {
+  // 片方が拒否されても、もう片方が**実際に動いていれば**副作用は起きている
+  expect(() =>
+    readResult(
+      ok({
+        permission_denials: [{ tool_name: "Read" }],
+        usage: { server_tool_use: { web_fetch_requests: 1 } },
+      }),
+    ),
+  ).toThrow(/隔離/);
 });
 
 test("CLI のエラーや壊れた出力は握り潰さない", () => {

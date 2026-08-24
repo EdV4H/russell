@@ -106,10 +106,30 @@ export interface ClaudeCodeResult {
  * 隔離は CLI 側の実装に依存していて、将来の更新や設定で崩れうる。崩れたときに
  * 黙って「ツールを持ったエージェントが Slack に返事をする」状態になるより、
  * その場で止まる方がよい（fail-closed）。
- * - `num_turns > 1` … ツール実行が挟まると増える
- * - `permission_denials` … ツールを使おうとした（拒否されたが試みはあった）
- * - `server_tool_use` … web 検索/取得が実際に走った
+ *
+ * > [!IMPORTANT]
+ * > **「試みて拒否された」は、破れていない。** 以前は `permission_denials` があるだけで
+ * > 中止していたので、**防ぎ切った場合まで**ターンごと捨てていた（利用者からは
+ * > 「うまく応答できませんでした」に見える）。拒否は隔離が**働いた**証拠であって、
+ * > 副作用は起きていない。
+ * >
+ * > 見るべきなのは「試みたか」ではなく「**動いたか**」である:
+ * > - `server_tool_use` … web 検索/取得が**実際に走った** → 破れている
+ * > - `num_turns > 1` なのに拒否が1件も無い … **何かが通った** → 破れている
+ * > - 拒否があるだけ … 塞げている → **答えを使う**（ただし黙らずに警告を出す）
  */
+/** 拒否された道具の名前。**名前だけ**（入力は載せない。何が入っているか分からない）。 */
+function deniedNames(denials: unknown[]): string {
+  const names = denials
+    .map((d) =>
+      typeof d === "object" && d !== null
+        ? ((d as Record<string, unknown>).tool_name ?? (d as Record<string, unknown>).tool)
+        : undefined,
+    )
+    .filter((n): n is string => typeof n === "string");
+  return names.length > 0 ? [...new Set(names)].join(", ") : "名前不明";
+}
+
 export function readResult(stdout: string): string {
   let parsed: ClaudeCodeResult;
   try {
@@ -123,12 +143,21 @@ export function readResult(stdout: string): string {
     );
   }
   const server = parsed.usage?.server_tool_use;
-  const usedTools =
-    (parsed.num_turns ?? 1) > 1 ||
-    (parsed.permission_denials?.length ?? 0) > 0 ||
-    (server?.web_search_requests ?? 0) > 0 ||
-    (server?.web_fetch_requests ?? 0) > 0;
-  if (usedTools) {
+  const denied = parsed.permission_denials ?? [];
+  const ranServerTool =
+    (server?.web_search_requests ?? 0) > 0 || (server?.web_fetch_requests ?? 0) > 0;
+  // ツールの試行はターン数を増やす。**拒否で説明がつかない増分**は「通った」ということ
+  const unexplainedTurns = (parsed.num_turns ?? 1) > 1 && denied.length === 0;
+
+  if (denied.length > 0 && !ranServerTool) {
+    // **塞げている。** ただし黙って流さない——同じ道具を繰り返し試すなら、
+    // 拒否リストに足すか、指示を直す必要がある（この行が唯一の手がかりになる）
+    console.warn(
+      `[model-claude-code] ツールの使用を拒否しました（${denied.length}件: ${deniedNames(denied)}）。応答はそのまま使います。`,
+    );
+  }
+
+  if (ranServerTool || unexplainedTurns) {
     throw new Error(
       "model-claude-code: 隔離が破れています（ツールが動いた形跡があります）。" +
         "Policy Gate の外で副作用が起きうるため中止しました。CLI の設定を確認してください。",
