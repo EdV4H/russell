@@ -35,6 +35,24 @@ function escapeQuery(text: string): string {
   return text.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
+/**
+ * 渡されたものからファイル ID を取り出す。**人は URL を貼る。**
+ *
+ * 「これ読んで」と URL を貼るのが自然な渡し方で、ID だけを抜いて渡せというのは
+ * 道具の都合である。両方受けて、こちらで吸収する。
+ */
+export function fileIdFrom(input: string): string {
+  const text = input.trim();
+  // https://docs.google.com/document/d/<id>/edit / https://drive.google.com/file/d/<id>/view
+  const path = text.match(/\/d\/([A-Za-z0-9_-]+)/);
+  if (path?.[1]) return path[1];
+  // https://drive.google.com/open?id=<id>
+  const query = text.match(/[?&]id=([A-Za-z0-9_-]+)/);
+  if (query?.[1]) return query[1];
+  // URL でなければ、そのまま ID として扱う
+  return text;
+}
+
 const failed = (): SourceResult<never> => ({
   status: "failed",
   freshness: new Date().toISOString(),

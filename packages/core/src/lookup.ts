@@ -88,7 +88,8 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
     "名前で引くので、会議名や日付を入れる。" +
     '入力 {"query": "検索語", "limit": 5}',
   "drive.read":
-    "Google ドキュメントの本文を読む。drive.search の結果の id を使う。" + '入力 {"fileId": "..."}',
+    "Google ドキュメントの本文を読む。drive.search の結果の id か、**共有された URL をそのまま**渡す。" +
+    '入力 {"fileId": "id または https://docs.google.com/document/d/..."}',
   deep_recall:
     '自分の書庫と日記を本文で検索する（普段の想起で出てこない古い記憶）。入力 {"query": "語"}',
 };

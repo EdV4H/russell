@@ -7,7 +7,7 @@
  */
 
 import { createAgent } from "@edv4h/russell-core";
-import { createGoogleEquipmentPlugin } from "@edv4h/russell-plugin-equipment-google";
+import { createGoogleEquipmentPlugin, fileIdFrom } from "@edv4h/russell-plugin-equipment-google";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import type { RussellPlugin, Temperament } from "@edv4h/russell-shared";
 import { expect, test } from "vitest";
@@ -196,6 +196,33 @@ test("空の検索語では API を叩かない", async () => {
 
   expect(result.data).toEqual([]);
   expect(calls.filter((c) => c.includes("/files?"))).toHaveLength(0);
+
+  await agent.destroy();
+});
+
+test("**URL をそのまま渡せる**（人は ID ではなく URL を貼る）", () => {
+  expect(fileIdFrom("https://docs.google.com/document/d/doc-1/edit?usp=sharing")).toBe("doc-1");
+  expect(fileIdFrom("https://drive.google.com/file/d/doc-2/view")).toBe("doc-2");
+  expect(fileIdFrom("https://drive.google.com/open?id=doc-3")).toBe("doc-3");
+  // URL でなければ、そのまま ID として扱う
+  expect(fileIdFrom("doc-4")).toBe("doc-4");
+  expect(fileIdFrom("  doc-5  ")).toBe("doc-5");
+});
+
+test("URL で渡しても、その文書を読みにいく", async () => {
+  const { agent, calls } = await withGoogle({
+    "/drive/v3/files/doc-1?": { body: { id: "doc-1", name: "設計メモ" } },
+    "/export?": { text: "本文" },
+  });
+
+  const result = (await agent.invokeTool("drive.read", {
+    fileId: "https://docs.google.com/document/d/doc-1/edit",
+  })) as { status: string; data: { name: string } };
+
+  expect(result.status).toBe("complete");
+  expect(result.data.name).toBe("設計メモ");
+  // URL のまま投げていない（それだと 404 になる）
+  expect(calls.some((c) => c.includes("/files/doc-1?"))).toBe(true);
 
   await agent.destroy();
 });

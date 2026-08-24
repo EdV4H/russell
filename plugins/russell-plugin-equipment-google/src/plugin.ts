@@ -13,7 +13,7 @@
 
 import type { AgentContext, RussellPlugin, SourceResult } from "@edv4h/russell-shared";
 import { type FetchLike, createGoogleAuth } from "./auth.js";
-import { type DriveDocument, type DriveFile, GoogleClient } from "./client.js";
+import { type DriveDocument, type DriveFile, GoogleClient, fileIdFrom } from "./client.js";
 
 export interface GoogleEquipmentOptions {
   clientId?: string;
@@ -97,7 +97,8 @@ export function createGoogleEquipmentPlugin(options: GoogleEquipmentOptions = {}
         name: "drive.read",
         effect: "read",
         async run(input: { fileId: string }): Promise<GoogleToolResult<DriveDocument>> {
-          const fileId = (input?.fileId ?? "").trim();
+          // URL でも ID でも受ける（人は URL を貼る）
+          const fileId = fileIdFrom(input?.fileId ?? "");
           if (fileId === "") {
             return untrusted({ status: "failed", freshness: new Date().toISOString() });
           }
