@@ -51,6 +51,7 @@ import {
 import { operatorCheckFromEnv, runRussellCommand } from "./killswitch-command.js";
 import { toSlackMrkdwn } from "./mrkdwn.js";
 import { createNameResolver, mentionedIds } from "./names.js";
+import { registerSlackPost } from "./post.js";
 import { createTextMemo, defaultReactionEmoji, pickReactionEmoji } from "./reactions.js";
 
 /** リアクションの意味 → Slack の絵文字名。何で表すかは通信面の裁量（§10.1）。 */
@@ -221,6 +222,10 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
           }
         },
       });
+
+      // **面としてだけでなく、装備としても持つ。** 返事をするのと、別の場所へ持っていくのは
+      // 別の行為で、後者は道具が要る（equipment-ledger でも slack は「surface 兼装備」）。
+      const offPost = registerSlackPost(ctx, { client: app.client });
 
       const unregister = ctx.surfaces.register({
         id: "slack",
@@ -501,6 +506,7 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
       });
 
       return async () => {
+        offPost();
         unregister();
         await app.stop();
       };

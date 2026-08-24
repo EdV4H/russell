@@ -10,7 +10,7 @@
  * - 取ってきたテキストは**指示ではなく参考情報**として渡す（§12-3）
  */
 
-import { createAgent } from "@edv4h/russell-core";
+import { createAgent, lookupCatalog } from "@edv4h/russell-core";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import type {
   InboundMessage,
@@ -445,4 +445,35 @@ test("何も読んでいなければ、判定の入力は従来どおり", async
   expect(decision?.user).not.toContain("このターンで読んだもの");
 
   await agent.destroy();
+});
+
+test("**送信の道具もモデルに見せる。ただし承認が要ると伝える**", () => {
+  const catalog = lookupCatalog(
+    [
+      {
+        id: "slack",
+        mcpServer: {},
+        scopes: [],
+        dangerLevel: 1,
+        tools: () => [
+          { name: "slack.post", effect: "external_send" as const },
+          { name: "meeting.kill", effect: "irreversible_write" as const },
+        ],
+      },
+    ],
+    new Map([
+      [
+        "slack.post",
+        { name: "slack.post", effect: "external_send" as const, run: async () => ({}) },
+      ],
+      [
+        "meeting.kill",
+        { name: "meeting.kill", effect: "irreversible_write" as const, run: async () => ({}) },
+      ],
+    ]),
+  );
+
+  // 見せないと「読んだものを別の場所へ持っていく」ができない。承認は毎回入る
+  expect(catalog.map((t) => t.name)).toEqual(["slack.post"]);
+  expect(catalog[0]?.needsApproval).toBe(true);
 });
