@@ -17,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@edv4h/russell-tsconfig": "workspace:*",
     "typescript": "^5.7.0"
   }
 }

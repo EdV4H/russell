@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "_comment": [
+    "全パッケージ共通の設定。各パッケージの tsconfig.json は、これを extends して",
+    "references を書くだけにする——**置き場所の取り決めを各パッケージへ写さない**。",
+    "",
+    "`${configDir}` は extends した側のディレクトリに解決される（TypeScript 5.5 以降）。",
+    "これが無かった頃は rootDir / outDir を各パッケージへ書き写すしかなく、実際それが",
+    "事故のもとになった: tsBuildInfoFile を22箇所へ足す形になり、**新しいパッケージが",
+    "1つ忘れれば同じ穴が開く**状態だった。",
+    "",
+    "> [!IMPORTANT]",
+    "> **tsBuildInfoFile は dist の中に置く。** tsc は「作り済みか」をこの記録の時刻だけで",
+    "> 判断し、dist が実際にどうなっているかは見ない。記録が dist の外にあると、",
+    "> キャッシュが dist だけを差し替えても記録は前のまま残り、次のビルドで tsc は",
+    "> 何も出力しない——`--force` を付けても直らない。実際、修正済みのコードが動いて",
+    "> いる個体へ届かず、ビルドもテストも通ったまま古い挙動が残った。",
+    "> dist の中に置けば一緒に消え、一緒に復元されるので、食い違う状態が作れない。"
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "composite": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "rootDir": "${configDir}/src",
+    "outDir": "${configDir}/dist",
+    "tsBuildInfoFile": "${configDir}/dist/tsconfig.tsbuildinfo"
+  },
+  "include": ["${configDir}/src"]
+}

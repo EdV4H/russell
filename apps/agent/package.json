@@ -32,11 +32,12 @@
     "@edv4h/russell-shared": "workspace:*"
   },
   "devDependencies": {
+    "@edv4h/russell-tsconfig": "workspace:*",
+    "@edv4h/russell-viewer": "workspace:*",
+    "@edv4h/russell-worker": "workspace:*",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",
     "pg": "^8.13.0",
-    "typescript": "^5.7.0",
-    "@edv4h/russell-viewer": "workspace:*",
-    "@edv4h/russell-worker": "workspace:*"
+    "typescript": "^5.7.0"
   }
 }

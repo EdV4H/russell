@@ -1,0 +1,10 @@
+{
+  "name": "@edv4h/russell-tsconfig",
+  "version": "0.0.0",
+  "private": true,
+  "description": "全パッケージ共通の TypeScript 設定。各 tsconfig はこれを extends するだけにして、置き場所の取り決めを1か所に閉じる。",
+  "exports": {
+    "./base.json": "./base.json"
+  },
+  "files": ["base.json"]
+}

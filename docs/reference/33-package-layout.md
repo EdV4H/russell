@@ -11,12 +11,13 @@ russell/                                   # このリポジトリ
 ├── package.json                       # ルート（private, workspaces）
 ├── pnpm-workspace.yaml                # packages/* plugins/* examples/* apps/*
 ├── turbo.json                         # dev/build/test/typecheck パイプライン
-├── biome.json / tsconfig.base.json
+├── biome.json                        # lint/format
 ├── docs/                              # 設計・準備物（既存）
 ├── packages/
 │   ├── core/                          # @edv4h/russell-core   … カーネル createAgent + レジストリ
 │   ├── shared/                        # @edv4h/russell-shared … RussellPlugin/AgentContext/ドメイン型
 │   ├── migrate/                       # @edv4h/russell-migrate … マイグレーションランナー（§11）
+│   ├── tsconfig/                      # @edv4h/russell-tsconfig … 全パッケージ共通の TS 設定
 │   ├── store/                         # @edv4h/russell-store  … 個体実行状態・config_version（任意）
 │   └── mcp-helpers/                   # 装備プラグイン共通の MCP 接続ヘルパ（任意）
 ├── plugins/

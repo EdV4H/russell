@@ -3,6 +3,12 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      // 成果物は dist だけ。**tsc の「作り済み」記録も dist の中**に置いてある
+      // （各 tsconfig の tsBuildInfoFile）。ここが離れていると、キャッシュが dist だけを
+      // 差し替えても記録は前のまま残り、tsc が「作り済み」と判断して**何も出力しない**。
+      //
+      // 実際に起きた: #125 の修正がビルドを通り、テストも「通り」、Bob だけが古いコードで
+      // 動いていた。`--force` を付けても直らない（turbo は作り直すが tsc が出力しない）。
       "outputs": ["dist/**"]
     },
     "typecheck": {

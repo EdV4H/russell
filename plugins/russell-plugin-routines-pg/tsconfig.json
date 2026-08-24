@@ -1,10 +1,17 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": "src", "outDir": "dist", "types": ["node"] },
-  "include": ["src"],
+  "extends": "@edv4h/russell-tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
   "references": [
-    { "path": "../../packages/core" },
-    { "path": "../../packages/migrate" },
-    { "path": "../../packages/shared" }
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/migrate"
+    },
+    {
+      "path": "../../packages/shared"
+    }
   ]
 }
