@@ -38,3 +38,5 @@ export type { NameResolver } from "./names.js";
 export { createTextMemo, defaultReactionEmoji, pickReactionEmoji } from "./reactions.js";
 export { toSlackMrkdwn } from "./mrkdwn.js";
 export { approvalBlocks, createApprovalDesk, decidedText, mayApprove } from "./approval.js";
+export { channelLabel, registerSlackPost } from "./post.js";
+export type { SlackPostDeps } from "./post.js";

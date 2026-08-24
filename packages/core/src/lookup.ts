@@ -35,15 +35,20 @@ export interface LookupTool {
 }
 
 /** 出してよい効果分類。**取り消せない変更は、モデルからは触らせない**。 */
-const OFFERABLE = new Set(["read", "external_write"]);
+const OFFERABLE = new Set(["read", "external_write", "external_send"]);
 
 /**
- * モデルに見せる道具を選ぶ。**`read` と `external_write` だけ。**
+ * モデルに見せる道具を選ぶ。**`irreversible_write` 以外。**
  *
- * 読み取りに限れば、最悪の失敗は「余計なものを読んだ」で済む。書き込みは
- * **実行の前に人の承認が入る**（#113）ので出せるようになった——ただし
- * `irreversible_write` は出さない。**取り消せないものを、モデルの求めに応じて
- * 人に承認させる形にはしない**（押す側が取り返しのつかなさを毎回背負うことになる）。
+ * 読み取りに限れば、最悪の失敗は「余計なものを読んだ」で済む。書き込みと送信は
+ * **実行の前に人の承認が入る**（#113）ので出せる——ただし `irreversible_write` は出さない。
+ * **取り消せないものを、モデルの求めに応じて人に承認させる形にはしない**
+ * （押す側が取り返しのつかなさを毎回背負うことになる）。
+ *
+ * `external_send` を後から足したのは、「読んだものを別の場所へ持っていく」が
+ * できなかったため。面としての返事は自分の発言量の枠（`daily_speak_cap`）で抑えているが、
+ * **道具としての送信はその枠を通らない**——代わりに毎回の承認が枠の役目を果たす。
+ * `dryrun` では効果分類を見て Policy Gate が止めるので、ここを広げても本番以外へは出ない。
  */
 export function lookupCatalog(
   equipment: EquipmentDefinition[],
@@ -92,6 +97,11 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
   "drive.read":
     "Google ドキュメントの本文を読む。drive.search の結果の id か、**共有された URL をそのまま**渡す。" +
     '入力 {"fileId": "id または https://docs.google.com/document/d/..."}',
+  "slack.post":
+    "Slack の**別のチャンネルへ投稿する**（いま話している場所への返事ではない）。" +
+    "会議の要点を共有する、決まったことを流す、といった用途。" +
+    '入力 {"channel": "#チャンネル名 または id", "text": "本文"}。' +
+    "**宛先は必ず人が言ったものを使う。** 言われていないなら、どこへ流すかを先に聞く",
   deep_recall:
     '自分の書庫と日記を本文で検索する（普段の想起で出てこない古い記憶）。入力 {"query": "語"}',
 };
