@@ -247,3 +247,40 @@ test("URL が無いときも、何が足りないかを言う", async () => {
 
   await agent.destroy();
 });
+
+/**
+ * 「会議に入っていない」と「取れなかった」は別物である。
+ *
+ * 理由なしで failed を返していたら、個体はそれを「入れなかった。中身ゼロ」と読み、
+ * **入ろうとしてもいないのに「入れませんでした」と報告した**。しかもその誤りを
+ * メモに書き残したので、次の会話にも効いてしまう。
+ */
+
+test("**入っていないなら、そう言う**（取れなかったことにしない）", async () => {
+  const { agent } = await withMeeting();
+
+  const result = (await agent.invokeTool("meeting.transcript", {}, "trusted")) as {
+    status: string;
+    detail?: string;
+  };
+
+  expect(result.status).toBe("failed");
+  expect(result.detail).toContain("入っていません");
+  // 何をすればよいかまで言う（個体が次の手を選べる）
+  expect(result.detail).toContain("meeting.join");
+
+  await agent.destroy();
+});
+
+test("入っていないのに退出しようとしたら、そう言う", async () => {
+  const { agent } = await withMeeting();
+
+  const result = (await agent.invokeTool("meeting.leave", {}, "trusted")) as {
+    status: string;
+    detail?: string;
+  };
+
+  expect(result.detail).toContain("入っていません");
+
+  await agent.destroy();
+});
