@@ -140,6 +140,34 @@ test("**ブラウザが開けない理由を、人がやることが分かる形
   expect(launchFailureReason("socket hang up")).toBe("socket hang up");
 });
 
+test("**`chrome` を含むだけで「見つかりません」と言わない**", () => {
+  // 初版は `chrome` を含めば飛びついたので、無関係な失敗にまで札を貼った——
+  // Chrome は標準の場所にあったのに、**環境の問題だと報告した**
+  const unrelated = "Target page, context or browser has been closed (chrome)";
+  expect(launchFailureReason(unrelated)).toBe(unrelated);
+  // 「見つからない」としか読めない文言のときだけ、そう言う
+  expect(launchFailureReason("Executable doesn't exist at /Applications/…")).toContain("Chrome");
+});
+
+test("**見立てを添えても、元のエラーは残す**", async () => {
+  const browser = fakeBrowser("");
+  browser.context.newPage = async () => {
+    throw new Error("never");
+  };
+  const instance = createBrowserMeetingProvider({
+    profileDir: "/tmp/profile",
+    launch: async () => {
+      throw new Error("ProcessSingleton failed: profile is already in use\n詳しい行");
+    },
+  });
+
+  // 見立て（閉じてください）と、元の文言の両方が出る。**外れたときに追えなくなる**
+  await expect(instance?.join({ url: "https://meet.google.com/a" })).rejects.toThrow(/閉じて/);
+  await expect(instance?.join({ url: "https://meet.google.com/a" })).rejects.toThrow(
+    /ProcessSingleton/,
+  );
+});
+
 test("待ち・拒否・不明で、言うことが変わる（人がやることが違う）", async () => {
   const waiting = provider("参加をリクエストしています");
   await expect(waiting.instance?.join({ url: "https://meet.google.com/a" })).rejects.toThrow(

@@ -57,11 +57,15 @@ export function launchFailureReason(detail: string): string {
   if (
     d.includes("processsingleton") ||
     d.includes("already in use") ||
-    d.includes("singletonlock")
+    d.includes("singletonlock") ||
+    d.includes("existing browser session")
   ) {
     return "ブラウザのプロファイルが使用中です。そのプロファイルで開いている Chrome を閉じてください";
   }
-  if (d.includes("executable doesn't exist") || d.includes("channel") || d.includes("chrome")) {
+  // **`chrome` を含むだけで飛びつかない。** 初版はそうしていたので、無関係な失敗にまで
+  // 「Chrome が見つかりません」と札を貼った——Chrome は標準の場所にあったのに、である。
+  // 当てにいく条件は、**それしか意味しない文言**に限る。
+  if (d.includes("executable doesn't exist") || d.includes("looks like playwright")) {
     return "Chrome が見つかりません（playwright-core は手元の Chrome を使います）";
   }
   return detail;
@@ -136,9 +140,16 @@ export function createBrowserMeetingProvider(
       try {
         context = await launch({ profileDir, headless });
       } catch (err) {
-        // **ブラウザが開けないことと、会議に入れないことは別**。人がやることが違う
+        // **ブラウザが開けないことと、会議に入れないことは別**。人がやることが違う。
+        //
+        // **元のエラーを捨てない。** 見立てを添えるだけにする——初版は書き換えていたので、
+        // 見立てが外れたときに**何が起きたのか誰にも分からなくなった**（実際そうなった）。
         const detail = err instanceof Error ? err.message : String(err);
-        throw new Error(`meeting-browser: ${launchFailureReason(detail)}`);
+        const hint = launchFailureReason(detail);
+        const first = detail.split("\n")[0] ?? detail;
+        throw new Error(
+          hint === detail ? `meeting-browser: ${detail}` : `meeting-browser: ${hint}（${first}）`,
+        );
       }
       const page = await context.newPage();
       let closed = false;
