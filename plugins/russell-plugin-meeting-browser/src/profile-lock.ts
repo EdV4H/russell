@@ -15,6 +15,7 @@
  * > 確かめられない（別のホストが持ち主、形が読めない）なら、触らない。
  */
 
+import { execFileSync } from "node:child_process";
 import { readlinkSync, unlinkSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
@@ -47,14 +48,40 @@ export function sameHost(a: string, b: string): boolean {
 /** 掃除の結果。**何をしたか（しなかったか）を言えるようにする。** */
 export type LockVerdict =
   | { action: "none"; reason: string }
-  | { action: "cleared"; pid: number }
-  | { action: "held"; pid: number };
+  | { action: "cleared"; pid: number; why: string }
+  | { action: "held"; pid: number; holder: string };
 
 export interface ClearLockDeps {
   readLink?: (path: string) => string;
   unlink?: (path: string) => void;
   isAlive?: (pid: number) => boolean;
+  /** その pid が何のプロセスか。読めなければ `undefined`（**当てにいかない**）。 */
+  processName?: (pid: number) => string | undefined;
   host?: string;
+}
+
+/**
+ * その pid の正体。**pid が生きているだけでは足りない。**
+ *
+ * macOS は pid を使い回す。数時間前のロックに書かれた pid が、いまはまったく別の
+ * プロセスであることは普通にある。そこを見ないと「生きている」と判定し続けて、
+ * **再起動するまで永久に会議へ入れない**（実際そうなった）。
+ */
+export function processName(pid: number): string | undefined {
+  try {
+    return execFileSync("ps", ["-p", String(pid), "-o", "comm="], {
+      encoding: "utf8",
+      timeout: 3000,
+    }).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+/** Chrome か。名前で見る（`…/Google Chrome` `chromium` など）。 */
+export function looksLikeChrome(name: string): boolean {
+  const n = name.toLowerCase();
+  return n.includes("chrome") || n.includes("chromium");
 }
 
 /** そのプロセスが生きているか。**シグナルは送らない**（0 は存在確認だけ）。 */
@@ -93,9 +120,19 @@ export function clearStaleProfileLock(profileDir: string, deps: ClearLockDeps = 
   if (!sameHost(owner.host, host)) {
     return { action: "none", reason: `別の機械が持っています（${owner.host}）` };
   }
-  if (isAlive(owner.pid)) return { action: "held", pid: owner.pid };
+  const name = (deps.processName ?? processName)(owner.pid);
+  let why: string | undefined;
+  if (!isAlive(owner.pid)) {
+    why = "プロセスが不在です";
+  } else if (name !== undefined && !looksLikeChrome(name)) {
+    // **pid の使い回し。** 生きてはいるが Chrome ではない＝このロックは古い
+    why = `pid が別のプロセスに使い回されています（${name}）`;
+  } else {
+    // 生きていて Chrome、または正体が読めない。**触らない**（判断は人に渡す）
+    return { action: "held", pid: owner.pid, holder: name ?? "正体不明" };
+  }
 
-  // 持ち主は死んでいる。**Singleton 系だけ**を消す（プロファイルの中身には触らない）
+  // 持ち主はもういない。**Singleton 系だけ**を消す（プロファイルの中身には触らない）
   for (const name of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
     try {
       unlink(join(profileDir, name));
@@ -103,5 +140,5 @@ export function clearStaleProfileLock(profileDir: string, deps: ClearLockDeps = 
       // 無ければそれでよい
     }
   }
-  return { action: "cleared", pid: owner.pid };
+  return { action: "cleared", pid: owner.pid, why };
 }
