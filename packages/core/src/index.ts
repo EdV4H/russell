@@ -42,3 +42,5 @@ export { leaseExpired, resolveCatchup } from "./schedule.js";
 export type { CatchupPolicy, DueOptions, RunStatus } from "./schedule.js";
 export { buildReplyJudgeRequest, decideReply, parseReplyJudgement } from "./reply-decision.js";
 export type { ReplyContext, ReplyVerdict } from "./reply-decision.js";
+export { catchupWindow, describeAway } from "./catchup-window.js";
+export type { CatchupWindow, CatchupWindowInput } from "./catchup-window.js";

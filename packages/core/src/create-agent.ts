@@ -33,6 +33,7 @@ import type {
   ModelRegistry,
   ModelTurn,
   PolicyRegistry,
+  PresenceCapability,
   ReactionKind,
   RoutineDefinition,
   RoutineRegistry,
@@ -47,8 +48,9 @@ import type {
   ToolSpec,
   TrustLabel,
 } from "@edv4h/russell-shared";
-import { CONVERSATION_SERVICE, MEMORY_SERVICE } from "@edv4h/russell-shared";
+import { CONVERSATION_SERVICE, MEMORY_SERVICE, PRESENCE_SERVICE } from "@edv4h/russell-shared";
 import { createAuditLog } from "./audit.js";
+import { catchupWindow, describeAway } from "./catchup-window.js";
 import { createFreezeGate } from "./freeze.js";
 import {
   NO_MORE_LOOKUP,
@@ -150,6 +152,13 @@ export interface CatchupConfig {
   limit?: number;
   /** 確認の間隔。既定10分。0 で起動時の1回だけ。 */
   intervalMs?: number;
+  /**
+   * 留守明けに遡ってよい上限。既定3日（#124）。
+   *
+   * 通常の窓（`windowMs`）とは別。**「古い話を掘り返さない」と「留守にしていた分に応える」は
+   * 別のこと**なので、別の数字で決める。
+   */
+  maxAwayMs?: number;
 }
 
 /**
@@ -162,6 +171,14 @@ const LOOKUP_DEADLINE_MS = 45_000;
 
 /** 積み残しの確認の既定値。保守側に倒してある（起動のたびに古い話へ返信しないように）。 */
 const DEFAULT_CATCHUP_WINDOW_MS = 12 * 60 * 60 * 1000;
+/**
+ * 留守明けに遡ってよい上限（#124）。
+ *
+ * **上限が無いと、長く止まっていた後に古い会話へ返信し始める。** 3日にしてあるのは、
+ * それを超えて止まっていたなら、拾い直すより人に言われた方が自然だからである
+ * （相手の側でも話は既に終わっている）。
+ */
+const MAX_AWAY_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 const DEFAULT_CATCHUP_LIMIT = 3;
 const DEFAULT_CATCHUP_INTERVAL_MS = 10 * 60 * 1000;
 /** 同じやりとりを何度まで試すか。失敗が続くと無限に試し続けるのを防ぐ。 */
@@ -1103,6 +1120,13 @@ ${length}
   }
 
   const catchup = config.catchup ?? {};
+  /**
+   * 前回いつまで動いていたか（#124）。**起動直後の1回だけ**使う。
+   * 通信面や記憶と同じく、無ければ無いで動く（既定の窓に倒れる）。
+   */
+  const presence = services.get<PresenceCapability>(PRESENCE_SERVICE);
+  /** 起動直後の確認かどうか。留守明けの遡りは、この1回に限る。 */
+  let firstSweep = true;
   /** 拾い直しを試した回数（contextId ごと）。失敗が続くループを防ぐ。 */
   const catchupAttempts = new Map<string, number>();
 
@@ -1473,8 +1497,32 @@ ${length}
     if (capable.length === 0) return;
     // 凍結中は自発的に動かない（§12-4）。解除後の確認で拾えばよい
     if ((await runtime.freezeLevel()) !== "none") return;
-    const since = new Date(Date.now() - (catchup.windowMs ?? DEFAULT_CATCHUP_WINDOW_MS));
+    // **留守明けだけ、前回まで遡る**（#124）。以降の周期実行では広げない——
+    // 動いている間は「留守にしていた分」など無く、広げれば古い話を掘り返すだけになる。
+    const window = catchupWindow({
+      now: new Date(),
+      windowMs: catchup.windowMs ?? DEFAULT_CATCHUP_WINDOW_MS,
+      maxAwayMs: catchup.maxAwayMs ?? MAX_AWAY_WINDOW_MS,
+      lastSeenAt: firstSweep ? presence?.lastSeenAt() : undefined,
+    });
+    firstSweep = false;
+    const since = window.since;
     const limit = catchup.limit ?? DEFAULT_CATCHUP_LIMIT;
+    if (window.awayMs !== undefined) {
+      // **黙って広げない。** 普段と違う動きをしているので、後から辿れる形で残す
+      const away = describeAway(window.awayMs);
+      console.log(
+        `[catchup] ${away}止まっていたので、その間の分まで遡ります` +
+          `${window.capped ? "（上限で打ち切り）" : ""}`,
+      );
+      await auditLog.registry.record({
+        actor: runtime.agentId,
+        action: "catchup.widened",
+        payload: { awayMs: window.awayMs, capped: window.capped },
+        trustLabel: "trusted",
+      });
+      events.emit("catchup:widened", { awayMs: window.awayMs, capped: window.capped });
+    }
 
     for (const surface of capable) {
       if (!surface.pendingMessages) continue;

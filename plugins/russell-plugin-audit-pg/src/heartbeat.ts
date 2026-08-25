@@ -73,3 +73,29 @@ export async function heartbeats(pool: pg.Pool, agentId: string): Promise<StaleC
     ageMs: Number(r.age_ms),
   }));
 }
+
+/**
+ * 前回の一打（#124）。**今回の分で上書きする前に読む。**
+ *
+ * `beat` は1行を上書きしていく形なので、打ってから読むと「たった今」しか返らない。
+ * ここが順序に依存するのは気持ち悪いが、行を増やさない設計（1コンポーネント1行）と
+ * 引き換えである——毎回1行足すと、5分ごとに1日288行になる。
+ *
+ * 取れなければ `undefined`。**「初めての起動」と「読めなかった」を同じに扱う**——
+ * どちらも「前回がいつまでかは言えない」であり、そのときは既定の窓に倒す方が安全である。
+ */
+export async function lastBeat(
+  pool: pg.Pool,
+  agentId: string,
+  component: string,
+): Promise<Date | undefined> {
+  try {
+    const res = await pool.query<{ beat_at: Date }>(
+      "SELECT beat_at FROM component_heartbeats WHERE agent_id = $1 AND component = $2",
+      [agentId, component],
+    );
+    return res.rows[0]?.beat_at;
+  } catch {
+    return undefined;
+  }
+}

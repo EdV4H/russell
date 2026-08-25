@@ -18,6 +18,7 @@ import {
   pendingReply,
   withinWindow,
 } from "@edv4h/russell-plugin-surface-slack";
+import { PRESENCE_SERVICE } from "@edv4h/russell-shared";
 import type { InboundMessage, RussellPlugin, Temperament } from "@edv4h/russell-shared";
 import { expect, test } from "vitest";
 import { scriptedModel } from "./memory-model.js";
@@ -525,4 +526,104 @@ test("**自分が誰か分からないまま探さない**（黙って0件と言
   // 名指しの判定ができない。**探した結果0件**と**探せなかった**は別物なので、理由を返す
   expect(result.found).toEqual([]);
   expect(result.reasons).toEqual(["自分の id が分からない"]);
+});
+
+/**
+ * 留守明け（#124）。**「古い話を掘り返さない」と「留守にしていた分に応える」は別のこと。**
+ *
+ * 4日間落ちていた間に来た呼びかけは、復帰時にはすべて既定の窓（12時間）の外にあり、
+ * **一件も拾われなかった**。窓の広げ方そのものは catchup-window.test.ts で見ているので、
+ * ここで確かめるのは**繋がっているか**——前回の稼働時刻が実際に使われ、
+ * 起動直後の1回だけであること。
+ */
+
+/** 前回いつまで動いていたかを答えるだけのプラグイン（本番は監査プラグインが提供する）。 */
+function presence(lastSeenAt: Date | undefined): RussellPlugin {
+  return {
+    id: "presence",
+    name: "presence",
+    setup(ctx) {
+      ctx.services.provide(PRESENCE_SERVICE, { lastSeenAt: () => lastSeenAt });
+    },
+  };
+}
+
+test("**留守にしていた分まで遡って探す**", async () => {
+  const away = new Date(Date.now() - 30 * 60 * 60 * 1000); // 30時間前まで動いていた
+  const s = catchupSurface([inbound("t1", "これお願いできる？")]);
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), scriptedModel().plugin, presence(away), s.plugin],
+  );
+  await drain();
+
+  // 既定の12時間ではなく、止まった時点まで遡っている
+  const since = s.calls[0]?.since.getTime() ?? 0;
+  expect(Math.abs(since - away.getTime())).toBeLessThan(2000);
+
+  // **黙って広げない。** 普段と違う動きなので、後から辿れる形で残す
+  const widened = agent.ctx.audit.recent().find((e) => e.action === "catchup.widened");
+  expect(widened?.payload).toMatchObject({ capped: false });
+
+  await agent.destroy();
+});
+
+test("**遡るのは起動直後の1回だけ**（動いている間は留守にしていない）", async () => {
+  const away = new Date(Date.now() - 30 * 60 * 60 * 1000);
+  const s = catchupSurface([]);
+  const agent = await createAgent(
+    {
+      agentId: "bob",
+      configVersion: "v0",
+      temperament: BOB,
+      model: "echo",
+      mode: "live",
+      catchup: { intervalMs: 5 },
+    },
+    [createInMemoryMemoryPlugin(), scriptedModel().plugin, presence(away), s.plugin],
+  );
+  await new Promise((r) => setTimeout(r, 40));
+  await drain();
+
+  expect(s.calls.length).toBeGreaterThan(1);
+  const first = s.calls[0]?.since.getTime() ?? 0;
+  const later = s.calls[s.calls.length - 1]?.since.getTime() ?? 0;
+  // 2回目以降は既定の窓。広げ続けると、古い話を毎回掘り返すことになる
+  expect(later - first).toBeGreaterThan(10 * 60 * 60 * 1000);
+
+  await agent.destroy();
+});
+
+test("**上限を超えて止まっていたら、打ち切ったことを残す**", async () => {
+  const away = new Date(Date.now() - 96 * 60 * 60 * 1000); // 4日（実際に起きた形）
+  const s = catchupSurface([]);
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), scriptedModel().plugin, presence(away), s.plugin],
+  );
+  await drain();
+
+  const widened = agent.ctx.audit.recent().find((e) => e.action === "catchup.widened");
+  // 拾えなかった分があることは、言える形にしておく
+  expect(widened?.payload).toMatchObject({ capped: true });
+  // 3日より前へは行かない
+  const since = s.calls[0]?.since.getTime() ?? 0;
+  expect(Date.now() - since).toBeLessThan(73 * 60 * 60 * 1000);
+
+  await agent.destroy();
+});
+
+test("前回が分からなければ、既定のまま動く（記録を持たない構成）", async () => {
+  const s = catchupSurface([]);
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [createInMemoryMemoryPlugin(), scriptedModel().plugin, s.plugin],
+  );
+  await drain();
+
+  const since = s.calls[0]?.since.getTime() ?? 0;
+  expect(Math.abs(Date.now() - since - 12 * 60 * 60 * 1000)).toBeLessThan(2000);
+  expect(agent.ctx.audit.recent().some((e) => e.action === "catchup.widened")).toBe(false);
+
+  await agent.destroy();
 });

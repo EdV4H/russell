@@ -47,6 +47,9 @@ importers:
       '@edv4h/russell-plugin-meeting':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-meeting
+      '@edv4h/russell-plugin-meeting-browser':
+        specifier: workspace:*
+        version: link:../../plugins/russell-plugin-meeting-browser
       '@edv4h/russell-plugin-memory-inmem':
         specifier: workspace:*
         version: link:../../plugins/russell-plugin-memory-inmem
@@ -333,6 +336,28 @@ importers:
       '@edv4h/russell-shared':
         specifier: workspace:*
         version: link:../../packages/shared
+    devDependencies:
+      '@edv4h/russell-tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  plugins/russell-plugin-meeting-browser:
+    dependencies:
+      '@edv4h/russell-plugin-meeting':
+        specifier: workspace:*
+        version: link:../russell-plugin-meeting
+      '@edv4h/russell-shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      playwright-core:
+        specifier: ^1.49.0
+        version: 1.62.1
     devDependencies:
       '@edv4h/russell-tsconfig':
         specifier: workspace:*
@@ -1398,6 +1423,11 @@ packages:
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
+  playwright-core@1.62.1:
+    resolution: {integrity: sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   postcss@8.5.24:
     resolution: {integrity: sha512-8RyVklq0owXUTa4xlpzu4l9AaVKIdQvAcOHZWaMh98HgySsUtxRVf/chRe3dsSLqb6i40BzGRzEUddRaI+9TSw==}
     engines: {node: ^10 || ^12 || >=14}
@@ -2456,6 +2486,8 @@ snapshots:
       split2: 4.2.0
 
   picocolors@1.1.1: {}
+
+  playwright-core@1.62.1: {}
 
   postcss@8.5.24:
     dependencies:

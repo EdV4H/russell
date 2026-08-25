@@ -1,0 +1,10 @@
+{
+  "extends": "@edv4h/russell-tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // ブラウザの中で動かす関数（page.evaluate）を書くので DOM の型が要る。
+    // **このパッケージだけの事情**なので共通側へは上げない
+    "lib": ["ES2022", "DOM"]
+  },
+  "references": [{ "path": "../../packages/shared" }, { "path": "../russell-plugin-meeting" }]
+}
