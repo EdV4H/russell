@@ -1,0 +1,23 @@
+{
+  "name": "@edv4h/russell-plugin-meeting-browser",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "会議に参加する経路（ブラウザ）。Meet の字幕を読んで文字起こしにする。",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@edv4h/russell-plugin-meeting": "workspace:*",
+    "@edv4h/russell-shared": "workspace:*",
+    "playwright-core": "^1.49.0"
+  },
+  "devDependencies": {
+    "@edv4h/russell-tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

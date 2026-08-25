@@ -20,6 +20,7 @@
     "@edv4h/russell-plugin-equipment-notion": "workspace:*",
     "@edv4h/russell-plugin-killswitch-pg": "workspace:*",
     "@edv4h/russell-plugin-meeting": "workspace:*",
+    "@edv4h/russell-plugin-meeting-browser": "workspace:*",
     "@edv4h/russell-plugin-memory-inmem": "workspace:*",
     "@edv4h/russell-plugin-memory-pg": "workspace:*",
     "@edv4h/russell-plugin-model-claude": "workspace:*",
@@ -32,6 +33,7 @@
     "@edv4h/russell-shared": "workspace:*"
   },
   "devDependencies": {
+    "@edv4h/russell-plugin-meeting-browser": "workspace:*",
     "@edv4h/russell-tsconfig": "workspace:*",
     "@edv4h/russell-viewer": "workspace:*",
     "@edv4h/russell-worker": "workspace:*",

@@ -37,7 +37,14 @@ function buildablePackages(): { dir: string; pkg: Record<string, unknown> }[] {
   return found;
 }
 
-const read = (path: string) => JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+/**
+ * tsconfig を読む。**注釈を落としてから**——tsconfig は JSON5 寄りで注釈を書けるし、
+ * ここには「なぜこの設定なのか」を書いてある（それを読めない検査に落とされたら本末転倒）。
+ *
+ * 落とすのは**行頭から始まる注釈だけ**。値の中の `https://` を巻き込まないため。
+ */
+const read = (path: string) =>
+  JSON.parse(readFileSync(path, "utf8").replace(/^\s*\/\/.*$/gm, "")) as Record<string, unknown>;
 
 test("ビルドするパッケージは、全て共通設定を extends している", () => {
   const packages = buildablePackages();

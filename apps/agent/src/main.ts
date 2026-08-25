@@ -14,6 +14,8 @@ import { createPgAuditPlugin } from "@edv4h/russell-plugin-audit-pg";
 import { createGoogleEquipmentPlugin } from "@edv4h/russell-plugin-equipment-google";
 import { createNotionEquipmentPlugin } from "@edv4h/russell-plugin-equipment-notion";
 import { createPgKillSwitchPlugin } from "@edv4h/russell-plugin-killswitch-pg";
+import { createMeetingPlugin } from "@edv4h/russell-plugin-meeting";
+import { createBrowserMeetingProvider } from "@edv4h/russell-plugin-meeting-browser";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import { createPgMemoryPlugin } from "@edv4h/russell-plugin-memory-pg";
 import { createClaudeModelPlugin } from "@edv4h/russell-plugin-model-claude";
@@ -76,6 +78,9 @@ function assembleSpongePlugins(): RussellPlugin[] {
     ...(useNotion ? [createNotionEquipmentPlugin()] : []),
     // 鍵が揃っていなければ、プラグイン側が自分で降りる（未支給, §9.2）
     createGoogleEquipmentPlugin(),
+    // 会議。**入る経路が無ければ、装備そのものが支給されない**（#130）。
+    // 経路はブラウザで、ログイン済みのプロファイル（`RUSSELL_MEET_PROFILE`）が要る。
+    createMeetingPlugin({ provider: createBrowserMeetingProvider() }),
     modelPlugin(),
     useSlack ? createSlackSurfacePlugin() : createCliSurfacePlugin({ displayName: BOB.name }),
     // **最後に置く。** 安全系イベントの購読なので、他のプラグインの setup 中に起きたものは
