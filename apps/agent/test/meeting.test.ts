@@ -194,3 +194,56 @@ test("経路が無ければ、装備そのものが存在しない（未支給, 
 
   await agent.destroy();
 });
+
+/**
+ * 入れなかった理由を握り潰さない。
+ *
+ * 実際に一度、理由を捨てて「入れませんでした」とだけ返した。個体は理由を渡されて
+ * いないので、聞かれて**推測で理由を作った**——「リンクが期限切れかもしれません」。
+ * そんなことは分かっていない。原因の手がかりは本文ではないので、そのまま返してよい（A1-5）。
+ */
+
+test("**入れなかった理由が、結果に残る**", async () => {
+  const s = surfaceThatApproves(true);
+  const agent = await createAgent(
+    { agentId: "bob", configVersion: "v0", temperament: BOB, model: "echo", mode: "live" },
+    [
+      createInMemoryMemoryPlugin(),
+      createMeetingPlugin({
+        provider: {
+          id: "broken",
+          async join() {
+            throw new Error("プロファイルが使用中です");
+          },
+        },
+      }),
+      s.plugin,
+    ],
+  );
+
+  const result = (await agent.invokeTool(
+    "meeting.join",
+    { url: "https://meet.example/abc" },
+    "untrusted",
+    ask,
+  )) as { status: string; detail?: string };
+
+  expect(result.status).toBe("failed");
+  expect(result.detail).toContain("使用中");
+
+  await agent.destroy();
+});
+
+test("URL が無いときも、何が足りないかを言う", async () => {
+  const { agent } = await withMeeting();
+
+  const result = (await agent.invokeTool("meeting.join", {}, "untrusted", ask)) as {
+    status: string;
+    detail?: string;
+  };
+
+  expect(result.status).toBe("failed");
+  expect(result.detail).toContain("URL");
+
+  await agent.destroy();
+});

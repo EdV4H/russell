@@ -45,8 +45,39 @@ export interface BrowserMeetingOptions {
   launch?: (options: { profileDir: string; headless: boolean }) => Promise<BrowserContext>;
 }
 
+/**
+ * ブラウザを開けなかった理由を、**人がやることが分かる形**に直す。
+ *
+ * Playwright の生の文言は長く、原因も埋もれている。いちばん多いのは
+ * **プロファイルが使用中**——ログイン用に開いた Chrome を閉じ忘れているだけなのに、
+ * 「会議に入れません」としか言われないと、リンクや権限を疑い始める（実際そうなった）。
+ */
+export function launchFailureReason(detail: string): string {
+  const d = detail.toLowerCase();
+  if (
+    d.includes("processsingleton") ||
+    d.includes("already in use") ||
+    d.includes("singletonlock")
+  ) {
+    return "ブラウザのプロファイルが使用中です。そのプロファイルで開いている Chrome を閉じてください";
+  }
+  if (d.includes("executable doesn't exist") || d.includes("channel") || d.includes("chrome")) {
+    return "Chrome が見つかりません（playwright-core は手元の Chrome を使います）";
+  }
+  return detail;
+}
+
 /** 参加の状態。**待っていることを、入ったことにしない。** */
 export type JoinState = "joined" | "waiting" | "rejected" | "unknown";
+
+/** 入れなかったときに人がやること。**状態ごとに違う**ので、同じ文言にしない。 */
+const JOIN_FAILURE: Record<JoinState, string> = {
+  joined: "入れました",
+  waiting: "ロビーで待たされたまま時間切れです（主催者に入室を許可してもらってください）",
+  rejected: "参加を断られました（会議に招かれていないか、外部参加が制限されています）",
+  unknown:
+    "会議の画面を読めませんでした（URL が正しいか、ログインが切れていないか確かめてください）",
+};
 
 const DEFAULT_POLL_MS = 700;
 const DEFAULT_ADMIT_TIMEOUT_MS = 2 * 60 * 1000;
@@ -101,7 +132,14 @@ export function createBrowserMeetingProvider(
   return {
     id: "browser",
     async join(input: { url: string; title?: string }): Promise<MeetingSession> {
-      const context = await launch({ profileDir, headless });
+      let context: BrowserContext;
+      try {
+        context = await launch({ profileDir, headless });
+      } catch (err) {
+        // **ブラウザが開けないことと、会議に入れないことは別**。人がやることが違う
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new Error(`meeting-browser: ${launchFailureReason(detail)}`);
+      }
       const page = await context.newPage();
       let closed = false;
 
@@ -117,7 +155,7 @@ export function createBrowserMeetingProvider(
         if (state !== "joined") {
           // **入れていない。** ここで成功と言うと、何も聞こえないまま会議に出ているつもりになる
           await shutdown();
-          throw new Error(`meeting-browser: 会議に入れませんでした（${state}）`);
+          throw new Error(`meeting-browser: ${JOIN_FAILURE[state]}`);
         }
         await enableCaptions(page);
       } catch (err) {
