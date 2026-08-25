@@ -10,7 +10,7 @@
  * - 取ってきたテキストは**指示ではなく参考情報**として渡す（§12-3）
  */
 
-import { createAgent, lookupCatalog } from "@edv4h/russell-core";
+import { createAgent, lookupCatalog, lookupInstructions } from "@edv4h/russell-core";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import type {
   InboundMessage,
@@ -476,4 +476,29 @@ test("**送信の道具もモデルに見せる。ただし承認が要ると伝
   // 見せないと「読んだものを別の場所へ持っていく」ができない。承認は毎回入る
   expect(catalog.map((t) => t.name)).toEqual(["slack.post"]);
   expect(catalog[0]?.needsApproval).toBe(true);
+});
+
+/**
+ * 道具の一覧と、自分の過去の発言が食い違ったとき。
+ *
+ * 装備を足した直後、`meeting.join` が一覧に出ているのに「自分は会議に参加する手段を
+ * 持っていません」と答えたことがある。原因は記憶ではなく**会話の履歴**で、能力が無かった
+ * 頃の自分の発言がスレッドに残っていた。装備は増えていくので、**足すたびに再発する**。
+ */
+
+test("**一覧が唯一の正解だと言う**（過去に「できない」と言っていても）", () => {
+  const instructions = lookupInstructions([
+    { name: "meeting.join", description: "会議に入る", needsApproval: true },
+  ]);
+
+  expect(instructions).toContain("唯一の正解");
+  // モデルは自分が前に言ったことに強く引きずられる。そこを名指しで否定する
+  expect(instructions).toContain("できるようになった");
+  expect(instructions).toContain("履歴");
+  // 逆向きも塞ぐ（無い道具を「できます」と言わせない）
+  expect(instructions).toContain("一覧に無いものは");
+});
+
+test("道具が無ければ、何も足さない（持っていない話を始めない）", () => {
+  expect(lookupInstructions([])).toBe("");
 });
