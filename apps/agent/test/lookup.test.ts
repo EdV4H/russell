@@ -10,7 +10,12 @@
  * - 取ってきたテキストは**指示ではなく参考情報**として渡す（§12-3）
  */
 
-import { createAgent, lookupCatalog, lookupInstructions } from "@edv4h/russell-core";
+import {
+  TOOL_DESCRIPTIONS,
+  createAgent,
+  lookupCatalog,
+  lookupInstructions,
+} from "@edv4h/russell-core";
 import { createInMemoryMemoryPlugin } from "@edv4h/russell-plugin-memory-inmem";
 import type {
   InboundMessage,
@@ -501,4 +506,14 @@ test("**一覧が唯一の正解だと言う**（過去に「できない」と�
 
 test("道具が無ければ、何も足さない（持っていない話を始めない）", () => {
   expect(lookupInstructions([])).toBe("");
+});
+
+test("**会議の道具は、使い分けが説明から分かる**", () => {
+  // 「会議の中身を答えるときは、まずこれを読む」と書いていたら、入る前に呼んだ。
+  // その結果「入れませんでした」と報告した——**入ろうとしてもいないのに**
+  const transcript = TOOL_DESCRIPTIONS["meeting.transcript"] ?? "";
+  expect(transcript).toContain("すでに入っている");
+  expect(transcript).toContain("meeting.join");
+  // 終わった会議は Drive の話で、これとは別（そこも取り違えやすい）
+  expect(transcript).toContain("drive.search");
 });

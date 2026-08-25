@@ -138,7 +138,13 @@ export function createMeetingPlugin(options: MeetingOptions = {}): RussellPlugin
         name: "meeting.leave",
         effect: "internal_write",
         async run(): Promise<SourceResult<{ lines: number; minutes: number; dropped: number }>> {
-          if (!current) return { status: "failed", freshness: new Date().toISOString() };
+          if (!current) {
+            return {
+              status: "failed",
+              freshness: new Date().toISOString(),
+              detail: "いま会議には入っていません",
+            };
+          }
           const joined = current;
           current = undefined;
           // **出られなくても、こちらは出たことにする。** 掴んだままにする方が困る
@@ -173,13 +179,29 @@ export function createMeetingPlugin(options: MeetingOptions = {}): RussellPlugin
           const target = current ?? last;
           const now = new Date().toISOString();
           if (!target) {
-            return { status: "failed", freshness: now, trustLabel: "untrusted" };
+            // **「会議に入っていない」と「取れなかった」は別物。**
+            // 理由なしで failed を返したら、個体はそれを「入れなかった。中身ゼロ」と読み、
+            // **入ろうとしてもいないのに「入れませんでした」と報告した**（実際に起きた）。
+            return {
+              status: "failed",
+              freshness: now,
+              detail: "まだ会議に入っていません（先に meeting.join が要ります）",
+              trustLabel: "untrusted",
+            };
           }
           const text = target.lines.map((l) => `${l.speaker}: ${l.text}`).join("\n");
           return {
             // 捨てた分があるなら**全部は見ていない**（complete と名乗らない, §6.3）
             status: target.dropped > 0 ? "partial" : "complete",
             freshness: now,
+            // **聞こえていないことを、取れなかったことにしない。** 入った直後や
+            // 誰も喋っていない会議では 0 件が正しい（それは complete である）
+            ...(target.lines.length === 0
+              ? { detail: "会議には入っていますが、まだ何も聞こえていません" }
+              : {}),
+            ...(target.dropped > 0
+              ? { detail: `古い方から ${target.dropped} 件を捨てています（全部は見ていません）` }
+              : {}),
             data: { text, lines: target.lines.length },
             // 他人の発言なので untrusted。**来歴を消さない**（§12-3）
             trustLabel: "untrusted",
