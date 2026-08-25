@@ -71,15 +71,24 @@ export function createMeetingPlugin(options: MeetingOptions = {}): RussellPlugin
       const offJoin = ctx.tools.register("meeting.join", {
         name: "meeting.join",
         effect: "external_send",
-        async describe(input: { url?: string; title?: string }) {
-          const where = (input?.title ?? "").trim() || (input?.url ?? "").trim();
+        /**
+         * 承認画面に出すもの。**確かめられるものだけを出す。**
+         *
+         * 以前は入力の `title` を見出しに使っていた。だが**入る前に会議名を知る手段は無い**
+         * ので、そこに入るのはモデルが作った名前である（実際、URL の会議コードや会話から
+         * 推測した名前が毎回入っていた）。押す人はその名前を見て「ああ、あの会議か」と
+         * 判断するので、**作り物の名前を出すのは承認の意味を薄める**。
+         *
+         * 出すのは URL。書き換えられていないかを確かめられる唯一の材料である。
+         */
+        async describe(input: { url?: string }) {
+          const url = (input?.url ?? "").trim();
           return {
-            summary: `会議〈${where}〉に入ります（参加者一覧に出ます）`,
-            // **押す前に、どこへ入るかを見せる。** URL は書き換えられていないか確かめる材料になる
-            preview: (input?.url ?? "").trim(),
+            summary: url ? `この会議に入ります（参加者一覧に出ます）: ${url}` : "会議に入ります",
+            preview: url,
           };
         },
-        async run(input: { url: string; title?: string }): Promise<SourceResult<{ id: string }>> {
+        async run(input: { url: string }): Promise<SourceResult<{ id: string }>> {
           const url = (input?.url ?? "").trim();
           if (url === "") {
             return {
@@ -97,10 +106,11 @@ export function createMeetingPlugin(options: MeetingOptions = {}): RussellPlugin
             };
           }
           try {
-            const session = await provider.join({ url, title: input?.title });
+            const session = await provider.join({ url });
             const joined: Joined = {
               session,
-              title: input?.title,
+              // **会議名は入ってから分かる。** 入る前に名乗らせない（作り物になる）
+              title: session.title,
               joinedAt: Date.now(),
               lines: [],
               dropped: 0,

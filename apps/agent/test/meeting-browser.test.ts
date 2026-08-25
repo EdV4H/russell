@@ -10,6 +10,7 @@ import {
   createBrowserMeetingProvider,
   launchFailureReason,
   readJoinState,
+  titleFromDocument,
 } from "@edv4h/russell-plugin-meeting-browser";
 import { expect, test } from "vitest";
 
@@ -183,4 +184,24 @@ test("待ち・拒否・不明で、言うことが変わる（人がやるこ�
   await expect(unknown.instance?.join({ url: "https://meet.google.com/a" })).rejects.toThrow(
     /URL|ログイン/,
   );
+});
+
+/**
+ * 会議の名前は、**入ってから画面で分かる**もの。
+ *
+ * 以前は参加を頼む側（モデル）に名乗らせていた。入る前に会議名を知る手段は無いので、
+ * そこに入るのは作り話である——URL の会議コードや、会話から推測した名前が毎回入り、
+ * **それが承認画面の見出しになっていた**。押す人はその名前を見て判断する。
+ */
+
+test("**タブのタイトルから会議名を取る**", () => {
+  expect(titleFromDocument("Meet – 定例ミーティング")).toBe("定例ミーティング");
+  expect(titleFromDocument("Meet - Weekly Sync")).toBe("Weekly Sync");
+});
+
+test("**会議コードは名前ではない**（人に伝わらない）", () => {
+  // 「bmn-seom-nyu という会議」と言われても、何のことか分からない
+  expect(titleFromDocument("Meet – bmn-seom-nyu")).toBeUndefined();
+  expect(titleFromDocument("Meet")).toBeUndefined();
+  expect(titleFromDocument("")).toBeUndefined();
 });

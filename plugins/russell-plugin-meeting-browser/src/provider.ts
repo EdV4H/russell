@@ -136,7 +136,7 @@ export function createBrowserMeetingProvider(
 
   return {
     id: "browser",
-    async join(input: { url: string; title?: string }): Promise<MeetingSession> {
+    async join(input: { url: string }): Promise<MeetingSession> {
       // **死んでいるロックは自分で片付ける。** このプロファイルは個体専用で、
       // 他に開く者はいない。人に毎回アクティビティモニタを見にいかせるのは筋が悪い。
       // 生きているなら消さない——**誰が持っているか**を言って、判断は人に渡す。
@@ -170,6 +170,8 @@ export function createBrowserMeetingProvider(
       }
       const page = await context.newPage();
       let closed = false;
+      /** 会議の名前。**入ってから読む**（取れなければ名乗らない）。 */
+      let title: string | undefined;
 
       const shutdown = async () => {
         if (closed) return;
@@ -186,6 +188,7 @@ export function createBrowserMeetingProvider(
           throw new Error(`meeting-browser: ${JOIN_FAILURE[state]}`);
         }
         await enableCaptions(page);
+        title = await meetingTitle(page);
       } catch (err) {
         await shutdown();
         throw err;
@@ -214,6 +217,7 @@ export function createBrowserMeetingProvider(
 
       return {
         id: input.url,
+        title,
         onLine(handler) {
           handlers.push(handler);
         },
@@ -269,6 +273,31 @@ async function enableCaptions(page: Page): Promise<void> {
         .catch(() => {});
       return;
     }
+  }
+}
+
+/**
+ * 会議の名前を、**画面から**読む。
+ *
+ * Meet はタブのタイトルを `Meet – 〈会議名〉` の形にする。会議名が付いていない会議では
+ * 会議コードがそのまま入るので、**それは名前ではない**として捨てる——
+ * 「bmn-seom-nyu という会議」と言われても、人には何のことか分からない。
+ *
+ * 取れなければ `undefined`。**当てにいかない**（当てた名前は、当てたと分からない）。
+ */
+export function titleFromDocument(documentTitle: string): string | undefined {
+  const raw = documentTitle.replace(/^meet\s*[–—-]\s*/i, "").trim();
+  if (raw === "" || /^meet$/i.test(raw)) return undefined;
+  // 会議コード（`abc-defg-hij`）だけなら、名前ではない
+  if (/^[a-z]{3}-[a-z]{4}-[a-z]{3}$/i.test(raw)) return undefined;
+  return raw;
+}
+
+async function meetingTitle(page: Page): Promise<string | undefined> {
+  try {
+    return titleFromDocument(await page.title());
+  } catch {
+    return undefined;
   }
 }
 
