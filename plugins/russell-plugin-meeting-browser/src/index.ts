@@ -2,6 +2,7 @@ export {
   createBrowserMeetingProvider,
   launchFailureReason,
   readJoinState,
+  titleFromDocument,
 } from "./provider.js";
 export type { BrowserMeetingOptions, JoinState } from "./provider.js";
 export {

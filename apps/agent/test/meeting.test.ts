@@ -284,3 +284,27 @@ test("入っていないのに退出しようとしたら、そう言う", async
 
   await agent.destroy();
 });
+
+/**
+ * 承認画面には、**確かめられるものだけ**を出す。
+ *
+ * 以前は入力の `title` を見出しにしていた。入る前に会議名を知る手段は無いので、
+ * そこに入るのはモデルが作った名前である。押す人はその名前を見て
+ * 「ああ、あの会議か」と判断するので、**作り物を出すのは承認の意味を薄める**。
+ */
+
+test("**承認画面には URL を出す**（モデルが付けた名前ではなく）", async () => {
+  const { agent } = await withMeeting();
+
+  const described = await agent.ctx.tools.get("meeting.join")?.describe?.({
+    url: "https://meet.google.com/abc-defg-hij",
+    title: "そこにない会議名",
+  });
+
+  // 書き換えられていないかを確かめられる唯一の材料
+  expect(described?.summary).toContain("https://meet.google.com/abc-defg-hij");
+  expect(described?.summary).not.toContain("そこにない会議名");
+  expect(described?.preview).toContain("meet.google.com");
+
+  await agent.destroy();
+});
