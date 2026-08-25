@@ -179,7 +179,7 @@ export function createBrowserMeetingProvider(
 
       try {
         await page.goto(input.url, { waitUntil: "domcontentloaded" });
-        const state = await admit(page, admitTimeoutMs, pollMs);
+        const state = await admit(page, admitTimeoutMs, pollMs, debug);
         if (state !== "joined") {
           // **入れていない。** ここで成功と言うと、何も聞こえないまま会議に出ているつもりになる
           await shutdown();
@@ -231,12 +231,23 @@ export function createBrowserMeetingProvider(
 }
 
 /** 入れてもらえるまで待つ。**上限を超えたら諦める**（ロビーで永遠に待たない）。 */
-async function admit(page: Page, timeoutMs: number, pollMs: number): Promise<JoinState> {
+async function admit(
+  page: Page,
+  timeoutMs: number,
+  pollMs: number,
+  debug = false,
+): Promise<JoinState> {
   const deadline = Date.now() + timeoutMs;
   let last: JoinState = "unknown";
   while (Date.now() < deadline) {
     const text = await page.innerText("body").catch(() => "");
-    last = readJoinState(text);
+    const state = readJoinState(text);
+    // **判断の材料を捨てない。** 文言で状態を当てているので、外れたときに
+    // 何を見てそう言ったのかが分からないと直せない（ここで何度も嵌っている）
+    if (debug && state !== last) {
+      console.log(`[meeting-browser] 画面: ${state} ← ${text.replace(/\s+/g, " ").slice(0, 300)}`);
+    }
+    last = state;
     if (last === "joined" || last === "rejected") return last;
     await page.waitForTimeout(pollMs);
   }

@@ -121,10 +121,28 @@ export function createAlertsPlugin(options: AlertsOptions = {}): RussellPlugin {
  * 知らせに添える一言。**本文は絶対に入れない**（A1-5）。
  * 入れてよいのは道具名やエラーの種類のような、それ自体が機微でないものだけ。
  */
+/** 通知に載せる理由の上限。**長い stderr をそのまま流さない**（A1-5 の観点でも切る）。 */
+const MAX_DETAIL = 200;
+
+/**
+ * 知らせに添える理由。
+ *
+ * > [!IMPORTANT]
+ * > **ターンの失敗は理由を出す。** 出していなかったので、`⚠️ ターンが失敗しました` だけが
+ * > 毎回流れ、**何が起きているのか誰にも分からなかった**（実際、毎回1通目が失敗していた
+ * > のに原因を追えなかった）。知らせるだけで理由を落とすなら、知らせていないのと大差ない。
+ * >
+ * > 載せるのは**1行目だけ**を切り詰めたもの。エラーの文言は本文ではないが、
+ * > CLI の stderr がそのまま入ることがあるので、長さで頭を打つ。
+ */
 function detailOf(event: string, payload: unknown): string {
   if (!payload || typeof payload !== "object") return "";
   const p = payload as Record<string, unknown>;
   if (event === "policy:blocked" && typeof p.tool === "string") return p.tool;
   if (event === "mode:change-blocked" && typeof p.reason === "string") return p.reason;
+  if (event === "turn:error") {
+    const message = payload instanceof Error ? payload.message : String(p.message ?? "");
+    return (message.split("\n")[0] ?? "").slice(0, MAX_DETAIL);
+  }
   return "";
 }

@@ -165,3 +165,50 @@ test("拾う対象に、黙る原因が全部入っている", () => {
     ]),
   );
 });
+
+/**
+ * ターンの失敗は、理由まで出す。
+ *
+ * 出していなかったので `⚠️ ターンが失敗しました` だけが毎回流れ、**何が起きているのか
+ * 誰にも分からなかった**。知らせるだけで理由を落とすなら、知らせていないのと大差ない。
+ */
+
+test("**ターンが失敗した理由を載せる**", async () => {
+  const { agent, sent } = await withAlerts();
+
+  agent.ctx.events.emit(
+    "turn:error",
+    new Error("model-claude-code: 120000ms で応答がありませんでした"),
+  );
+  await settle();
+
+  expect(sent[0]).toContain("ターンが失敗");
+  expect(sent[0]).toContain("120000ms");
+
+  await agent.destroy();
+});
+
+test("長い理由は切り詰める（stderr をそのまま流さない）", async () => {
+  const { agent, sent } = await withAlerts();
+
+  agent.ctx.events.emit("turn:error", new Error(`頭: ${"あ".repeat(500)}`));
+  await settle();
+
+  expect(sent[0]).toContain("頭:");
+  // 1行目だけ・上限つき。長さで頭を打つ（A1-5 の観点でも）
+  expect((sent[0] ?? "").length).toBeLessThan(300);
+
+  await agent.destroy();
+});
+
+test("複数行のエラーは1行目だけ（後続に何が入るか分からない）", async () => {
+  const { agent, sent } = await withAlerts();
+
+  agent.ctx.events.emit("turn:error", new Error("1行目です\n2行目は載せない"));
+  await settle();
+
+  expect(sent[0]).toContain("1行目です");
+  expect(sent[0]).not.toContain("2行目");
+
+  await agent.destroy();
+});
