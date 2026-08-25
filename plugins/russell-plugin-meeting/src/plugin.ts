@@ -81,10 +81,20 @@ export function createMeetingPlugin(options: MeetingOptions = {}): RussellPlugin
         },
         async run(input: { url: string; title?: string }): Promise<SourceResult<{ id: string }>> {
           const url = (input?.url ?? "").trim();
-          if (url === "") return { status: "failed", freshness: new Date().toISOString() };
+          if (url === "") {
+            return {
+              status: "failed",
+              freshness: new Date().toISOString(),
+              detail: "会議の URL がありません",
+            };
+          }
           if (current) {
             // **黙って乗り換えない。** 前の会議に入ったままだと思っている人がいる
-            return { status: "failed", freshness: new Date().toISOString() };
+            return {
+              status: "failed",
+              freshness: new Date().toISOString(),
+              detail: "すでに別の会議に入っています（先に退出してください）",
+            };
           }
           try {
             const session = await provider.join({ url, title: input?.title });
@@ -111,8 +121,15 @@ export function createMeetingPlugin(options: MeetingOptions = {}): RussellPlugin
               freshness: new Date().toISOString(),
               data: { id: session.id },
             };
-          } catch {
-            return { status: "failed", freshness: new Date().toISOString() };
+          } catch (err) {
+            // **理由を握り潰さない。** ここが空だと、個体は「入れませんでした」としか
+            // 言えず、聞かれたら**推測で理由を作る**（実際「リンクが期限切れかも」と
+            // 言った。そんなことは分かっていない）。原因の手がかりは本文ではないので、
+            // そのまま返してよい（A1-5）。
+            const detail = err instanceof Error ? err.message : String(err);
+            console.warn(`[meeting] 会議に入れませんでした: ${detail}`);
+            ctx.events.emit("meeting:join-failed", { detail });
+            return { status: "failed", freshness: new Date().toISOString(), detail };
           }
         },
       });

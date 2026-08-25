@@ -1,4 +1,8 @@
-export { createBrowserMeetingProvider, readJoinState } from "./provider.js";
+export {
+  createBrowserMeetingProvider,
+  launchFailureReason,
+  readJoinState,
+} from "./provider.js";
 export type { BrowserMeetingOptions, JoinState } from "./provider.js";
 export {
   SETTLE_MS,

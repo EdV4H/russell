@@ -157,6 +157,19 @@ export interface PendingSearchDeps {
  * だいたい直せない（抜けた・消えた）。この区別が付かないと、毎回出る警告を
  * 見なかったことにするしかなくなる。
  */
+/**
+ * 読めなかった理由に、**どの会話か**を添える（#121）。
+ *
+ * 理由だけだと「毎回1件読めない」までしか分からず、直せるものかどうかも、
+ * それが**大事な会話なのか**も言えない。実際、読めないチャンネルがあることは
+ * 毎回ログに出ていたのに、**そこが主戦場のチャンネルかもしれない**ことに気づけなかった。
+ *
+ * 出すのは id だけ。**本文は出さない**（A1-5）。
+ */
+function skipNote(err: unknown, channel: string): string {
+  return `${slackReason(err)}(${channel})`;
+}
+
 function slackReason(err: unknown): string {
   const detail = err instanceof Error ? err.message : String(err);
   const known = [
@@ -201,7 +214,7 @@ export async function findPendingMessages(
       history = await deps.history(channel, oldest);
     } catch (err) {
       skipped++;
-      reasons.add(slackReason(err));
+      reasons.add(skipNote(err, channel));
       continue;
     }
 
@@ -217,7 +230,7 @@ export async function findPendingMessages(
         thread = await deps.messages(contextId);
       } catch (err) {
         skipped++;
-        reasons.add(slackReason(err));
+        reasons.add(skipNote(err, contextId));
         continue;
       }
       const pending = pendingReply(thread, deps.botUserId);

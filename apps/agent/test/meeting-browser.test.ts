@@ -6,7 +6,11 @@
  * **何も聞こえないまま会議に出ているつもり**になる——黙って壊れる形である。
  */
 
-import { createBrowserMeetingProvider, readJoinState } from "@edv4h/russell-plugin-meeting-browser";
+import {
+  createBrowserMeetingProvider,
+  launchFailureReason,
+  readJoinState,
+} from "@edv4h/russell-plugin-meeting-browser";
 import { expect, test } from "vitest";
 
 test("画面の文言から参加の状態を読む", () => {
@@ -86,7 +90,7 @@ test("入れたら、会議として扱える", async () => {
 test("**ロビーで待たされたまま上限に達したら、入れたと言わない**", async () => {
   const { instance, browser } = provider("参加をリクエストしています");
 
-  await expect(instance?.join({ url: "https://meet.google.com/abc" })).rejects.toThrow(/waiting/);
+  await expect(instance?.join({ url: "https://meet.google.com/abc" })).rejects.toThrow(/ロビー/);
   // 入れなかったのにブラウザを掴んだままにしない
   expect(browser.isClosed()).toBe(true);
 });
@@ -94,14 +98,18 @@ test("**ロビーで待たされたまま上限に達したら、入れたと言
 test("断られたら、待たずに諦める", async () => {
   const { instance, browser } = provider("会議に参加できません");
 
-  await expect(instance?.join({ url: "https://meet.google.com/abc" })).rejects.toThrow(/rejected/);
+  await expect(instance?.join({ url: "https://meet.google.com/abc" })).rejects.toThrow(
+    /断られました/,
+  );
   expect(browser.isClosed()).toBe(true);
 });
 
 test("**画面が読めないときも、入れたことにしない**", async () => {
   const { instance } = provider("読み込み中");
 
-  await expect(instance?.join({ url: "https://meet.google.com/abc" })).rejects.toThrow(/unknown/);
+  await expect(instance?.join({ url: "https://meet.google.com/abc" })).rejects.toThrow(
+    /読めませんでした/,
+  );
 });
 
 test("出たらブラウザを閉じる（掴んだまま残さない）", async () => {
@@ -113,4 +121,38 @@ test("出たらブラウザを閉じる（掴んだまま残さない）", async
   expect(browser.isClosed()).toBe(true);
   // 二度呼んでも壊れない（退出は止める方向の行為なので、通しておきたい）
   await session?.leave();
+});
+
+/**
+ * 入れなかったときに何と言うか。
+ *
+ * 実際に一度、理由を握り潰したまま「入れませんでした」とだけ返した。すると個体は
+ * **推測で理由を作った**——「リンクが期限切れかもしれません」。そんなことは分かっていない。
+ * 原因の手がかりは本文ではないので、そのまま渡してよい（A1-5）。
+ */
+
+test("**ブラウザが開けない理由を、人がやることが分かる形にする**", () => {
+  // いちばん多いのはこれ。ログイン用に開いた Chrome を閉じ忘れているだけ
+  expect(launchFailureReason("ProcessSingleton: profile is already in use")).toContain("閉じて");
+  expect(launchFailureReason("Failed to create SingletonLock")).toContain("閉じて");
+  expect(launchFailureReason("Chromium executable doesn't exist")).toContain("Chrome");
+  // 知らない失敗は、そのまま渡す（黙って「不明」に潰さない）
+  expect(launchFailureReason("socket hang up")).toBe("socket hang up");
+});
+
+test("待ち・拒否・不明で、言うことが変わる（人がやることが違う）", async () => {
+  const waiting = provider("参加をリクエストしています");
+  await expect(waiting.instance?.join({ url: "https://meet.google.com/a" })).rejects.toThrow(
+    /主催者/,
+  );
+
+  const rejected = provider("会議に参加できません");
+  await expect(rejected.instance?.join({ url: "https://meet.google.com/a" })).rejects.toThrow(
+    /招かれていない|制限/,
+  );
+
+  const unknown = provider("読み込み中");
+  await expect(unknown.instance?.join({ url: "https://meet.google.com/a" })).rejects.toThrow(
+    /URL|ログイン/,
+  );
 });
