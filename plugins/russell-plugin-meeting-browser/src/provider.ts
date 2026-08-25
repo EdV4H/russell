@@ -31,6 +31,7 @@ import {
   drainCaptions,
   ingestCaptions,
 } from "./captions.js";
+import { clearStaleProfileLock } from "./profile-lock.js";
 
 export interface BrowserMeetingOptions {
   /** ログイン済みのプロファイル。**人が一度作る**（無ければ支給されない）。 */
@@ -136,6 +137,18 @@ export function createBrowserMeetingProvider(
   return {
     id: "browser",
     async join(input: { url: string; title?: string }): Promise<MeetingSession> {
+      // **死んでいるロックは自分で片付ける。** このプロファイルは個体専用で、
+      // 他に開く者はいない。人に毎回アクティビティモニタを見にいかせるのは筋が悪い。
+      // 生きているなら消さない——**誰が持っているか**を言って、判断は人に渡す。
+      const lock = clearStaleProfileLock(profileDir);
+      if (lock.action === "cleared") {
+        console.log(`[meeting-browser] 残っていたロックを片付けました（pid ${lock.pid} は不在）`);
+      } else if (lock.action === "held") {
+        throw new Error(
+          `meeting-browser: プロファイルを別の Chrome が使っています（pid ${lock.pid}）。それを終了してください`,
+        );
+      }
+
       let context: BrowserContext;
       try {
         context = await launch({ profileDir, headless });

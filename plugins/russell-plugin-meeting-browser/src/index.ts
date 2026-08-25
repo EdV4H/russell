@@ -12,3 +12,5 @@ export {
   ingestCaptions,
 } from "./captions.js";
 export type { CaptionEntry, CaptionState } from "./captions.js";
+export { clearStaleProfileLock, parseLockOwner, sameHost } from "./profile-lock.js";
+export type { ClearLockDeps, LockOwner, LockVerdict } from "./profile-lock.js";
