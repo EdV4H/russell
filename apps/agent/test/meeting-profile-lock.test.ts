@@ -11,6 +11,7 @@
 
 import {
   clearStaleProfileLock,
+  looksLikeChrome,
   parseLockOwner,
   sameHost,
 } from "@edv4h/russell-plugin-meeting-browser";
@@ -53,25 +54,37 @@ test("同じ機械かどうかを、表記ゆれで取り違えない", () => {
 
 test("**持ち主が死んでいれば片付ける**", () => {
   const fs = fakeFs(`${HOST}-999`);
-  const verdict = clearStaleProfileLock("/p", { ...fs.deps, isAlive: () => false });
+  const verdict = clearStaleProfileLock("/p", {
+    ...fs.deps,
+    isAlive: () => false,
+    processName: () => undefined,
+  });
 
-  expect(verdict).toEqual({ action: "cleared", pid: 999 });
+  expect(verdict).toMatchObject({ action: "cleared", pid: 999 });
   // 消すのは Singleton 系だけ。**プロファイルの中身には触らない**
   expect(fs.removed.sort()).toEqual(["SingletonCookie", "SingletonLock", "SingletonSocket"]);
 });
 
 test("**生きているなら消さない。誰が持っているかを言う**", () => {
   const fs = fakeFs(`${HOST}-777`);
-  const verdict = clearStaleProfileLock("/p", { ...fs.deps, isAlive: () => true });
+  const verdict = clearStaleProfileLock("/p", {
+    ...fs.deps,
+    isAlive: () => true,
+    processName: () => "Google Chrome",
+  });
 
   // 消したら、動いている Chrome のデータを壊す
-  expect(verdict).toEqual({ action: "held", pid: 777 });
+  expect(verdict).toMatchObject({ action: "held", pid: 777 });
   expect(fs.removed).toEqual([]);
 });
 
 test("**別の機械が持っていたら触らない**（生死を確かめようがない）", () => {
   const fs = fakeFs("OTHER-MACHINE-123");
-  const verdict = clearStaleProfileLock("/p", { ...fs.deps, isAlive: () => false });
+  const verdict = clearStaleProfileLock("/p", {
+    ...fs.deps,
+    isAlive: () => false,
+    processName: () => undefined,
+  });
 
   expect(verdict.action).toBe("none");
   expect(fs.removed).toEqual([]);
@@ -79,7 +92,11 @@ test("**別の機械が持っていたら触らない**（生死を確かめよ�
 
 test("形が読めないロックも触らない", () => {
   const fs = fakeFs("なにか");
-  const verdict = clearStaleProfileLock("/p", { ...fs.deps, isAlive: () => false });
+  const verdict = clearStaleProfileLock("/p", {
+    ...fs.deps,
+    isAlive: () => false,
+    processName: () => undefined,
+  });
 
   expect(verdict.action).toBe("none");
   expect(fs.removed).toEqual([]);
@@ -87,8 +104,65 @@ test("形が読めないロックも触らない", () => {
 
 test("ロックが無ければ、何もしない（それが正常）", () => {
   const fs = fakeFs(undefined);
-  const verdict = clearStaleProfileLock("/p", { ...fs.deps, isAlive: () => false });
+  const verdict = clearStaleProfileLock("/p", {
+    ...fs.deps,
+    isAlive: () => false,
+    processName: () => undefined,
+  });
 
   expect(verdict.action).toBe("none");
+  expect(fs.removed).toEqual([]);
+});
+
+/**
+ * **pid が生きているだけでは足りない。**
+ *
+ * macOS は pid を使い回す。数時間前のロックに書かれた pid が、いまはまったく別の
+ * プロセスであることは普通にある。そこを見ないと「生きている」と判定し続けて、
+ * **再起動するまで永久に会議へ入れない**（実際そうなった）。
+ */
+
+test("Chrome かどうかを名前で見る", () => {
+  expect(looksLikeChrome("Google Chrome")).toBe(true);
+  expect(looksLikeChrome("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")).toBe(
+    true,
+  );
+  expect(looksLikeChrome("chromium")).toBe(true);
+  expect(looksLikeChrome("node")).toBe(false);
+});
+
+test("**pid が使い回されていたら、古いロックとして片付ける**", () => {
+  const fs = fakeFs(`${HOST}-60615`);
+  const verdict = clearStaleProfileLock("/p", {
+    ...fs.deps,
+    isAlive: () => true, // 生きてはいる
+    processName: () => "node", // が、Chrome ではない
+  });
+
+  expect(verdict.action).toBe("cleared");
+  expect(fs.removed).toContain("SingletonLock");
+});
+
+test("生きていて Chrome なら、やはり消さない（誰が持っているかを言う）", () => {
+  const fs = fakeFs(`${HOST}-60615`);
+  const verdict = clearStaleProfileLock("/p", {
+    ...fs.deps,
+    isAlive: () => true,
+    processName: () => "Google Chrome",
+  });
+
+  expect(verdict).toMatchObject({ action: "held", holder: "Google Chrome" });
+  expect(fs.removed).toEqual([]);
+});
+
+test("**正体が読めないときは触らない**（当てにいかない）", () => {
+  const fs = fakeFs(`${HOST}-60615`);
+  const verdict = clearStaleProfileLock("/p", {
+    ...fs.deps,
+    isAlive: () => true,
+    processName: () => undefined,
+  });
+
+  expect(verdict.action).toBe("held");
   expect(fs.removed).toEqual([]);
 });

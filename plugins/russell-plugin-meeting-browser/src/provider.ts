@@ -142,11 +142,15 @@ export function createBrowserMeetingProvider(
       // 生きているなら消さない——**誰が持っているか**を言って、判断は人に渡す。
       const lock = clearStaleProfileLock(profileDir);
       if (lock.action === "cleared") {
-        console.log(`[meeting-browser] 残っていたロックを片付けました（pid ${lock.pid} は不在）`);
+        console.log(
+          `[meeting-browser] 残っていたロックを片付けました（pid ${lock.pid}: ${lock.why}）`,
+        );
       } else if (lock.action === "held") {
         throw new Error(
-          `meeting-browser: プロファイルを別の Chrome が使っています（pid ${lock.pid}）。それを終了してください`,
+          `meeting-browser: プロファイルを別の Chrome が使っています（pid ${lock.pid}: ${lock.holder}）。それを終了してください`,
         );
+      } else {
+        console.log(`[meeting-browser] ロックの確認: ${lock.reason}`);
       }
 
       let context: BrowserContext;
