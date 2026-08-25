@@ -322,7 +322,8 @@ test("読めない会話があっても止まらず、読めなかった数を�
   // 0件が「無い」なのか「見られなかった」なのかは別物なので、必ず数える
   expect(result.skipped).toBe(1);
   // **理由も返す。** 数だけだと、直せるものかどうかが判断できない
-  expect(result.reasons).toEqual(["channel_not_found"]);
+  // **どの会話かも返す**（#121）。そこが主戦場のチャンネルかもしれない
+  expect(result.reasons).toEqual(["channel_not_found(C_BROKEN)"]);
 });
 
 test("読めなかった理由は、直せるものかどうかが分かる形で返る", async () => {
@@ -344,8 +345,12 @@ test("読めなかった理由は、直せるものかどうかが分かる形�
   );
 
   expect(result.skipped).toBe(3);
-  // 同じ理由は畳む（3件読めなくても、理由は2種類）
-  expect([...result.reasons].sort()).toEqual(["channel_not_found", "missing_scope"]);
+  // 会話ごとに残す。**同じ理由でも、どこが読めないかは別の情報**である
+  expect([...result.reasons].sort()).toEqual([
+    "channel_not_found(C_ALSO_GONE)",
+    "channel_not_found(C_GONE)",
+    "missing_scope(C_NO_SCOPE)",
+  ]);
 });
 
 test("知らない失敗は「不明」として残す（黙って落とさない）", async () => {
@@ -360,7 +365,7 @@ test("知らない失敗は「不明」として残す（黙って落とさな�
     }),
   );
 
-  expect(result.reasons).toEqual(["不明"]);
+  expect(result.reasons).toEqual(["不明(C_WEIRD)"]);
 });
 
 test("スレッドが1つ読めなくても、他のスレッドは見る", async () => {
@@ -626,4 +631,22 @@ test("前回が分からなければ、既定のまま動く（記録を持た�
   expect(agent.ctx.audit.recent().some((e) => e.action === "catchup.widened")).toBe(false);
 
   await agent.destroy();
+});
+
+test("**読めなかったのがどの会話かを言える**（#121）", async () => {
+  const result = await findPendingMessages(
+    fakeSlack({
+      async listConversations() {
+        return [{ id: "C_MAIN", isDm: false }];
+      },
+      async history() {
+        throw new Error("An API error occurred: channel_not_found");
+      },
+    }),
+  );
+
+  // 理由だけだと「毎回1件読めない」までしか分からず、**そこが主戦場のチャンネルでも気づけない**
+  expect(result.reasons[0]).toContain("C_MAIN");
+  // 本文は出さない（A1-5）。出すのは id と理由だけ
+  expect(result.reasons.join(" ")).not.toContain("やあ");
 });
