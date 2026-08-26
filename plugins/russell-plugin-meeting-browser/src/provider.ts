@@ -235,7 +235,8 @@ export function createBrowserMeetingProvider(
           await shutdown();
           throw new Error(`meeting-browser: ${JOIN_FAILURE[state]}`);
         }
-        await enableCaptions(page);
+        const captionState = await enableCaptions(page);
+        console.log(`[meeting-browser] 字幕: ${captionState}`);
         title = await meetingTitle(page);
       } catch (err) {
         await shutdown();
@@ -244,19 +245,29 @@ export function createBrowserMeetingProvider(
 
       const handlers: ((line: TranscriptLine) => void)[] = [];
       const captions = createCaptionState();
+      /** 枠が無いことを言ったか。**毎周期は騒がしい**ので一度だけ。 */
+      let warnedNoRegion = false;
       const timer = setInterval(() => {
         void (async () => {
           if (closed) return;
-          let visible: CaptionEntry[];
+          let seen: { region: boolean; entries: CaptionEntry[] };
           try {
-            visible = await readCaptions(page);
+            seen = await readCaptions(page);
           } catch {
             return; // 一時的に読めないことはある。**次の周期で拾い直す**
           }
-          if (debug && visible.length > 0) {
-            console.log(`[meeting-browser] 生の字幕: ${JSON.stringify(visible)}`);
+          // **枠が見つからないことを、黙って0件にしない。** 一度だけ言う（毎周期は騒がしい）
+          if (!seen.region && !warnedNoRegion) {
+            warnedNoRegion = true;
+            console.warn(
+              "[meeting-browser] 字幕の枠が見つかりません（字幕が出ていないか、探し方が違います）",
+            );
           }
-          for (const line of ingestCaptions(captions, visible, Date.now())) {
+          if (seen.region) warnedNoRegion = false;
+          if (debug && seen.entries.length > 0) {
+            console.log(`[meeting-browser] 生の字幕: ${JSON.stringify(seen.entries)}`);
+          }
+          for (const line of ingestCaptions(captions, seen.entries, Date.now())) {
             for (const h of handlers) h(line);
           }
         })();
@@ -315,21 +326,39 @@ async function admit(
   return last === "unknown" ? "unknown" : "waiting";
 }
 
+/** 字幕のボタンの呼び名。Meet は表記が揺れるので、いくつか試す。 */
+const CAPTION_BUTTONS = [
+  "字幕をオンにする",
+  "字幕を表示",
+  "Turn on captions",
+  "字幕",
+  "captions",
+] as const;
+
 /**
  * 字幕を出す。**自分の画面だけの設定**なので、他の参加者には何も起きない。
  *
  * 押せなくても投げない——字幕が既に出ていることもある。**入っているのに落とす方が悪い。**
+ * ただし**押せたかどうかは返す**。字幕が一件も来ないときに、
+ * 「誰も喋っていない」のか「そもそも字幕を出せていない」のかが分かれる。
  */
-async function enableCaptions(page: Page): Promise<void> {
-  for (const name of ["字幕をオンにする", "Turn on captions"]) {
-    const button = page.getByRole("button", { name });
-    if (await button.count().catch(() => 0)) {
-      await button
-        .first()
-        .click()
-        .catch(() => {});
-      return;
+async function enableCaptions(page: Page): Promise<string> {
+  for (const name of CAPTION_BUTTONS) {
+    const button = page.getByRole("button", { name, exact: false });
+    try {
+      if ((await button.count()) === 0) continue;
+      await button.first().click({ timeout: 3000 });
+      return `押した（${name}）`;
+    } catch {
+      // 別の呼び名を試す
     }
+  }
+  // ボタンが見つからない。**Meet のショートカット**で試す（`c` が字幕の切り替え）
+  try {
+    await page.keyboard.press("c");
+    return "ショートカット c を押した（ボタンが見つからなかった）";
+  } catch {
+    return "字幕を出せなかった";
   }
 }
 
@@ -358,18 +387,27 @@ async function meetingTitle(page: Page): Promise<string | undefined> {
   }
 }
 
-/** 画面に見えている字幕を読む。**取れなければ空**（読めないことを発言0件と混ぜない）。 */
-async function readCaptions(page: Page): Promise<CaptionEntry[]> {
+/**
+ * 画面に見えている字幕を読む。
+ *
+ * > [!IMPORTANT]
+ * > **「枠が無い」と「誰も喋っていない」を分ける。** 両方を空配列で返していたので、
+ * > 字幕が一件も来ないときに**どちらなのか分からなかった**（実際そうなった）。
+ * > 前者は直せる問題（字幕が出ていない・探し方が違う）で、後者は正常である。
+ */
+async function readCaptions(page: Page): Promise<{ region: boolean; entries: CaptionEntry[] }> {
   return await page.evaluate(() => {
-    const region = document.querySelector('[aria-label*="字幕"], [aria-label*="aptions"]');
-    if (!region) return [];
+    const region = document.querySelector(
+      '[aria-label*="字幕"], [aria-label*="aptions"], [jsname][class*="caption" i]',
+    );
+    if (!region) return { region: false, entries: [] };
     const out: { speaker: string; text: string }[] = [];
     for (const node of Array.from(region.querySelectorAll("div"))) {
       const speaker = node.querySelector("span")?.textContent?.trim() ?? "";
       const text = node.querySelector("div:last-child")?.textContent?.trim() ?? "";
       if (speaker && text) out.push({ speaker, text });
     }
-    return out;
+    return { region: true, entries: out };
   });
 }
 
