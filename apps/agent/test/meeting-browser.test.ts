@@ -9,6 +9,7 @@
 import {
   createBrowserMeetingProvider,
   launchFailureReason,
+  looksSignedOut,
   readJoinState,
   titleFromDocument,
 } from "@edv4h/russell-plugin-meeting-browser";
@@ -35,6 +36,10 @@ function fakeBrowser(bodyText: string) {
     async newPage() {
       return {
         async goto() {},
+        url: () => "https://meet.google.com/abc",
+        async title() {
+          return "Meet";
+        },
         async innerText() {
           return bodyText;
         },
@@ -204,4 +209,22 @@ test("**会議コードは名前ではない**（人に伝わらない）", () =
   expect(titleFromDocument("Meet – bmn-seom-nyu")).toBeUndefined();
   expect(titleFromDocument("Meet")).toBeUndefined();
   expect(titleFromDocument("")).toBeUndefined();
+});
+
+/**
+ * **押さないと入れない。**
+ *
+ * 初版は URL を開くだけで「入った／入れない」を判定していた。Meet は開いた時点では
+ * 準備画面で、`今すぐ参加` か `参加をリクエスト` を押して初めて中へ進む——
+ * 押していないのだから、入れないのは当たり前だった。しかも判定が即座に走るので、
+ * **Chrome が開いて一瞬で閉じ、人が承認する間もなかった**。
+ */
+
+test("**ログインしていないことを、招かれていないことと混ぜない**", () => {
+  // 直す場所がまるで違う（主催者に頼むのか、こちらでログインし直すのか）
+  expect(looksSignedOut("https://accounts.google.com/ServiceLogin", "")).toBe(true);
+  expect(looksSignedOut("https://meet.google.com/abc", "ログインしてください")).toBe(true);
+  expect(looksSignedOut("https://meet.google.com/abc", "Sign in to continue")).toBe(true);
+  // 会議の画面はログイン済み
+  expect(looksSignedOut("https://meet.google.com/abc", "会議を退出 字幕")).toBe(false);
 });

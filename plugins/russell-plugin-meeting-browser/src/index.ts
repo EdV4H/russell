@@ -1,6 +1,8 @@
 export {
   createBrowserMeetingProvider,
+  clickJoin,
   launchFailureReason,
+  looksSignedOut,
   readJoinState,
   titleFromDocument,
 } from "./provider.js";
