@@ -7,6 +7,7 @@
  */
 
 import {
+  changedTexts,
   createBrowserMeetingProvider,
   launchFailureReason,
   looksSignedOut,
@@ -236,4 +237,30 @@ test("**「別のアカウントでログイン」を、未ログインと読ま
     "あなたはこのビデオハングアウトに参加できません 別のアカウントでログイン ホーム画面に戻る";
   expect(looksSignedOut("https://meet.google.com/abc", cannotJoin)).toBe(false);
   expect(readJoinState(cannotJoin)).toBe("rejected");
+});
+
+/**
+ * 字幕の枠を**振る舞いで**探す。
+ *
+ * 属性で当てにいって3回外した（`aria-label` はボタン、`role="region"` はツールバー、
+ * `aria-live` は読み上げ用のお知らせ）。Meet の DOM はこちらの仕様ではないので、
+ * 名前で当てにいく限り外し続ける。**字幕は、人が喋るたびに変わる唯一の場所である。**
+ */
+
+test("**変わったところだけを返す**", () => {
+  const before = { "DIV#a#0": "こんにちは", "DIV#b#1": "16:31" };
+  const after = { "DIV#a#0": "こんにちは、始めましょう", "DIV#b#1": "16:31" };
+
+  const changes = changedTexts(before, after);
+  expect(changes).toHaveLength(1);
+  expect(changes[0]).toContain("始めましょう");
+});
+
+test("新しく現れたものも変化として拾う（字幕は増える）", () => {
+  expect(changedTexts({}, { "DIV#a#0": "はじめまして" })[0]).toContain("はじめまして");
+});
+
+test("何も変わらなければ、何も言わない", () => {
+  const same = { "DIV#a#0": "同じ" };
+  expect(changedTexts(same, same)).toEqual([]);
 });

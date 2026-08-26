@@ -252,7 +252,9 @@ export function createBrowserMeetingProvider(
       /** 枠が無いことを言ったか。**毎周期は騒がしい**ので一度だけ。 */
       let warnedNoRegion = false;
       /** DOM を出す残り回数。**数回で足りる**（毎周期出すとログが埋まる）。 */
-      let probesLeft = debug ? 5 : 0;
+      let probesLeft = debug ? 6 : 0;
+      /** 前回見えていた文字。**変わったところ**を見つけるための控え。 */
+      let previousTexts: Record<string, string> = {};
       const timer = setInterval(() => {
         void (async () => {
           if (closed) return;
@@ -276,9 +278,18 @@ export function createBrowserMeetingProvider(
           // **構造を先に見る。** 取れた／取れないに関わらず数回出す——
           // 「取れているが中身が違う」を、取れたことにして見逃さないため
           if (debug && probesLeft > 0) {
-            probesLeft--;
-            const dom = await probeCaptionDom(page).catch(() => "");
-            console.log(`[meeting-browser] 字幕まわりの DOM: ${dom || "（何も見つからない）"}`);
+            const now = await snapshotTexts(page).catch(() => ({}));
+            const changes = changedTexts(previousTexts, now).filter(
+              // 時計や状態のお知らせなど、喋らなくても変わるものを弾く
+              (c) => !/\d{1,2}:\d{2}|カメラはオフ|マイクはオフ|自動字幕起こし/.test(c),
+            );
+            previousTexts = now;
+            if (changes.length > 0) {
+              probesLeft--;
+              console.log(
+                `[meeting-browser] 変わったところ:\n  ${changes.slice(0, 8).join("\n  ")}`,
+              );
+            }
           }
           for (const line of ingestCaptions(captions, seen.entries, Date.now())) {
             for (const h of handlers) h(line);
@@ -437,35 +448,47 @@ async function readCaptions(page: Page): Promise<{ region: boolean; entries: Cap
 }
 
 /**
- * 字幕まわりの DOM を**そのまま**出す（`RUSSELL_MEET_DEBUG=1` のとき、数回だけ）。
+ * 字幕の枠を**振る舞いで**探す（`RUSSELL_MEET_DEBUG=1` のとき）。
  *
  * > [!IMPORTANT]
- * > **三度目の当て推量をしない。** ここまで DOM の形を想像で書いて2回外している
- * > （枠の探し方、ボタンとの取り違え）。実物を見ずに直すと、また
- * > 「動いているのに間違っている」を作る。**構造を出させてから直す。**
+ * > **属性で当てにいくのは3回失敗した。** `aria-label` はボタンに当たり、`role="region"` は
+ * > ツールバーに当たり、`aria-live` は読み上げ用のお知らせ（「カメラはオフになっています」）
+ * > に当たった。Meet の DOM はこちらの仕様ではないので、名前で当てにいく限り外し続ける。
+ * >
+ * > **字幕は、人が喋るたびに変わる唯一の場所である。** だから「変わったところ」を探す。
+ * > これは名前に依存しないので、画面の作りが変わっても効く。
  */
-async function probeCaptionDom(page: Page): Promise<string> {
+async function snapshotTexts(page: Page): Promise<Record<string, string>> {
   return await page.evaluate(() => {
-    const found: string[] = [];
-    const selectors = ["[aria-live]", '[role="region"]', '[aria-label*="字幕"]'];
-    for (const sel of selectors) {
-      const nodes = Array.from(document.querySelectorAll(sel));
-      for (const el of nodes.slice(0, 4)) {
-        const text = (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 100);
-        if (text === "") continue;
-        // **構造も出す。** テキストだけでは、どこを掴めばよいか決められない
-        const attrs = Array.from(el.attributes)
-          .filter((a) => ["aria-live", "aria-label", "role", "jsname", "class"].includes(a.name))
-          .map((a) => `${a.name}=${a.value.slice(0, 40)}`)
-          .join(" ");
-        const shape = el.querySelector("span")
-          ? `span=${el.querySelector("span")?.textContent?.trim().slice(0, 24)}`
-          : "span無し";
-        found.push(`${sel}<${el.tagName} ${attrs}> ${shape} :: ${text}`);
-      }
+    const out: Record<string, string> = {};
+    let index = 0;
+    for (const el of Array.from(document.querySelectorAll("div,span,p"))) {
+      // 子を持たない（＝実際に文字を持つ）ところだけを見る。親は子の変化を写すだけ
+      if (el.querySelector("div,span,p")) continue;
+      const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+      if (text.length < 2 || text.length > 300) continue;
+      const attrs = ["jsname", "class", "aria-label"]
+        .map((n) => el.getAttribute(n))
+        .filter(Boolean)
+        .join("|")
+        .slice(0, 60);
+      out[`${el.tagName}#${attrs || "無属性"}#${index++}`] = text;
     }
-    return found.join("\n  ").slice(0, 2000);
+    return out;
   });
+}
+
+/** 前回から**変わったところ**だけを返す。常に変わるもの（時計など）は呼び出し側で弾く。 */
+export function changedTexts(
+  before: Record<string, string>,
+  after: Record<string, string>,
+): string[] {
+  const changes: string[] = [];
+  for (const [key, text] of Object.entries(after)) {
+    if (before[key] === text) continue;
+    changes.push(`${key} :: ${text.slice(0, 120)}`);
+  }
+  return changes;
 }
 
 export type { Browser, BrowserContext, Page };
