@@ -36,7 +36,15 @@ import { clearStaleProfileLock } from "./profile-lock.js";
 export interface BrowserMeetingOptions {
   /** ログイン済みのプロファイル。**人が一度作る**（無ければ支給されない）。 */
   profileDir?: string;
-  /** 画面を出すか。既定は出す——**headless は Meet に弾かれることがある**。 */
+  /**
+   * 画面を出すか。既定は出す。`RUSSELL_MEET_HEADLESS=1` で隠せる。
+   *
+   * **既定を「出す」にしているのは、確かめていないからである。** headless は Meet に
+   * 弾かれることがある、という話は聞くが、こちらで試してはいない。ログインはプロファイルに
+   * 残っているので、隠しても足りないのは「入って字幕を読む」だけのはず——**試せば分かる**。
+   *
+   * 隠して壊れたときは、画面の状態も DOM もログに出るので原因は追える。
+   */
   headless?: boolean;
   /** 字幕を見に行く間隔。 */
   pollMs?: number;
@@ -70,6 +78,17 @@ export function launchFailureReason(detail: string): string {
     return "Chrome が見つかりません（playwright-core は手元の Chrome を使います）";
   }
   return detail;
+}
+
+/**
+ * 画面を隠すか。**既定は出す**（確かめていないので安全側）。
+ *
+ * `1` / `true` のときだけ隠す。打ち間違いを「隠す」に倒さない——
+ * 隠れて動いているのに気づかない方が、余計なウィンドウが出るより困る。
+ */
+export function headlessFromEnv(value: string | undefined): boolean {
+  const raw = (value ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true";
 }
 
 /** 参加の状態。**待っていることを、入ったことにしない。** */
@@ -166,7 +185,14 @@ async function launchChrome(options: {
     // 会議に入るのでマイクとカメラを聞かれる。**どちらも渡さない**——
     // 聞くだけの参加なので、権限そのものを与えない方が事故が少ない
     permissions: [],
-    args: ["--use-fake-ui-for-media-stream", "--mute-audio", "--lang=ja"],
+    args: [
+      "--use-fake-ui-for-media-stream",
+      // **偽のカメラとマイクを持たせる。** 画面を隠すと、実デバイスが無い環境で
+      // 会議に入れないことがある（聞くだけなので中身は要らない）
+      "--use-fake-device-for-media-stream",
+      "--mute-audio",
+      "--lang=ja",
+    ],
   });
 }
 
@@ -180,7 +206,7 @@ export function createBrowserMeetingProvider(
     );
     return undefined;
   }
-  const headless = options.headless ?? false;
+  const headless = options.headless ?? headlessFromEnv(process.env.RUSSELL_MEET_HEADLESS);
   const pollMs = options.pollMs ?? DEFAULT_POLL_MS;
   const admitTimeoutMs = options.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS;
   const launch = options.launch ?? launchChrome;

@@ -2,6 +2,7 @@ export {
   createBrowserMeetingProvider,
   changedTexts,
   clickJoin,
+  headlessFromEnv,
   launchFailureReason,
   looksSignedOut,
   readJoinState,
