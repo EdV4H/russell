@@ -252,7 +252,7 @@ export function createBrowserMeetingProvider(
       /** 枠が無いことを言ったか。**毎周期は騒がしい**ので一度だけ。 */
       let warnedNoRegion = false;
       /** DOM を出す残り回数。**数回で足りる**（毎周期出すとログが埋まる）。 */
-      let probesLeft = debug ? 3 : 0;
+      let probesLeft = debug ? 5 : 0;
       const timer = setInterval(() => {
         void (async () => {
           if (closed) return;
@@ -273,8 +273,9 @@ export function createBrowserMeetingProvider(
           if (debug && seen.entries.length > 0) {
             console.log(`[meeting-browser] 生の字幕: ${JSON.stringify(seen.entries)}`);
           }
-          // **一件も取れないなら、DOM をそのまま出す。** 当て推量で直さないため
-          if (debug && seen.entries.length === 0 && probesLeft > 0) {
+          // **構造を先に見る。** 取れた／取れないに関わらず数回出す——
+          // 「取れているが中身が違う」を、取れたことにして見逃さないため
+          if (debug && probesLeft > 0) {
             probesLeft--;
             const dom = await probeCaptionDom(page).catch(() => "");
             console.log(`[meeting-browser] 字幕まわりの DOM: ${dom || "（何も見つからない）"}`);
@@ -412,11 +413,18 @@ async function readCaptions(page: Page): Promise<{ region: boolean; entries: Cap
     // **ボタンを枠と間違えない。** 字幕の切り替えボタン自身の aria-label に「字幕」が入る
     // （`字幕をオンにする（C キーまたは Shift+C キー）`）ので、素朴に aria-label で
     // 引くと**ボタンが枠として当たり**、「枠はある・中身は空」に見える（実際そうなった）。
+    // **`aria-live` を軸にする。** 字幕は読み上げ用に随時更新されるので、Meet は
+    // そこへ `aria-live` を付ける。`role="region"` で「文字がある最初の枠」を選ぶ形は
+    // **ツールバーや参加者パネルを掴んだ**（`ユーザー2` `挙手` を発言として拾った）。
     const candidates = Array.from(
-      document.querySelectorAll('[aria-label*="字幕"], [aria-label*="aptions"], [role="region"]'),
+      document.querySelectorAll('[aria-live="polite"], [aria-live="assertive"]'),
     ).filter((el) => !el.closest("button") && el.tagName !== "BUTTON");
-    // 中に文字がある枠だけを候補にする（ボタンや空の器を弾く）
-    const region = candidates.find((el) => (el.textContent ?? "").trim().length > 0);
+    // 画面の部品を弾く。**ボタンの文字だけの枠は字幕ではない**
+    const noise = /^(挙手|ユーザー\d*|通話から退出|全員とチャット|会議ツール)$/;
+    const region = candidates.find((el) => {
+      const text = (el.textContent ?? "").trim();
+      return text.length > 0 && !noise.test(text);
+    });
     if (!region) return { region: false, entries: [] };
     const out: { speaker: string; text: string }[] = [];
     for (const node of Array.from(region.querySelectorAll("div"))) {
@@ -439,23 +447,24 @@ async function readCaptions(page: Page): Promise<{ region: boolean; entries: Cap
 async function probeCaptionDom(page: Page): Promise<string> {
   return await page.evaluate(() => {
     const found: string[] = [];
-    const selectors = [
-      '[aria-label*="字幕"]',
-      '[aria-label*="aptions"]',
-      '[role="region"]',
-      "[data-use-tweened-animation]",
-      '[jsname="dsyhDe"]',
-      '[jsname="tgaKEf"]',
-    ];
+    const selectors = ["[aria-live]", '[role="region"]', '[aria-label*="字幕"]'];
     for (const sel of selectors) {
       const nodes = Array.from(document.querySelectorAll(sel));
-      for (const el of nodes.slice(0, 3)) {
-        const text = (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+      for (const el of nodes.slice(0, 4)) {
+        const text = (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 100);
         if (text === "") continue;
-        found.push(`${sel}[${el.tagName}] ${text}`);
+        // **構造も出す。** テキストだけでは、どこを掴めばよいか決められない
+        const attrs = Array.from(el.attributes)
+          .filter((a) => ["aria-live", "aria-label", "role", "jsname", "class"].includes(a.name))
+          .map((a) => `${a.name}=${a.value.slice(0, 40)}`)
+          .join(" ");
+        const shape = el.querySelector("span")
+          ? `span=${el.querySelector("span")?.textContent?.trim().slice(0, 24)}`
+          : "span無し";
+        found.push(`${sel}<${el.tagName} ${attrs}> ${shape} :: ${text}`);
       }
     }
-    return found.join(" | ").slice(0, 1200);
+    return found.join("\n  ").slice(0, 2000);
   });
 }
 
