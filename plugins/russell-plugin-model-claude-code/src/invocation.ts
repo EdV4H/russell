@@ -158,9 +158,19 @@ export function readResult(stdout: string): string {
   }
 
   if (ranServerTool || unexplainedTurns) {
+    // **何を見てそう言ったのかを残す。** 本文は入れない（A1-5）——数と名前だけで、
+    // 「本当にツールが動いたのか」「ターンが増えただけなのか」を後から判断できる。
+    //
+    // これが無いと、毎回1通目で中止しているのに**原因を追えない**（実際そうなった）。
+    const evidence = [
+      `num_turns=${parsed.num_turns ?? "?"}`,
+      `denials=${denied.length}`,
+      `web_search=${server?.web_search_requests ?? 0}`,
+      `web_fetch=${server?.web_fetch_requests ?? 0}`,
+      `subtype=${parsed.subtype ?? "?"}`,
+    ].join(" ");
     throw new Error(
-      "model-claude-code: 隔離が破れています（ツールが動いた形跡があります）。" +
-        "Policy Gate の外で副作用が起きうるため中止しました。CLI の設定を確認してください。",
+      `model-claude-code: 隔離が破れています（ツールが動いた形跡があります）。Policy Gate の外で副作用が起きうるため中止しました（${evidence}）。CLI の設定を確認してください。`,
     );
   }
   const text = parsed.result;

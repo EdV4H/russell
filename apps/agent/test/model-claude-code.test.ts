@@ -121,3 +121,25 @@ test("本番では使えない（キーを使う経路へ倒す）", async () =>
     process.env.NODE_ENV = original ?? "test";
   }
 });
+
+/**
+ * 中止するときは、**何を見てそう言ったのか**を残す。
+ *
+ * これが無くて、毎回1通目で中止しているのに原因を追えなかった。
+ * 「隔離が破れています」とだけ言われても、本当にツールが動いたのか、
+ * ターンが増えただけなのかが分からない。
+ */
+
+test("**中止の理由に、見た数を添える**（本文は入れない）", () => {
+  try {
+    readResult(ok({ num_turns: 4 }));
+    throw new Error("throw されるはず");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    expect(message).toContain("num_turns=4");
+    expect(message).toContain("denials=0");
+    expect(message).toContain("web_search=0");
+    // 本文は載せない（A1-5）
+    expect(message).not.toContain("こんにちは");
+  }
+});
