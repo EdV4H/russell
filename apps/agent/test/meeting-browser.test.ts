@@ -9,6 +9,7 @@
 import {
   changedTexts,
   createBrowserMeetingProvider,
+  headlessFromEnv,
   launchFailureReason,
   looksSignedOut,
   readJoinState,
@@ -263,4 +264,18 @@ test("新しく現れたものも変化として拾う（字幕は増える）",
 test("何も変わらなければ、何も言わない", () => {
   const same = { "DIV#a#0": "同じ" };
   expect(changedTexts(same, same)).toEqual([]);
+});
+
+/**
+ * 画面を隠すかどうか。**既定は出す**（headless で通るかを確かめていないため）。
+ */
+
+test("**打ち間違いを「隠す」に倒さない**", () => {
+  expect(headlessFromEnv("1")).toBe(true);
+  expect(headlessFromEnv("true")).toBe(true);
+  // 隠れて動いているのに気づかない方が、余計なウィンドウが出るより困る
+  expect(headlessFromEnv("yes")).toBe(false);
+  expect(headlessFromEnv("0")).toBe(false);
+  expect(headlessFromEnv(undefined)).toBe(false);
+  expect(headlessFromEnv("")).toBe(false);
 });

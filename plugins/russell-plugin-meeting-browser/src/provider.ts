@@ -36,7 +36,15 @@ import { clearStaleProfileLock } from "./profile-lock.js";
 export interface BrowserMeetingOptions {
   /** ログイン済みのプロファイル。**人が一度作る**（無ければ支給されない）。 */
   profileDir?: string;
-  /** 画面を出すか。既定は出す——**headless は Meet に弾かれることがある**。 */
+  /**
+   * 画面を出すか。既定は出す。`RUSSELL_MEET_HEADLESS=1` で隠せる。
+   *
+   * **既定を「出す」にしているのは、確かめていないからである。** headless は Meet に
+   * 弾かれることがある、という話は聞くが、こちらで試してはいない。ログインはプロファイルに
+   * 残っているので、隠しても足りないのは「入って字幕を読む」だけのはず——**試せば分かる**。
+   *
+   * 隠して壊れたときは、画面の状態も DOM もログに出るので原因は追える。
+   */
   headless?: boolean;
   /** 字幕を見に行く間隔。 */
   pollMs?: number;
@@ -70,6 +78,17 @@ export function launchFailureReason(detail: string): string {
     return "Chrome が見つかりません（playwright-core は手元の Chrome を使います）";
   }
   return detail;
+}
+
+/**
+ * 画面を隠すか。**既定は出す**（確かめていないので安全側）。
+ *
+ * `1` / `true` のときだけ隠す。打ち間違いを「隠す」に倒さない——
+ * 隠れて動いているのに気づかない方が、余計なウィンドウが出るより困る。
+ */
+export function headlessFromEnv(value: string | undefined): boolean {
+  const raw = (value ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true";
 }
 
 /** 参加の状態。**待っていることを、入ったことにしない。** */
@@ -166,7 +185,14 @@ async function launchChrome(options: {
     // 会議に入るのでマイクとカメラを聞かれる。**どちらも渡さない**——
     // 聞くだけの参加なので、権限そのものを与えない方が事故が少ない
     permissions: [],
-    args: ["--use-fake-ui-for-media-stream", "--mute-audio", "--lang=ja"],
+    args: [
+      "--use-fake-ui-for-media-stream",
+      // **偽のカメラとマイクを持たせる。** 画面を隠すと、実デバイスが無い環境で
+      // 会議に入れないことがある（聞くだけなので中身は要らない）
+      "--use-fake-device-for-media-stream",
+      "--mute-audio",
+      "--lang=ja",
+    ],
   });
 }
 
@@ -180,7 +206,7 @@ export function createBrowserMeetingProvider(
     );
     return undefined;
   }
-  const headless = options.headless ?? false;
+  const headless = options.headless ?? headlessFromEnv(process.env.RUSSELL_MEET_HEADLESS);
   const pollMs = options.pollMs ?? DEFAULT_POLL_MS;
   const admitTimeoutMs = options.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS;
   const launch = options.launch ?? launchChrome;
@@ -421,27 +447,46 @@ async function meetingTitle(page: Page): Promise<string | undefined> {
  */
 async function readCaptions(page: Page): Promise<{ region: boolean; entries: CaptionEntry[] }> {
   return await page.evaluate(() => {
-    // **ボタンを枠と間違えない。** 字幕の切り替えボタン自身の aria-label に「字幕」が入る
-    // （`字幕をオンにする（C キーまたは Shift+C キー）`）ので、素朴に aria-label で
-    // 引くと**ボタンが枠として当たり**、「枠はある・中身は空」に見える（実際そうなった）。
-    // **`aria-live` を軸にする。** 字幕は読み上げ用に随時更新されるので、Meet は
-    // そこへ `aria-live` を付ける。`role="region"` で「文字がある最初の枠」を選ぶ形は
-    // **ツールバーや参加者パネルを掴んだ**（`ユーザー2` `挙手` を発言として拾った）。
-    const candidates = Array.from(
-      document.querySelectorAll('[aria-live="polite"], [aria-live="assertive"]'),
-    ).filter((el) => !el.closest("button") && el.tagName !== "BUTTON");
-    // 画面の部品を弾く。**ボタンの文字だけの枠は字幕ではない**
-    const noise = /^(挙手|ユーザー\d*|通話から退出|全員とチャット|会議ツール)$/;
-    const region = candidates.find((el) => {
-      const text = (el.textContent ?? "").trim();
-      return text.length > 0 && !noise.test(text);
-    });
-    if (!region) return { region: false, entries: [] };
+    // **実物の構造**（2026-08-26 に確認）:
+    //   SPAN.NWpY1d        … 話者の名前
+    //   DIV.ygicle.VbkSUe  … 本文（喋るあいだ伸びていく／途中で言い直される）
+    //
+    // class 名は難読化されていて**いつか変わる**。だから名前は手がかりに留め、
+    // 見つからなければ**形**で探す（名前の span と、それより長い本文の div が
+    // 同じ入れ物にいる）。壊れたときに黙って0件にならないことの方が大事である。
+    const byName = Array.from(document.querySelectorAll('div[class*="ygicle"]'));
+    const byShape = byName.length > 0 ? [] : findByShape();
+
+    function findByShape(): Element[] {
+      const found: Element[] = [];
+      for (const el of Array.from(document.querySelectorAll("div"))) {
+        if (el.querySelector("div")) continue; // 葉だけを見る
+        const text = (el.textContent ?? "").trim();
+        if (text.length < 2 || text.length > 400) continue;
+        const holder = el.parentElement?.parentElement;
+        const name = holder?.querySelector("span")?.textContent?.trim() ?? "";
+        // 名前は短く、本文はそれより長い。ボタンの並びはここで落ちる
+        if (name.length >= 1 && name.length <= 40 && text.length > name.length) found.push(el);
+      }
+      return found;
+    }
+
+    const nodes = byName.length > 0 ? byName : byShape;
+    if (nodes.length === 0) return { region: false, entries: [] };
+
     const out: { speaker: string; text: string }[] = [];
-    for (const node of Array.from(region.querySelectorAll("div"))) {
-      const speaker = node.querySelector("span")?.textContent?.trim() ?? "";
-      const text = node.querySelector("div:last-child")?.textContent?.trim() ?? "";
-      if (speaker && text) out.push({ speaker, text });
+    for (const node of nodes) {
+      const text = (node.textContent ?? "").replace(/\s+/g, " ").trim();
+      if (text === "") continue;
+      // 名前は同じ入れ物の中にある。近いところから順に探す
+      let speaker = "";
+      let holder: Element | null = node.parentElement;
+      for (let i = 0; i < 3 && holder && speaker === ""; i++) {
+        speaker = holder.querySelector("span")?.textContent?.trim() ?? "";
+        holder = holder.parentElement;
+      }
+      if (speaker === "" || speaker === text) continue;
+      out.push({ speaker, text });
     }
     return { region: true, entries: out };
   });
