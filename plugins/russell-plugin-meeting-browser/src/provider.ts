@@ -251,6 +251,8 @@ export function createBrowserMeetingProvider(
       const captions = createCaptionState();
       /** 枠が無いことを言ったか。**毎周期は騒がしい**ので一度だけ。 */
       let warnedNoRegion = false;
+      /** DOM を出す残り回数。**数回で足りる**（毎周期出すとログが埋まる）。 */
+      let probesLeft = debug ? 3 : 0;
       const timer = setInterval(() => {
         void (async () => {
           if (closed) return;
@@ -270,6 +272,12 @@ export function createBrowserMeetingProvider(
           if (seen.region) warnedNoRegion = false;
           if (debug && seen.entries.length > 0) {
             console.log(`[meeting-browser] 生の字幕: ${JSON.stringify(seen.entries)}`);
+          }
+          // **一件も取れないなら、DOM をそのまま出す。** 当て推量で直さないため
+          if (debug && seen.entries.length === 0 && probesLeft > 0) {
+            probesLeft--;
+            const dom = await probeCaptionDom(page).catch(() => "");
+            console.log(`[meeting-browser] 字幕まわりの DOM: ${dom || "（何も見つからない）"}`);
           }
           for (const line of ingestCaptions(captions, seen.entries, Date.now())) {
             for (const h of handlers) h(line);
@@ -401,9 +409,14 @@ async function meetingTitle(page: Page): Promise<string | undefined> {
  */
 async function readCaptions(page: Page): Promise<{ region: boolean; entries: CaptionEntry[] }> {
   return await page.evaluate(() => {
-    const region = document.querySelector(
-      '[aria-label*="字幕"], [aria-label*="aptions"], [jsname][class*="caption" i]',
-    );
+    // **ボタンを枠と間違えない。** 字幕の切り替えボタン自身の aria-label に「字幕」が入る
+    // （`字幕をオンにする（C キーまたは Shift+C キー）`）ので、素朴に aria-label で
+    // 引くと**ボタンが枠として当たり**、「枠はある・中身は空」に見える（実際そうなった）。
+    const candidates = Array.from(
+      document.querySelectorAll('[aria-label*="字幕"], [aria-label*="aptions"], [role="region"]'),
+    ).filter((el) => !el.closest("button") && el.tagName !== "BUTTON");
+    // 中に文字がある枠だけを候補にする（ボタンや空の器を弾く）
+    const region = candidates.find((el) => (el.textContent ?? "").trim().length > 0);
     if (!region) return { region: false, entries: [] };
     const out: { speaker: string; text: string }[] = [];
     for (const node of Array.from(region.querySelectorAll("div"))) {
@@ -412,6 +425,37 @@ async function readCaptions(page: Page): Promise<{ region: boolean; entries: Cap
       if (speaker && text) out.push({ speaker, text });
     }
     return { region: true, entries: out };
+  });
+}
+
+/**
+ * 字幕まわりの DOM を**そのまま**出す（`RUSSELL_MEET_DEBUG=1` のとき、数回だけ）。
+ *
+ * > [!IMPORTANT]
+ * > **三度目の当て推量をしない。** ここまで DOM の形を想像で書いて2回外している
+ * > （枠の探し方、ボタンとの取り違え）。実物を見ずに直すと、また
+ * > 「動いているのに間違っている」を作る。**構造を出させてから直す。**
+ */
+async function probeCaptionDom(page: Page): Promise<string> {
+  return await page.evaluate(() => {
+    const found: string[] = [];
+    const selectors = [
+      '[aria-label*="字幕"]',
+      '[aria-label*="aptions"]',
+      '[role="region"]',
+      "[data-use-tweened-animation]",
+      '[jsname="dsyhDe"]',
+      '[jsname="tgaKEf"]',
+    ];
+    for (const sel of selectors) {
+      const nodes = Array.from(document.querySelectorAll(sel));
+      for (const el of nodes.slice(0, 3)) {
+        const text = (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+        if (text === "") continue;
+        found.push(`${sel}[${el.tagName}] ${text}`);
+      }
+    }
+    return found.join(" | ").slice(0, 1200);
   });
 }
 
