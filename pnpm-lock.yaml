@@ -80,6 +80,9 @@ importers:
       '@edv4h/russell-shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      playwright-core:
+        specifier: ^1.49.0
+        version: 1.62.1
     devDependencies:
       '@edv4h/russell-tsconfig':
         specifier: workspace:*
