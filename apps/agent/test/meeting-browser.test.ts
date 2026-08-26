@@ -228,3 +228,12 @@ test("**ログインしていないことを、招かれていないことと混
   // 会議の画面はログイン済み
   expect(looksSignedOut("https://meet.google.com/abc", "会議を退出 字幕")).toBe(false);
 });
+
+test("**「別のアカウントでログイン」を、未ログインと読まない**", () => {
+  // 「参加できません」の画面には、このリンクが普通にある。本文の「ログイン」で
+  // 判断すると、**招かれていないだけの画面を未ログインと読む**（実際にそう誤判定した）
+  const cannotJoin =
+    "あなたはこのビデオハングアウトに参加できません 別のアカウントでログイン ホーム画面に戻る";
+  expect(looksSignedOut("https://meet.google.com/abc", cannotJoin)).toBe(false);
+  expect(readJoinState(cannotJoin)).toBe("rejected");
+});

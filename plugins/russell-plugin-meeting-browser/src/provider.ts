@@ -119,10 +119,21 @@ export async function clickJoin(page: Page): Promise<boolean> {
   return false;
 }
 
-/** ログインしていない兆候。**「招かれていない」と取り違えると、直す場所を間違える。** */
+/**
+ * ログインしていない兆候。**「招かれていない」と取り違えると、直す場所を間違える。**
+ *
+ * > [!IMPORTANT]
+ * > **本文の「ログイン」で判断しない。** 初版はそうしていたが、Meet の「参加できません」
+ * > 画面には「**別のアカウントでログイン**」のリンクが普通にある。つまり
+ * > **招かれていないだけの画面を、未ログインと読む**。実際にそう誤判定した。
+ * >
+ * > 当てになるのは**行き先が変わったこと**（Google のログイン画面へ飛ばされる）で、
+ * > これは他の意味を持たない。文言で見るのは、それ以外に読みようのないものだけ。
+ */
 export function looksSignedOut(url: string, text: string): boolean {
   if (url.includes("accounts.google.com") || url.includes("ServiceLogin")) return true;
-  return /ログイン|sign in to continue|アカウントを選択/i.test(text);
+  // 「ログインしてください」だけを見る。「〜でログイン」（別アカウントへの誘導）は含まない
+  return /ログインしてください|sign in to continue/i.test(text);
 }
 
 export function readJoinState(text: string): JoinState {
@@ -283,12 +294,11 @@ async function admit(
   let clicked = false;
   while (Date.now() < deadline) {
     const text = await page.innerText("body").catch(() => "");
-    // **ログインしていないなら、そう言う。** 「招かれていない」と取り違えると、
-    // 主催者に許可を頼みにいくことになる——直す場所がまるで違う
-    if (looksSignedOut(page.url(), text)) return "signed_out";
     // **押さないと入れない。** 準備画面のうちに押す（一度だけ）
     if (!clicked) clicked = await clickJoin(page);
-    const state = readJoinState(text);
+    // **ログインしていないなら、そう言う。** 「招かれていない」と取り違えると、
+    // 主催者に許可を頼みにいくことになる——直す場所がまるで違う
+    const state = looksSignedOut(page.url(), text) ? "signed_out" : readJoinState(text);
     // **判断の材料を捨てない。** 文言で状態を当てているので、外れたときに
     // 何を見てそう言ったのかが分からないと直せない（ここで何度も嵌っている）
     if (debug && state !== last) {
@@ -297,7 +307,9 @@ async function admit(
       );
     }
     last = state;
-    if (last === "joined" || last === "rejected") return last;
+    // **記録してから抜ける。** 初版は signed_out をここより手前で返していたので、
+    // 何を見てそう言ったのかが一切残らなかった（この失敗をここで繰り返した）
+    if (last === "joined" || last === "rejected" || last === "signed_out") return last;
     await page.waitForTimeout(pollMs);
   }
   return last === "unknown" ? "unknown" : "waiting";
