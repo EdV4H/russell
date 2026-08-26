@@ -1,5 +1,6 @@
 export {
   createBrowserMeetingProvider,
+  changedTexts,
   clickJoin,
   launchFailureReason,
   looksSignedOut,
