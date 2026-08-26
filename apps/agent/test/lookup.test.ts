@@ -517,3 +517,66 @@ test("**会議の道具は、使い分けが説明から分かる**", () => {
   // 終わった会議は Drive の話で、これとは別（そこも取り違えやすい）
   expect(transcript).toContain("drive.search");
 });
+
+/**
+ * **止める方向の道具は、必ず見せる。**
+ *
+ * `meeting.leave` は承認を要らなくするため `internal_write` にしてあった。その結果
+ * 一覧に載らず、**個体は退出できることを知らないままだった**——「出たいのに出られない」を
+ * 避けるための分類が、そもそも出られない状態を作っていた。
+ */
+
+test("**装備が「見せたい」と言った道具は、効果分類に関わらず出す**", () => {
+  const catalog = lookupCatalog(
+    [
+      {
+        id: "meeting",
+        mcpServer: {},
+        scopes: [],
+        dangerLevel: 2,
+        tools: () => [
+          { name: "meeting.leave", effect: "internal_write" as const, offer: true },
+          { name: "note.write", effect: "internal_write" as const },
+        ],
+      },
+    ],
+    new Map([
+      [
+        "meeting.leave",
+        { name: "meeting.leave", effect: "internal_write" as const, run: async () => ({}) },
+      ],
+      [
+        "note.write",
+        { name: "note.write", effect: "internal_write" as const, run: async () => ({}) },
+      ],
+    ]),
+  );
+
+  // 立てたものだけが出る。内部書き込み全部が出るわけではない
+  expect(catalog.map((t) => t.name)).toEqual(["meeting.leave"]);
+  // **承認は要らない道具なので、そう伝える。** ここが嘘だと、退出のたびに
+  // 「承認をお願いします」と言い出す（Policy Gate は internal_write を素通しする）
+  expect(catalog[0]?.needsApproval).toBe(false);
+});
+
+test("**取り消せないものは、立てても出さない**（例外を作らない）", () => {
+  const catalog = lookupCatalog(
+    [
+      {
+        id: "danger",
+        mcpServer: {},
+        scopes: [],
+        dangerLevel: 3,
+        tools: () => [{ name: "db.drop", effect: "irreversible_write" as const, offer: true }],
+      },
+    ],
+    new Map([
+      [
+        "db.drop",
+        { name: "db.drop", effect: "irreversible_write" as const, run: async () => ({}) },
+      ],
+    ]),
+  );
+
+  expect(catalog).toEqual([]);
+});

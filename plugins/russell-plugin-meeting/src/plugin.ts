@@ -63,7 +63,9 @@ export function createMeetingPlugin(options: MeetingOptions = {}): RussellPlugin
         dangerLevel: 2,
         tools: () => [
           { name: "meeting.join", effect: "external_send" },
-          { name: "meeting.leave", effect: "internal_write" },
+          // **出る道具は必ず見せる。** 承認を要らなくするために internal_write にしてあるが、
+          // そのままだと一覧に載らず、個体は退出できることを知らないままになる（実際そうなった）
+          { name: "meeting.leave", effect: "internal_write", offer: true },
           { name: "meeting.transcript", effect: "read" },
         ],
       });
