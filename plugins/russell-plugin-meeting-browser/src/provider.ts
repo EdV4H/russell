@@ -159,10 +159,14 @@ async function launchChrome(options: {
   return await chromium.launchPersistentContext(options.profileDir, {
     channel: "chrome",
     headless: options.headless,
+    // **日本語で聞かせる。** 字幕の言語は Meet 側の設定だが、既定はブラウザの言語に
+    // 引きずられる。英語のまま日本語を聞かせると、**英語として書き起こされる**
+    // （実際そうなった）。ここを揃えておくと、少なくとも初期値が日本語側に寄る。
+    locale: "ja-JP",
     // 会議に入るのでマイクとカメラを聞かれる。**どちらも渡さない**——
     // 聞くだけの参加なので、権限そのものを与えない方が事故が少ない
     permissions: [],
-    args: ["--use-fake-ui-for-media-stream", "--mute-audio"],
+    args: ["--use-fake-ui-for-media-stream", "--mute-audio", "--lang=ja"],
   });
 }
 
