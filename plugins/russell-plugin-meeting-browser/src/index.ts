@@ -25,3 +25,10 @@ export {
   sameHost,
 } from "./profile-lock.js";
 export type { ClearLockDeps, LockOwner, LockVerdict } from "./profile-lock.js";
+export {
+  UNKNOWN_SPEAKER,
+  attributeSpeakers,
+  overlapMs,
+  toSpeakingSpans,
+} from "./speakers.js";
+export type { SpeakingSpan, SpeechSegment } from "./speakers.js";
