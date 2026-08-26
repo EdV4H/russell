@@ -73,7 +73,7 @@ export function launchFailureReason(detail: string): string {
 }
 
 /** 参加の状態。**待っていることを、入ったことにしない。** */
-export type JoinState = "joined" | "waiting" | "rejected" | "unknown";
+export type JoinState = "joined" | "waiting" | "rejected" | "signed_out" | "unknown";
 
 /** 入れなかったときに人がやること。**状態ごとに違う**ので、同じ文言にしない。 */
 const JOIN_FAILURE: Record<JoinState, string> = {
@@ -82,12 +82,49 @@ const JOIN_FAILURE: Record<JoinState, string> = {
   rejected: "参加を断られました（会議に招かれていないか、外部参加が制限されています）",
   unknown:
     "会議の画面を読めませんでした（URL が正しいか、ログインが切れていないか確かめてください）",
+  // **「招かれていない」と取り違えない。** 直す場所がまるで違う（主催者ではなく、こちら）
+  signed_out: "ブラウザのプロファイルがログインしていません（人が一度ログインし直してください）",
 };
 
 const DEFAULT_POLL_MS = 700;
 const DEFAULT_ADMIT_TIMEOUT_MS = 2 * 60 * 1000;
 
 /** 画面の文言から参加の状態を読む。**当てにいかず、分からなければ `unknown`。** */
+/**
+ * 参加ボタンの呼び名。**押さないと入れない。**
+ *
+ * 初版は URL を開くだけで「入った/入れない」を判定していた。Meet は開いた時点では
+ * 準備画面で、`今すぐ参加` か `参加をリクエスト` を押して初めて中へ進む——
+ * **押していないのだから、入れないのは当たり前だった。**
+ */
+const JOIN_BUTTONS = ["今すぐ参加", "参加をリクエスト", "Join now", "Ask to join", "参加"] as const;
+
+/**
+ * 準備画面なら参加を押す。**押せたかどうかを返す。**
+ *
+ * 押せなくても投げない——すでに中にいる、まだ描かれていない、のどちらもありうる。
+ * 次の周期で見直せばよい。
+ */
+export async function clickJoin(page: Page): Promise<boolean> {
+  for (const name of JOIN_BUTTONS) {
+    const button = page.getByRole("button", { name, exact: false });
+    try {
+      if ((await button.count()) === 0) continue;
+      await button.first().click({ timeout: 3000 });
+      return true;
+    } catch {
+      // 押せなかった。別の呼び名を試す
+    }
+  }
+  return false;
+}
+
+/** ログインしていない兆候。**「招かれていない」と取り違えると、直す場所を間違える。** */
+export function looksSignedOut(url: string, text: string): boolean {
+  if (url.includes("accounts.google.com") || url.includes("ServiceLogin")) return true;
+  return /ログイン|sign in to continue|アカウントを選択/i.test(text);
+}
+
 export function readJoinState(text: string): JoinState {
   const t = text.toLowerCase();
   // 断られた（先に見る。待ちの文言と同時に出ることがある）
@@ -243,13 +280,21 @@ async function admit(
 ): Promise<JoinState> {
   const deadline = Date.now() + timeoutMs;
   let last: JoinState = "unknown";
+  let clicked = false;
   while (Date.now() < deadline) {
     const text = await page.innerText("body").catch(() => "");
+    // **ログインしていないなら、そう言う。** 「招かれていない」と取り違えると、
+    // 主催者に許可を頼みにいくことになる——直す場所がまるで違う
+    if (looksSignedOut(page.url(), text)) return "signed_out";
+    // **押さないと入れない。** 準備画面のうちに押す（一度だけ）
+    if (!clicked) clicked = await clickJoin(page);
     const state = readJoinState(text);
     // **判断の材料を捨てない。** 文言で状態を当てているので、外れたときに
     // 何を見てそう言ったのかが分からないと直せない（ここで何度も嵌っている）
     if (debug && state !== last) {
-      console.log(`[meeting-browser] 画面: ${state} ← ${text.replace(/\s+/g, " ").slice(0, 300)}`);
+      console.log(
+        `[meeting-browser] 画面: ${state} / ${page.url()} / 押した=${clicked} ← ${text.replace(/\s+/g, " ").slice(0, 300)}`,
+      );
     }
     last = state;
     if (last === "joined" || last === "rejected") return last;
