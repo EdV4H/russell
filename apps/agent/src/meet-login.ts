@@ -39,7 +39,10 @@ async function main(): Promise<void> {
   const context = await chromium.launchPersistentContext(PROFILE, {
     channel: "chrome",
     headless: false,
+    // **本番と同じ開き方**（言語も含めて）。ここが違うと、設定した先も違う場所になる
+    locale: "ja-JP",
     permissions: [],
+    args: ["--lang=ja"],
   });
   const page = context.pages()[0] ?? (await context.newPage());
 
@@ -66,6 +69,25 @@ async function main(): Promise<void> {
       .catch(() => null);
     console.log(`[meet-login] ログインできています${who ? `: ${who}` : ""}`);
     console.log("[meet-login] このアカウントを、会議の招待にゲストとして追加してください。");
+
+    // **字幕の言語は、この個体の設定である。** Meet はアカウントごとに覚えるので、
+    // ここで一度決めておけば以後の会議に効く。英語のまま日本語を聞かせると
+    // **英語として書き起こされる**（実際そうなった）ので、ここを通しておきたい。
+    const meetingUrl = process.argv.slice(2).find((a) => a.startsWith("http"));
+    if (meetingUrl) {
+      console.log(`[meet-login] 会議を開きます: ${meetingUrl}`);
+      console.log(
+        "[meet-login] 字幕をオンにして、**字幕の言語を日本語**にしてください（一度で以後も効きます）。",
+      );
+      await page.goto(meetingUrl, { waitUntil: "domcontentloaded" });
+      const rl2 = createInterface({ input: process.stdin, output: process.stdout });
+      await rl2.question("\n設定が終わったら Enter を押してください… ");
+      rl2.close();
+    } else {
+      console.log(
+        "[meet-login] 字幕の言語も決めるなら、会議の URL を渡して実行してください: meet-login <会議のURL>",
+      );
+    }
   } finally {
     // **必ず閉じる。** 掴んだままにすると、次に Bob が入れない
     await context.close().catch(() => {});
