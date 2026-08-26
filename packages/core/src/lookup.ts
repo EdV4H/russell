@@ -58,12 +58,17 @@ export function lookupCatalog(
   const catalog: LookupTool[] = [];
   for (const eq of equipment) {
     for (const spec of eq.tools()) {
-      if (!OFFERABLE.has(spec.effect)) continue;
+      // 効果分類で出せるもの、または**装備が明示的に出したいと言ったもの**。
+      // ただし `irreversible_write` は、立てても出さない（例外を作らない）
+      const offered = OFFERABLE.has(spec.effect) || spec.offer === true;
+      if (!offered || spec.effect === "irreversible_write") continue;
       if (!tools.has(spec.name)) continue;
       catalog.push({
         name: spec.name,
         description: descriptions[spec.name] ?? `${eq.id} の ${spec.name}`,
-        needsApproval: spec.effect !== "read",
+        // **Policy Gate の実際の規則に合わせる。** `read` と `internal_write` は承認なしで
+        // 通る。ここが嘘だと、個体は退出のたびに「承認をお願いします」と言い出す
+        needsApproval: spec.effect !== "read" && spec.effect !== "internal_write",
       });
     }
   }
@@ -103,6 +108,9 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
     '入力 {"url": "会議の URL"}。' +
     "**URL は必ず人が渡したものを使う。** 分からないなら、どの会議か先に聞く。" +
     "**会議名は入ってから分かる**ので、こちらで名前を付けない",
+  "meeting.leave":
+    "**いま入っている会議から出る。** 会議が終わった、もう聞かなくてよい、と言われたら使う。" +
+    "承認は要らない（出るのを止める理由がないので）。入力は不要",
   "meeting.transcript":
     "**すでに入っている会議**（または直前に出た会議）で、ここまでに聞こえた発言を読む。" +
     "**入っていなければ何も読めない**——会議に入るよう頼まれているなら meeting.join を使う。" +

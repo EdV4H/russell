@@ -98,6 +98,19 @@ export interface SurfaceRegistry {
 export interface EquipmentToolSpec {
   name: string;
   effect: EffectClass;
+  /**
+   * 効果分類では出せないが、**個体に知らせたい**道具。
+   *
+   * モデルに見せるのは既定で `read` / `external_write` / `external_send` だけである
+   * （書き込みと送信は承認が入るので出せる）。だが**止める方向の道具**はそこから漏れる——
+   * `meeting.leave` は承認不要にするため `internal_write` にしてあり、その結果
+   * **個体は退出する道具の存在を知らなかった**。「出たいのに出られない」を避けたはずが、
+   * そもそも出られなくなっていた。
+   *
+   * これを立てた道具は一覧に出る。**`irreversible_write` は立てても出さない**
+   * （取り消せないものを、モデルの求めに応じて人に承認させる形にはしない）。
+   */
+  offer?: boolean;
 }
 export interface EquipmentDefinition {
   id: string;
