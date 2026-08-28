@@ -24,7 +24,13 @@ import { createEchoModelPlugin } from "@edv4h/russell-plugin-model-echo";
 import { createPgSettingsPlugin } from "@edv4h/russell-plugin-settings-pg";
 import { createCliSurfacePlugin } from "@edv4h/russell-plugin-surface-cli";
 import { createSlackSurfacePlugin } from "@edv4h/russell-plugin-surface-slack";
-import type { Mode, RussellPlugin, Temperament } from "@edv4h/russell-shared";
+import type { Mode, RussellPlugin } from "@edv4h/russell-shared";
+import { resolveIndividual, secretFor } from "./individuals.js";
+
+// どの個体を立ち上げるか（§8）。既定は Bob（今までどおり）。
+// **知らない名前は落とす**——打ち間違いで別の個体の記憶へ書き込まないため。
+const INDIVIDUAL = resolveIndividual(process.env.RUSSELL_AGENT);
+const BOB = INDIVIDUAL.temperament;
 
 // env に応じて本番プラグイン/オフライン stub を選ぶ。
 const useClaude = Boolean(process.env.ANTHROPIC_API_KEY); // ANTHROPIC_API_KEY → 実 Claude、無ければ echo
@@ -32,7 +38,9 @@ const useClaude = Boolean(process.env.ANTHROPIC_API_KEY); // ANTHROPIC_API_KEY �
 // **明示的な opt-in のみ**（勝手に CLI プロセスを起動しない）。本番では拒否される。
 const useClaudeCode = !useClaude && process.env.RUSSELL_MODEL === "claude-code";
 const usePg = Boolean(process.env.DATABASE_URL); // DATABASE_URL → Postgres、無ければインメモリ
-const useSlack = Boolean(process.env.SLACK_BOT_TOKEN && process.env.SLACK_APP_TOKEN); // → Slack、無ければ CLI
+const slackBotToken = secretFor("SLACK_BOT_TOKEN", INDIVIDUAL);
+const slackAppToken = secretFor("SLACK_APP_TOKEN", INDIVIDUAL);
+const useSlack = Boolean(slackBotToken && slackAppToken); // → Slack、無ければ CLI
 // 装備は「支給されていれば持っている」。トークンが無ければプラグイン側が自分で降りるので、
 // ここでは常に配列へ入れておく（支給の有無は env が決める, §9.1）。
 const useNotion = Boolean(process.env.NOTION_TOKEN);
@@ -44,17 +52,6 @@ function modelPlugin(): RussellPlugin {
   return createEchoModelPlugin();
 }
 const MODEL_ID = useClaude ? "claude" : useClaudeCode ? "claude-code" : "echo";
-
-// 個体1号 Bob（docs/preparation/initial-data/temperament-unit-01.md の確定値）
-const BOB: Temperament = {
-  name: "Bob",
-  tone: "丁寧だが硬すぎない。明るく前向き。わからないことは素直に聞く。絵文字は控えめ",
-  backstory: "好奇心旺盛で、何でもスポンジのように吸収する新人。半年後にジェネラリストへ",
-  proactivity: 0.3,
-  daily_speak_cap: 3,
-  curiosity: 0.9,
-  reaction_rate: 0.7,
-};
 
 /**
  * スポンジプリセットが Bob 用に組むプラグイン配列。
@@ -82,7 +79,10 @@ function assembleSpongePlugins(): RussellPlugin[] {
     // 経路はブラウザで、ログイン済みのプロファイル（`RUSSELL_MEET_PROFILE`）が要る。
     createMeetingPlugin({ provider: createBrowserMeetingProvider() }),
     modelPlugin(),
-    useSlack ? createSlackSurfacePlugin() : createCliSurfacePlugin({ displayName: BOB.name }),
+    useSlack
+      ? // **個体ごとの鍵を渡す。** 同じトークンを共有すると、2つの個体が同じ名前で喋る
+        createSlackSurfacePlugin({ botToken: slackBotToken, appToken: slackAppToken })
+      : createCliSurfacePlugin({ displayName: BOB.name }),
     // **最後に置く。** 安全系イベントの購読なので、他のプラグインの setup 中に起きたものは
     // 拾えない——それでも構わない。ここが拾いたいのは「動き出した後に壊れたとき」である。
     createAlertsPlugin(),
@@ -122,7 +122,7 @@ function where(p: { surfaceId: string; contextId: string; messageId?: string }):
 async function main(): Promise<void> {
   const agent = await createAgent(
     {
-      agentId: "bob",
+      agentId: INDIVIDUAL.id,
       configVersion: "v0",
       temperament: BOB,
       mode: resolveMode(), // §6.5: off → dryrun → live

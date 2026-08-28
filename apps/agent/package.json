@@ -43,5 +43,12 @@
     "@types/pg": "^8.11.0",
     "pg": "^8.13.0",
     "typescript": "^5.7.0"
+  },
+  "exports": {
+    "./individuals": {
+      "source": "./src/individuals.ts",
+      "types": "./dist/individuals.d.ts",
+      "import": "./dist/individuals.js"
+    }
   }
 }
