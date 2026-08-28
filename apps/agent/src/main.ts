@@ -25,7 +25,7 @@ import { createPgSettingsPlugin } from "@edv4h/russell-plugin-settings-pg";
 import { createCliSurfacePlugin } from "@edv4h/russell-plugin-surface-cli";
 import { createSlackSurfacePlugin } from "@edv4h/russell-plugin-surface-slack";
 import type { Mode, RussellPlugin } from "@edv4h/russell-shared";
-import { resolveIndividual, secretFor } from "./individuals.js";
+import { type EquipmentId, resolveIndividual, secretFor } from "./individuals.js";
 
 // どの個体を立ち上げるか（§8）。既定は Bob（今までどおり）。
 // **知らない名前は落とす**——打ち間違いで別の個体の記憶へ書き込まないため。
@@ -69,15 +69,22 @@ const MODEL_ID = useClaude ? "claude" : useClaudeCode ? "claude-code" : "echo";
  * スキーマが未適用なら setup が throw して起動しない（fail-closed）。先に `pnpm migrate` を実行する。
  */
 function assembleSpongePlugins(): RussellPlugin[] {
+  /** その個体に支給されているか。**支給の意思**を見る（鍵の有無は各プラグインが見る）。 */
+  const issued = (id: EquipmentId) => INDIVIDUAL.equipment.includes(id);
+
   return [
     ...(usePg ? [createPgAuditPlugin(), createPgKillSwitchPlugin(), createPgSettingsPlugin()] : []),
     usePg ? createPgMemoryPlugin() : createInMemoryMemoryPlugin(),
-    ...(useNotion ? [createNotionEquipmentPlugin()] : []),
-    // 鍵が揃っていなければ、プラグイン側が自分で降りる（未支給, §9.2）
-    createGoogleEquipmentPlugin(),
+    // **支給する装備だけを組み立てる**（§9.1）。載っていないものは作りもしない——
+    // 個体は持っていない能力の存在を知らない（§9.2）。
+    // 載っていても鍵が無ければ、プラグイン側が自分で降りる。
+    ...(issued("notion") && useNotion ? [createNotionEquipmentPlugin()] : []),
+    ...(issued("google-drive") ? [createGoogleEquipmentPlugin()] : []),
     // 会議。**入る経路が無ければ、装備そのものが支給されない**（#130）。
     // 経路はブラウザで、ログイン済みのプロファイル（`RUSSELL_MEET_PROFILE`）が要る。
-    createMeetingPlugin({ provider: createBrowserMeetingProvider() }),
+    ...(issued("meeting")
+      ? [createMeetingPlugin({ provider: createBrowserMeetingProvider() })]
+      : []),
     modelPlugin(),
     useSlack
       ? // **個体ごとの鍵を渡す。** 同じトークンを共有すると、2つの個体が同じ名前で喋る

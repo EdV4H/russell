@@ -15,18 +15,39 @@
 
 import type { Temperament } from "@edv4h/russell-shared";
 
+/**
+ * 支給しうる装備（§9.1）。**個体ごとに違う。**
+ *
+ * プリセットにも `equipment` という軸が最初からある（番頭は `["slack"]` だけ）。
+ * 秘書に会議の装備は要らないし、逆にカレンダーは新人には要らない。
+ */
+export type EquipmentId = "notion" | "google-drive" | "meeting";
+
 export interface Individual {
   /** 記憶と監査に付く id。**変えない**（変えると過去の記憶と切り離される）。 */
   id: string;
   temperament: Temperament;
   /** env の接尾辞。`SLACK_BOT_TOKEN_<suffix>` を探し、無ければ接尾辞なしを使う。 */
   envSuffix: string;
+  /**
+   * 支給する装備（§9.1）。
+   *
+   * > [!IMPORTANT]
+   * > **載っていない装備は、組み立てすらしない。** 個体は持っていない能力の
+   * > 存在を知らない（§9.2）。「持っているが使わせない」ではなく「持っていない」。
+   * >
+   * > 載っていても、鍵が無ければプラグイン側が自分で降りる。**支給の意思**と
+   * > **支給できるか**は別の話で、ここに書くのは前者である。
+   */
+  equipment: EquipmentId[];
 }
 
 /** 個体1号 Bob（スポンジ）。docs/preparation/initial-data/temperament-unit-01.md の確定値。 */
 const BOB: Individual = {
   id: "bob",
   envSuffix: "BOB",
+  // いまの Bob が持っているものをそのまま（挙動を変えない）
+  equipment: ["notion", "google-drive", "meeting"],
   temperament: {
     name: "Bob",
     tone: "丁寧だが硬すぎない。明るく前向き。わからないことは素直に聞く。絵文字は控えめ",

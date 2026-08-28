@@ -53,3 +53,24 @@ test("鍵が無ければ undefined（空文字を鍵として扱わない）", (
     process.env = saved;
   }
 });
+
+/**
+ * 装備は個体ごと（§9.1）。
+ *
+ * プリセットにも `equipment` という軸が最初からある（番頭は `["slack"]` だけ）。
+ * 秘書に会議の装備は要らないし、逆にカレンダーは新人には要らない。
+ */
+
+test("個体は自分に支給された装備だけを持つ", () => {
+  const bob = resolveIndividual("bob");
+
+  // いまの Bob が持っているものがそのまま載っている（挙動を変えていない）
+  expect(bob.equipment).toContain("google-drive");
+  expect(bob.equipment).toContain("meeting");
+});
+
+test("**支給されていない装備は、存在すら知らない**（§9.2）", () => {
+  const bob = resolveIndividual("bob");
+  // 「持っているが使わせない」ではなく「持っていない」。載っていないものは組み立てない
+  expect(bob.equipment).not.toContain("calendar" as never);
+});
