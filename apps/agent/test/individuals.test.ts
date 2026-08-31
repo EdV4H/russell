@@ -6,7 +6,7 @@
  * 分かれているので、id を取り違えると後から分離できない。
  */
 
-import { resolveIndividual, secretFor } from "@edv4h/russell-agent/individuals";
+import { INDIVIDUALS, resolveIndividual, secretFor } from "@edv4h/russell-agent/individuals";
 import { expect, test } from "vitest";
 
 test("既定は個体1号（今までどおり動く）", () => {
@@ -122,4 +122,31 @@ test("番頭は、新人より自発的で、口数の枠が広い", () => {
   // 呼ばれなくても気づいて言うのが役目。ただし枠と静音時間で暴走は抑える（§6）
   expect(walter.temperament.proactivity).toBeGreaterThan(bob.temperament.proactivity);
   expect(walter.temperament.daily_speak_cap).toBeGreaterThan(bob.temperament.daily_speak_cap);
+});
+
+/**
+ * 止める口は個体ごとに違う。
+ *
+ * Slack はワークスペース内で**同じコマンド名を2つのアプリに持たせられない**。
+ * 揃えてしまうと、後から作った個体は**キルスイッチが効かない**——
+ * 止められない個体を動かすことになる。
+ */
+
+test("**キルスイッチのコマンド名が、個体ごとに違う**", () => {
+  const bob = resolveIndividual("bob");
+  const walter = resolveIndividual("walter");
+
+  expect(bob.slashCommand).toBe("/russell");
+  expect(walter.slashCommand).toBe("/walter");
+  // ここが揃うと、2体目は Slack 側で登録できず、止める手段を失う
+  expect(bob.slashCommand).not.toBe(walter.slashCommand);
+});
+
+test("すべての個体が、止める口を持っている", () => {
+  for (const individual of Object.values(INDIVIDUALS)) {
+    expect(individual.slashCommand.startsWith("/")).toBe(true);
+  }
+  // 名前が重複していないこと（増やしたときに気づけるように）
+  const names = Object.values(INDIVIDUALS).map((i) => i.slashCommand);
+  expect(new Set(names).size).toBe(names.length);
 });

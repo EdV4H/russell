@@ -30,6 +30,13 @@ export interface Individual {
   /** env の接尾辞。`SLACK_BOT_TOKEN_<suffix>` を探し、無ければ接尾辞なしを使う。 */
   envSuffix: string;
   /**
+   * キルスイッチのスラッシュコマンド。**個体ごとに違う名前が要る。**
+   *
+   * Slack はワークスペース内で同じコマンド名を2つのアプリに持たせられない。
+   * 揃えてしまうと、後から作った個体は**止められない**。
+   */
+  slashCommand: string;
+  /**
    * 支給する装備（§9.1）。
    *
    * > [!IMPORTANT]
@@ -46,6 +53,7 @@ export interface Individual {
 const BOB: Individual = {
   id: "bob",
   envSuffix: "BOB",
+  slashCommand: "/russell",
   // いまの Bob が持っているものをそのまま（挙動を変えない）
   equipment: ["notion", "google-drive", "meeting"],
   temperament: {
@@ -77,6 +85,7 @@ const BOB: Individual = {
 const WALTER: Individual = {
   id: "walter",
   envSuffix: "WALTER",
+  slashCommand: "/walter",
   // **会議には入らない。** 秘書が同席する必要はなく、装備は少ないほど事故が減る（§9.3）。
   // カレンダーは読むだけ（予定を作る・動かすのは他人の時間に触るので、承認と一緒に足す）。
   equipment: ["google-drive", "google-calendar"],
