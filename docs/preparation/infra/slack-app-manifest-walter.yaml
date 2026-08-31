@@ -9,6 +9,10 @@
 # > どちらの発言か後から言えなくなる。`.env` には接尾辞つきで入れる:
 # >   SLACK_BOT_TOKEN_WALTER / SLACK_APP_TOKEN_WALTER
 #
+# > [!NOTE]
+# > **キルスイッチは1号の口から効く**（`/russell stop --agent=walter`）。凍結の状態は
+# > DB にあり、全個体が同じものを見る。だから2号はコマンドを持たなくてよい。
+#
 # ★ が付いているのは、実地で漏れて詰まった箇所（1号で踏んだもの）。画面上は設定済みに
 #   見えるのに動かない、という形で出るので、マニフェストから作れば踏まない。
 #
@@ -31,11 +35,14 @@ features:
     home_tab_enabled: false
     messages_tab_enabled: true
     messages_tab_read_only_enabled: false
-  slash_commands:
-    - command: /walter
-      description: キルスイッチ。自発行動を凍結する
-      usage_hint: "stop [理由] | start | status"
-      should_escape: false
+  # スラッシュコマンドは**持たせない。**
+  #
+  # Slack はワークスペース内で同じコマンド名を2つのアプリに許さないので、2体目は
+  # `/russell` を持てない。だが**設計は最初からそれを織り込んでいる**——
+  # `/russell stop --agent=walter` で、1号の口から2号を止められる（凍結の状態は
+  # DB にあり、全個体が同じものを見る）。
+  #
+  # 専用のコマンドを足すこともできるが、要らない権限は持たない方がよい（最小スコープ）。
 
 oauth_config:
   scopes:
@@ -46,7 +53,6 @@ oauth_config:
       - im:history
       - chat:write
       - reactions:write # 📝「メモしました」（§10.1）
-      - commands # キルスイッチ（§12-4）
       # ★ 積み残しの確認（返信し忘れの拾い直し）に要る3つ。
       #    「どのチャンネルに入っているか」を数えるためだけの権限で、履歴の中身は
       #    既存の *:history で読む。**無くても通常の受信・返信は動く**（拾い直しだけ止まる）。

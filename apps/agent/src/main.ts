@@ -98,11 +98,7 @@ function assembleSpongePlugins(): RussellPlugin[] {
     modelPlugin(),
     useSlack
       ? // **個体ごとの鍵を渡す。** 同じトークンを共有すると、2つの個体が同じ名前で喋る
-        createSlackSurfacePlugin({
-          botToken: slackBotToken,
-          appToken: slackAppToken,
-          slashCommand: INDIVIDUAL.slashCommand,
-        })
+        createSlackSurfacePlugin({ botToken: slackBotToken, appToken: slackAppToken })
       : createCliSurfacePlugin({ displayName: BOB.name }),
     // **最後に置く。** 安全系イベントの購読なので、他のプラグインの setup 中に起きたものは
     // 拾えない——それでも構わない。ここが拾いたいのは「動き出した後に壊れたとき」である。

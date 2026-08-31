@@ -125,28 +125,18 @@ test("番頭は、新人より自発的で、口数の枠が広い", () => {
 });
 
 /**
- * 止める口は個体ごとに違う。
+ * 止める口は**1つでよい**。
  *
- * Slack はワークスペース内で**同じコマンド名を2つのアプリに持たせられない**。
- * 揃えてしまうと、後から作った個体は**キルスイッチが効かない**——
- * 止められない個体を動かすことになる。
+ * Slack のスラッシュコマンドはワークスペース内で重複できないので、2体目は `/russell` を
+ * 持てない。だが設計は最初からそれを織り込んでいて、`--agent=<個体>` で**受信した1体が
+ * 他の個体を止められる**（凍結の状態は DB にあり、全個体が同じものを見る）。
+ *
+ * 2体目に専用のコマンドを持たせようとしたが、**要らなかった**。
+ * 権限は少ない方がよい（最小スコープ）。
  */
 
-test("**キルスイッチのコマンド名が、個体ごとに違う**", () => {
-  const bob = resolveIndividual("bob");
-  const walter = resolveIndividual("walter");
-
-  expect(bob.slashCommand).toBe("/russell");
-  expect(walter.slashCommand).toBe("/walter");
-  // ここが揃うと、2体目は Slack 側で登録できず、止める手段を失う
-  expect(bob.slashCommand).not.toBe(walter.slashCommand);
-});
-
-test("すべての個体が、止める口を持っている", () => {
+test("個体は、止める口を自前で持たない（1つの口から全個体を止める）", () => {
   for (const individual of Object.values(INDIVIDUALS)) {
-    expect(individual.slashCommand.startsWith("/")).toBe(true);
+    expect(individual).not.toHaveProperty("slashCommand");
   }
-  // 名前が重複していないこと（増やしたときに気づけるように）
-  const names = Object.values(INDIVIDUALS).map((i) => i.slashCommand);
-  expect(new Set(names).size).toBe(names.length);
 });

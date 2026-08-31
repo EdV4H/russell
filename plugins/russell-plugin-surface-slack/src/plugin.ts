@@ -62,15 +62,6 @@ export interface SlackSurfaceOptions {
   botToken?: string;
   appToken?: string;
   /**
-   * キルスイッチのスラッシュコマンド（既定 `/russell`）。
-   *
-   * > [!IMPORTANT]
-   * > **個体ごとに変える必要がある。** Slack はワークスペース内で同じコマンド名を
-   * > 2つのアプリに持たせられない。決め打ちのままだと、2体目は**キルスイッチが
-   * > 効かない**——止められない個体を動かすことになる。
-   */
-  slashCommand?: string;
-  /**
    * 発動記録を流す管理チャンネル（既定 env `RUSSELL_ADMIN_CHANNEL`）。
    * 未設定なら流さない（kill-switch.md の「#russell-管理 に自動で記録」に対応）。
    */
@@ -113,8 +104,6 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
         socketMode: true,
       });
 
-      // **止める口は個体ごとに違う**（Slack が同じコマンド名を2つのアプリに許さない）
-      const slashCommand = options.slashCommand ?? "/russell";
       const adminChannel = options.adminChannel ?? process.env.RUSSELL_ADMIN_CHANNEL;
       const isOperator = operatorCheckFromEnv();
       const allowedChannels = options.allowedChannels ?? allowedChannelsFromEnv();
@@ -256,7 +245,7 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
           });
           // キルスイッチ（§12-4 レベル1/2）。認知ループを通さず、ここで直接処理する——
           // 「止めろ」がモデル呼び出しや Policy Gate に依存していては、暴走時に効かない。
-          app.command(slashCommand, async ({ command, ack, respond }) => {
+          app.command("/russell", async ({ command, ack, respond }) => {
             await ack(); // Slack の3秒制約。処理は ack の後で
             try {
               const result = await runRussellCommand(command.text ?? "", command.user_id, {
