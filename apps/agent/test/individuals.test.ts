@@ -74,3 +74,52 @@ test("**支給されていない装備は、存在すら知らない**（§9.2�
   // 「持っているが使わせない」ではなく「持っていない」。載っていないものは組み立てない
   expect(bob.equipment).not.toContain("calendar" as never);
 });
+
+/**
+ * 個体2号 Walter（番頭）。
+ *
+ * 名前は Alice and Bob の一覧から取る。順番が決まっていて名付けで悩まないのが主な理由だが、
+ * **あの一覧には敵役がいる**（Eve は盗聴者、Mallory は攻撃者、Trudy は侵入者）。
+ * 個体の名前に使うと、監査ログにその名前が並ぶことになる。
+ */
+
+test("2号は 1号とは別の個体として立つ", () => {
+  const walter = resolveIndividual("walter");
+
+  expect(walter.id).toBe("walter");
+  expect(walter.temperament.name).toBe("Walter");
+  // 記憶は agent_id で分かれる。**id が違うことが分離の根拠**である
+  expect(walter.id).not.toBe(resolveIndividual("bob").id);
+});
+
+test("**鍵は個体ごとに分かれる**（同じものを共有しない）", () => {
+  const key = "SLACK_APP_TOKEN";
+  const saved = { ...process.env };
+  try {
+    process.env[`${key}_BOB`] = "1号の分";
+    process.env[`${key}_WALTER`] = "2号の分";
+
+    // 共有すると、2つの個体が同じ名前で喋り、どちらの発言か分からなくなる
+    expect(secretFor(key, resolveIndividual("bob"))).toBe("1号の分");
+    expect(secretFor(key, resolveIndividual("walter"))).toBe("2号の分");
+  } finally {
+    process.env = saved;
+  }
+});
+
+test("**秘書は会議に入らない**（装備は少ないほど事故が減る, §9.3）", () => {
+  const walter = resolveIndividual("walter");
+
+  expect(walter.equipment).not.toContain("meeting");
+  // 資料を見て予定を判断できる程度は持たせる
+  expect(walter.equipment).toContain("google-drive");
+});
+
+test("番頭は、新人より自発的で、口数の枠が広い", () => {
+  const walter = resolveIndividual("walter");
+  const bob = resolveIndividual("bob");
+
+  // 呼ばれなくても気づいて言うのが役目。ただし枠と静音時間で暴走は抑える（§6）
+  expect(walter.temperament.proactivity).toBeGreaterThan(bob.temperament.proactivity);
+  expect(walter.temperament.daily_speak_cap).toBeGreaterThan(bob.temperament.daily_speak_cap);
+});
