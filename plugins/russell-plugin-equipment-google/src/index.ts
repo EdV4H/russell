@@ -4,3 +4,7 @@ export { createGoogleAuth } from "./auth.js";
 export type { GoogleAuth, FetchLike } from "./auth.js";
 export { GoogleClient, fileIdFrom } from "./client.js";
 export type { DriveFile, DriveDocument, DriveMatch } from "./client.js";
+export { createCalendarEquipmentPlugin } from "./calendar-plugin.js";
+export type { CalendarEquipmentOptions, CalendarToolResult } from "./calendar-plugin.js";
+export { CalendarClient, attendeeNames, rangeOf } from "./calendar.js";
+export type { CalendarEvent } from "./calendar.js";
