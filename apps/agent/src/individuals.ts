@@ -21,7 +21,7 @@ import type { Temperament } from "@edv4h/russell-shared";
  * プリセットにも `equipment` という軸が最初からある（番頭は `["slack"]` だけ）。
  * 秘書に会議の装備は要らないし、逆にカレンダーは新人には要らない。
  */
-export type EquipmentId = "notion" | "google-drive" | "meeting";
+export type EquipmentId = "notion" | "google-drive" | "google-calendar" | "meeting";
 
 export interface Individual {
   /** 記憶と監査に付く id。**変えない**（変えると過去の記憶と切り離される）。 */
@@ -78,8 +78,8 @@ const WALTER: Individual = {
   id: "walter",
   envSuffix: "WALTER",
   // **会議には入らない。** 秘書が同席する必要はなく、装備は少ないほど事故が減る（§9.3）。
-  // カレンダーはこれから作る（いまは Drive を読めるだけ）。
-  equipment: ["google-drive"],
+  // カレンダーは読むだけ（予定を作る・動かすのは他人の時間に触るので、承認と一緒に足す）。
+  equipment: ["google-drive", "google-calendar"],
   temperament: {
     name: "Walter",
     tone: "落ち着いていて手短か。要点から言う。急かさないが、抜けは必ず指摘する",

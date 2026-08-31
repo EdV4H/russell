@@ -23,6 +23,9 @@ import { createServer } from "node:http";
 const SCOPES = [
   "https://www.googleapis.com/auth/drive.readonly",
   "https://www.googleapis.com/auth/documents.readonly",
+  // 秘書役（Walter）が予定を見るため。**読み取りだけ**——予定を作る・動かすのは
+  // 他人の時間に触るので、承認の設計と一緒に足す（§9.3）
+  "https://www.googleapis.com/auth/calendar.readonly",
 ];
 const PORT = Number(process.env.GOOGLE_AUTH_PORT ?? 8123);
 const REDIRECT = `http://127.0.0.1:${PORT}`;

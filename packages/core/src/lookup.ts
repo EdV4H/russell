@@ -102,6 +102,11 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
   "drive.read":
     "Google ドキュメントの本文を読む。drive.search の結果の id か、**共有された URL をそのまま**渡す。" +
     '入力 {"fileId": "id または https://docs.google.com/document/d/..."}',
+  "calendar.upcoming":
+    "**これからの予定**を見る（既定は今日から7日）。誰と・いつ・何を、会議の URL も分かる。" +
+    "見えるのは自分のカレンダーに共有されているものだけ。" +
+    '入力 {"days": 7, "query": "絞り込む語（省略可）", "from": "開始日（省略可）"}。' +
+    "**過去は既定で見ない**——終わった予定を持ち出しても役に立たない",
   "meeting.join":
     "会議に入る。**参加者一覧にあなたの名前が出て、その場の全員に見える**。" +
     "入ると発言が字幕から届き、退出するまで溜まっていく。" +

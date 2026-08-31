@@ -11,7 +11,10 @@
 import { createAgent } from "@edv4h/russell-core";
 import { createAlertsPlugin } from "@edv4h/russell-plugin-alerts";
 import { createPgAuditPlugin } from "@edv4h/russell-plugin-audit-pg";
-import { createGoogleEquipmentPlugin } from "@edv4h/russell-plugin-equipment-google";
+import {
+  createCalendarEquipmentPlugin,
+  createGoogleEquipmentPlugin,
+} from "@edv4h/russell-plugin-equipment-google";
 import { createNotionEquipmentPlugin } from "@edv4h/russell-plugin-equipment-notion";
 import { createPgKillSwitchPlugin } from "@edv4h/russell-plugin-killswitch-pg";
 import { createMeetingPlugin } from "@edv4h/russell-plugin-meeting";
@@ -44,6 +47,8 @@ const useSlack = Boolean(slackBotToken && slackAppToken); // → Slack、無け�
 // 装備は「支給されていれば持っている」。トークンが無ければプラグイン側が自分で降りるので、
 // ここでは常に配列へ入れておく（支給の有無は env が決める, §9.1）。
 const useNotion = Boolean(process.env.NOTION_TOKEN);
+/** Google の鍵。**リフレッシュトークンだけが個体ごと**（クライアントは共有, #123）。 */
+const googleToken = secretFor("GOOGLE_REFRESH_TOKEN", INDIVIDUAL);
 
 /** 会話に使うモデル。上から順に「キーがある / 手元の CLI を使う / ダミー」。 */
 function modelPlugin(): RussellPlugin {
@@ -79,7 +84,12 @@ function assembleSpongePlugins(): RussellPlugin[] {
     // 個体は持っていない能力の存在を知らない（§9.2）。
     // 載っていても鍵が無ければ、プラグイン側が自分で降りる。
     ...(issued("notion") && useNotion ? [createNotionEquipmentPlugin()] : []),
-    ...(issued("google-drive") ? [createGoogleEquipmentPlugin()] : []),
+    // **Google の鍵も個体ごと。** クライアントは共有だが、リフレッシュトークンが
+    // 「誰として読むか」を決める——共有すると、秘書が新人の Drive を読むことになる
+    ...(issued("google-drive") ? [createGoogleEquipmentPlugin({ refreshToken: googleToken })] : []),
+    ...(issued("google-calendar")
+      ? [createCalendarEquipmentPlugin({ refreshToken: googleToken })]
+      : []),
     // 会議。**入る経路が無ければ、装備そのものが支給されない**（#130）。
     // 経路はブラウザで、ログイン済みのプロファイル（`RUSSELL_MEET_PROFILE`）が要る。
     ...(issued("meeting")
