@@ -60,6 +60,57 @@ test("関与していなくても、名指しされていれば拾う", () => {
   expect(p?.text).toBe("これ どう思う？");
 });
 
+/**
+ * **呼ばれたことは、後続の発言では取り消されない。**
+ *
+ * 実際に取りこぼした形。名指しの25秒後に別の人が一言足しただけで、積み残しの確認が
+ * 「返信は要らない」と判定した——初版は**最後の1件しか見ていなかった**。
+ * 会話では、呼びかけの直後に相槌や補足が入るのが普通なので、これは稀な形ではない。
+ */
+test("**名指しの後に別の発言が入っても、呼ばれたことは消えない**", () => {
+  const p = pendingReply(
+    [
+      msg("U1", "この件どうする？", "1700000000.000100"),
+      msg("U2", "あとで見ます", "1700000100.000200"),
+      msg("U1", "<@U_BOB> これ調べられる？", "1700000200.000300"),
+      // ここが入るだけで、呼びかけが無かったことになっていた
+      msg("U2", "よろしくです", "1700000225.000400"),
+    ],
+    BOT,
+  );
+
+  expect(p).toBeDefined();
+  // 呼ばれたのは事実なので、正直に立てる（返すかどうかの判断材料になる）
+  expect(p?.mentionsBot).toBe(true);
+  // 返す先は最後の発言。スレッド全体は返信時に読める（CONVERSATION_SERVICE）
+  expect(p?.messageId).toBe("1700000225.000400");
+});
+
+test("**答え終わった呼びかけを、蒸し返さない**", () => {
+  // 名指し → 返事、の後に来た雑談。もう一度呼ばれたことにはしない
+  const p = pendingReply(
+    [
+      msg("U1", "<@U_BOB> お願い", "1700000000.000100"),
+      msg(BOT, "やっておきます", "1700000050.000500"),
+      msg("U2", "助かります", "1700000150.000600"),
+    ],
+    BOT,
+  );
+
+  // 関与しているので拾いはする。ただし「名指しされた」とは言わない
+  expect(p).toBeDefined();
+  expect(p?.mentionsBot).toBe(false);
+});
+
+test("名指しが無く、一度も喋っていなければ、やはり入らない", () => {
+  // 直したのは「名指しをどこまで見るか」であって、**入る条件を緩めたのではない**
+  const p = pendingReply(
+    [msg("U1", "AとBどっちがいい？"), msg("U2", "Bかな"), msg("U1", "じゃあBで")],
+    BOT,
+  );
+  expect(p).toBeUndefined();
+});
+
 test("参加通知や空の発言は数えない", () => {
   const messages = [
     msg(BOT, "よろしくお願いします"),
@@ -414,6 +465,55 @@ test("名前が引けなくても拾う（名前は諦めるが、返信は諦�
 test("除外チャンネルは見ない", async () => {
   const { found } = await findPendingMessages(fakeSlack({ excludedChannels: new Set(["C1"]) }));
   expect(found).toEqual([]);
+});
+
+/**
+ * **見に行かなかったことを、無かったことと混ぜない。**
+ *
+ * 読めなかった数は報告していたのに、設定で外した分は数えずに素通りしていた。
+ * その状態の「積み残し 0件」は、「無い」とも「30会話のうち1つしか見ていない」とも読める。
+ */
+test("**設定で外した会話も数える**（0件の意味が変わる）", async () => {
+  const result = await findPendingMessages(
+    fakeSlack({
+      async listConversations() {
+        return [
+          { id: "C1", isDm: false },
+          { id: "C2", isDm: false },
+          { id: "C3", isDm: false },
+        ];
+      },
+      allowedChannels: new Set(["C1"]),
+    }),
+  );
+
+  expect(result.found).toHaveLength(1);
+  expect(result.filtered).toBe(2);
+});
+
+/**
+ * **履歴は直近から取る。遡る指定を渡さない。**
+ *
+ * `conversations.history` に `oldest` と `limit` を同時に渡すと、Slack は
+ * **`oldest` から古い順に** `limit` 件を返す（「直近 limit 件」ではない）。
+ * 初版は 14日前を `oldest` にしていたので、**14日前あたりの20件だけ**を見て
+ * 「積み残し 0件」と報告し続けていた——今日の発言は一度も視界に入っていない。
+ *
+ * ここで引数の形を固定しているのは、**この間違いがエラーとして出ないから**である。
+ * 取れているが見ている場所が違う、という形でしか現れない。
+ */
+test("**履歴の取得に、遡る指定を渡さない**（Slack が古い順に返す）", async () => {
+  const calls: string[][] = [];
+  await findPendingMessages(
+    fakeSlack({
+      async history(...args: [string]) {
+        calls.push(args.map(String));
+        return [{ user: "U1", text: "やあ", ts: ts(5), thread_ts: "100.1" } as never];
+      },
+    }),
+  );
+
+  expect(calls).toEqual([["C1"]]);
 });
 
 test("上限で打ち切る", async () => {

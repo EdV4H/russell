@@ -6,7 +6,7 @@
  * 分かれているので、id を取り違えると後から分離できない。
  */
 
-import { resolveIndividual, secretFor } from "@edv4h/russell-agent/individuals";
+import { INDIVIDUALS, resolveIndividual, secretFor } from "@edv4h/russell-agent/individuals";
 import { expect, test } from "vitest";
 
 test("既定は個体1号（今までどおり動く）", () => {
@@ -122,4 +122,21 @@ test("番頭は、新人より自発的で、口数の枠が広い", () => {
   // 呼ばれなくても気づいて言うのが役目。ただし枠と静音時間で暴走は抑える（§6）
   expect(walter.temperament.proactivity).toBeGreaterThan(bob.temperament.proactivity);
   expect(walter.temperament.daily_speak_cap).toBeGreaterThan(bob.temperament.daily_speak_cap);
+});
+
+/**
+ * 止める口は**1つでよい**。
+ *
+ * Slack のスラッシュコマンドはワークスペース内で重複できないので、2体目は `/russell` を
+ * 持てない。だが設計は最初からそれを織り込んでいて、`--agent=<個体>` で**受信した1体が
+ * 他の個体を止められる**（凍結の状態は DB にあり、全個体が同じものを見る）。
+ *
+ * 2体目に専用のコマンドを持たせようとしたが、**要らなかった**。
+ * 権限は少ない方がよい（最小スコープ）。
+ */
+
+test("個体は、止める口を自前で持たない（1つの口から全個体を止める）", () => {
+  for (const individual of Object.values(INDIVIDUALS)) {
+    expect(individual).not.toHaveProperty("slashCommand");
+  }
 });

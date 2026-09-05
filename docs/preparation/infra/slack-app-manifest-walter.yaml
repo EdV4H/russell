@@ -1,0 +1,81 @@
+# Slack アプリのマニフェスト（個体2号 Walter・番頭）。
+#
+# api.slack.com/apps → Create New App → **From a manifest** に貼る。
+# 1号のもの（slack-app-manifest.yaml）と**中身は同じ**で、名前だけが違う——
+# 個体ごとに別アプリ（B-2 決定）なので、トークンも別になる。
+#
+# > [!IMPORTANT]
+# > **Bob と同じトークンを使い回さない。** 共有すると2つの個体が同じ名前で喋り、
+# > どちらの発言か後から言えなくなる。`.env` には接尾辞つきで入れる:
+# >   SLACK_BOT_TOKEN_WALTER / SLACK_APP_TOKEN_WALTER
+#
+# > [!NOTE]
+# > **キルスイッチは1号の口から効く**（`/russell stop --agent=walter`）。凍結の状態は
+# > DB にあり、全個体が同じものを見る。だから2号はコマンドを持たなくてよい。
+#
+# ★ が付いているのは、実地で漏れて詰まった箇所（1号で踏んだもの）。画面上は設定済みに
+#   見えるのに動かない、という形で出るので、マニフェストから作れば踏まない。
+#
+# 関連: slack-app-manifest.yaml（1号）/ setup-checklist.md（作成手順）
+
+display_information:
+  name: Walter
+  description: 予定と約束を落とさない番頭（Russell 個体2号）
+  background_color: "#37474f"
+
+features:
+  bot_user:
+    display_name: Walter
+    always_online: false
+  # ★ これが無いと DM の入力欄が出ない（「このアプリへのメッセージ送信はオフにされています」）。
+  #    im:history と message.im を入れていても、ここが off だと利用者が打てない。
+  #
+  #    **秘書役では特に効く。** 予定の相談は DM でやることが多い。
+  app_home:
+    home_tab_enabled: false
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+  # スラッシュコマンドは**持たせない。**
+  #
+  # Slack はワークスペース内で同じコマンド名を2つのアプリに許さないので、2体目は
+  # `/russell` を持てない。だが**設計は最初からそれを織り込んでいる**——
+  # `/russell stop --agent=walter` で、1号の口から2号を止められる（凍結の状態は
+  # DB にあり、全個体が同じものを見る）。
+  #
+  # 専用のコマンドを足すこともできるが、要らない権限は持たない方がよい（最小スコープ）。
+
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read
+      - channels:history # パブリックチャンネルのスレッド追従
+      - groups:history # プライベートチャンネルでも使うなら。不要なら消してよい（最小スコープ）
+      - im:history
+      - chat:write
+      - reactions:write # 📝「メモしました」（§10.1）
+      # ★ 積み残しの確認（返信し忘れの拾い直し）に要る3つ。
+      #    「どのチャンネルに入っているか」を数えるためだけの権限で、履歴の中身は
+      #    既存の *:history で読む。**無くても通常の受信・返信は動く**（拾い直しだけ止まる）。
+      - channels:read
+      - groups:read
+      - im:read
+      # ★ 相手の名前を引く（users.info）。無いと個体は相手を user id でしか認識できず、
+      #    丁寧に振る舞おうとして**存在しない名前を作る**（1号で実測）。
+      - users:read
+
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      # ★ message.channels が無いとスレッドの続きが配信されない。mention は届くので
+      #    「繋がっているのに追従だけしない」という紛らわしい症状になる。
+      - message.channels
+      - message.groups # groups:history を使わないなら消す
+      - message.im
+  # ★ HITL の承認ボタン（Block Kit）に要る。**これが off だと押しても何も起きない**——
+  #    ボタンは表示されるので、「壊れている」ではなく「無反応」という形で出る。
+  interactivity:
+    is_enabled: true
+  socket_mode_enabled: true
+  org_deploy_enabled: false
+  token_rotation_enabled: false
