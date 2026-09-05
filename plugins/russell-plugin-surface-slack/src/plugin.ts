@@ -57,6 +57,14 @@ import { createTextMemo, defaultReactionEmoji, pickReactionEmoji } from "./react
 /** リアクションの意味 → Slack の絵文字名。何で表すかは通信面の裁量（§10.1）。 */
 /** DM など、スレッドではない文脈で遡る件数。 */
 const MAX_HISTORY = 20;
+/**
+ * 積み残しの確認で1チャンネルあたり見る件数。**直近から**数える（`oldest` は渡さない）。
+ *
+ * DM の読み直し（`MAX_HISTORY`）より多いのは、**見落としの有無を判断する側**だから。
+ * 20件だと、少し賑やかなチャンネルでは半日分に届かず、窓（12時間〜留守の分）を
+ * 覆えない——覆えていないことは**エラーにならず「0件」として出る**。
+ */
+const CATCHUP_HISTORY = 200;
 
 export interface SlackSurfaceOptions {
   botToken?: string;
@@ -405,7 +413,7 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
          */
         async pendingMessages({ since, limit }): Promise<InboundMessage[]> {
           // 探し方は catchup.ts（テストできる形に切ってある）。ここは実クライアントを渡すだけ。
-          const { found, skipped, reasons } = await findPendingMessages({
+          const { found, skipped, reasons, filtered } = await findPendingMessages({
             since,
             limit,
             botUserId: botUserIdRef.value,
@@ -420,11 +428,12 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
               });
               return (res.channels ?? []).map((c) => ({ id: c.id, isDm: c.is_im === true }));
             },
-            history: async (channel, oldest) => {
+            history: async (channel) => {
+              // **`oldest` を渡さない**（catchup.ts の注意書き）。渡すとそこから
+              // 古い順に返ってきて、直近の発言が一切見えなくなる。
               const res = await app.client.conversations.history({
                 channel,
-                oldest,
-                limit: MAX_HISTORY,
+                limit: CATCHUP_HISTORY,
               });
               return (res.messages ?? []) as SlackHistoryMessage[];
             },
@@ -437,6 +446,12 @@ export function createSlackSurfacePlugin(options: SlackSurfaceOptions = {}): Rus
             // 直せるものかどうかが変わる（数だけだと見なかったことにするしかない）
             console.log(
               `[slack] 積み残しの確認: ${skipped}件の会話は読めませんでした（${reasons.join(", ")}／続行）`,
+            );
+          }
+          // **見に行かなかった分も言う。** 「0件」が「無い」なのか「見ていない」なのかは別物
+          if (filtered > 0) {
+            console.log(
+              `[slack] 積み残しの確認: ${filtered}件の会話は設定で対象外です（RUSSELL_SLACK_CHANNELS / RUSSELL_SLACK_EXCLUDE_CHANNELS）`,
             );
           }
           if (debug) console.log(`[slack] 積み残し ${found.length}件`);

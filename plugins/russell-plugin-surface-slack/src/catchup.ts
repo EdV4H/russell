@@ -39,12 +39,18 @@ function isOwn(m: SlackHistoryMessage, botUserId?: string): boolean {
  *
  * 要件は3つで、**すべて満たすときだけ**返信が要る:
  * - **自分が関与している** — 一度も発言していないスレッドには入らない（呼ばれてもいない会話）。
- *   ただし最後の発言が自分宛の mention なら、関与していなくても対象にする（呼ばれた）
+ *   ただし**未応答の発言のどれかで名指しされていれば**、関与していなくても対象にする（呼ばれた）
  * - **最後の発言が自分ではない** — 自分が最後なら返信は済んでいる
  * - **相手の発言が実体を持つ** — 空・subtype だけのものは無視
  *
  * 「自分が最後かどうか」で判定するので、**返信した時点で対象から外れる**。
  * 二重返信を防ぐための状態を別に持たなくてよい（べき等性が構造で出る）。
+ *
+ * > [!IMPORTANT]
+ * > **名指しは「最後の1件」ではなく「未応答の全部」で見る。** 初版は最後の発言しか
+ * > 見ていなかったので、**呼ばれた直後に誰かが一言足すだけで呼びかけが消えた**。
+ * > 実際にそれで取りこぼした——名指しの数十秒後に別の人が一言足しただけで
+ * > 「返信は要らない」と判定された。呼ばれたことは、後続の発言では取り消されない。
  */
 export function pendingReply(
   messages: SlackHistoryMessage[],
@@ -56,8 +62,21 @@ export function pendingReply(
   const last = usable[usable.length - 1];
   if (!last || isOwn(last, botUserId)) return undefined;
 
-  const involved = usable.some((m) => isOwn(m, botUserId));
-  const addressed = botUserId ? (last.text ?? "").includes(`<@${botUserId}>`) : false;
+  // 自分が最後に喋った位置。**そこから後だけが「まだ答えていない分」**である
+  let lastOwn = -1;
+  for (let i = usable.length - 1; i >= 0; i--) {
+    const m = usable[i];
+    if (m && isOwn(m, botUserId)) {
+      lastOwn = i;
+      break;
+    }
+  }
+  const involved = lastOwn >= 0;
+  // **答えた分まで遡らない。** 既に返事をした呼びかけで、もう一度呼ばれたことにしない
+  const unanswered = usable.slice(lastOwn + 1);
+  const addressed = botUserId
+    ? unanswered.some((m) => (m.text ?? "").includes(`<@${botUserId}>`))
+    : false;
   if (!involved && !addressed) return undefined;
 
   return {
@@ -118,12 +137,22 @@ export function findContexts(
 }
 
 /**
- * スレッドを見つけるためにさかのぼる長さ。**返信の窓とは別物**。
- *
- * 「3日前に始まったスレッドに、さっき返信が来た」を拾うために要る。取得件数は
- * `MAX_HISTORY` で頭打ちなので、ここを広げても API の負荷は変わらない。
+ * > [!IMPORTANT]
+ * > **`oldest` で遡ってはいけない。**
+ * >
+ * > 初版は `conversations.history` に `oldest`（14日前）と `limit`（20）を同時に渡していた。
+ * > Slack はこのとき **`oldest` から古い順に** 20件を返す——「直近20件」ではない。
+ * > つまり積み残しの確認は、**チャンネルの逆の端**（14日前あたりの20件）だけを見ていて、
+ * > 今日の発言は一度も視界に入っていなかった。
+ * >
+ * > 当時のコメントは「遡る期間を広げても API の負荷は変わらない」と書いてあり、
+ * > 負荷については正しいが、**広げるほど見える窓が過去へ押し出される**ことを見落としていた。
+ * > 2つのパラメータが打ち消し合っていて、しかも**エラーは出ない**——
+ * > 「0件」とだけ報告され続けた。
+ * >
+ * > いまは `oldest` を渡さず、**新しい方から**取る。親が古いスレッドは
+ * > `findContexts` が `latest_reply` で拾うので、遡る必要はもともと無かった。
  */
-const THREAD_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** 探すのに必要なものだけ。**実クライアントを持ち込まない**ので、そのままテストできる。 */
 export interface PendingSearchDeps {
@@ -133,7 +162,8 @@ export interface PendingSearchDeps {
   allowedChannels?: ReadonlySet<string>;
   excludedChannels?: ReadonlySet<string>;
   listConversations(): Promise<{ id?: string; isDm: boolean }[]>;
-  history(channel: string, oldest: string): Promise<SlackHistoryMessage[]>;
+  /** そのチャンネルの**直近**の発言（新しい方から）。**`oldest` で遡らない**（上記）。 */
+  history(channel: string): Promise<SlackHistoryMessage[]>;
   messages(contextId: string): Promise<SlackHistoryMessage[]>;
   names(text: string, author?: string): Promise<Map<string, string>>;
   onJoined?(contextId: string): void;
@@ -184,11 +214,22 @@ function slackReason(err: unknown): string {
   return known ?? "不明";
 }
 
-export async function findPendingMessages(
-  deps: PendingSearchDeps,
-): Promise<{ found: InboundMessage[]; skipped: number; reasons: string[] }> {
+export async function findPendingMessages(deps: PendingSearchDeps): Promise<{
+  found: InboundMessage[];
+  skipped: number;
+  reasons: string[];
+  /**
+   * 設定で**見に行かなかった**会話の数。
+   *
+   * 読めなかった数は報告していたのに、**見に行かないと決めた分は数えていなかった**。
+   * だから「0件」が「無い」とも「30会話のうち1つしか見ていない」とも読めた——
+   * 判断はしているのに、判断の材料を捨てている。
+   */
+  filtered: number;
+}> {
   const found: InboundMessage[] = [];
   let skipped = 0;
+  let filtered = 0;
   /** 読めなかった理由（重複は畳む）。**本文ではないので監査にもログにも出してよい**。 */
   const reasons = new Set<string>();
   // **スレッドを見つける窓は、返信の窓より広く取る。** 親が古いスレッドは、
@@ -198,20 +239,24 @@ export async function findPendingMessages(
   // 静かに「0件」を報告することになる（実際にそれで取りこぼした）。
   // 数だけ合っていて中身が欠けている状態を、黙って通さない。
   if (!deps.botUserId) {
-    return { found: [], skipped: 0, reasons: ["自分の id が分からない"] };
+    return { found: [], skipped: 0, reasons: ["自分の id が分からない"], filtered: 0 };
   }
-  const oldest = String(Math.floor((deps.since.getTime() - THREAD_LOOKBACK_MS) / 1000));
-
   for (const convo of await deps.listConversations()) {
     if (found.length >= deps.limit) break;
     const channel = convo.id;
     if (!channel) continue;
-    if (!convo.isDm && deps.excludedChannels?.has(channel)) continue;
-    if (!convo.isDm && deps.allowedChannels && !deps.allowedChannels.has(channel)) continue;
+    if (!convo.isDm && deps.excludedChannels?.has(channel)) {
+      filtered++;
+      continue;
+    }
+    if (!convo.isDm && deps.allowedChannels && !deps.allowedChannels.has(channel)) {
+      filtered++;
+      continue;
+    }
 
     let history: SlackHistoryMessage[];
     try {
-      history = await deps.history(channel, oldest);
+      history = await deps.history(channel);
     } catch (err) {
       skipped++;
       reasons.add(skipNote(err, channel));
@@ -253,5 +298,5 @@ export async function findPendingMessages(
       if (!convo.isDm) deps.onJoined?.(contextId);
     }
   }
-  return { found, skipped, reasons: [...reasons] };
+  return { found, skipped, reasons: [...reasons], filtered };
 }
