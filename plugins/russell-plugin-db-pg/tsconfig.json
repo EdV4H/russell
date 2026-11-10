@@ -1,0 +1,11 @@
+{
+  "extends": "@edv4h/russell-tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "references": [
+    {
+      "path": "../../packages/shared"
+    }
+  ]
+}

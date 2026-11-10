@@ -14,6 +14,8 @@ import { assertAutoMigrateAllowed, assertSchemaReady, runMigrations } from "@edv
 import {
   type AgentContext,
   type AuditEvent,
+  DB_SERVICE,
+  type DbCapability,
   PRESENCE_SERVICE,
   type PresenceCapability,
   type RussellPlugin,
@@ -23,7 +25,7 @@ import { beat, lastBeat } from "./heartbeat.js";
 import { AUDIT_MIGRATIONS } from "./migrations.js";
 
 export interface PgAuditOptions {
-  /** 接続文字列。未指定なら env DATABASE_URL。 */
+  /** 接続文字列。未指定なら db プラグイン、それも無ければ env DATABASE_URL。 */
   connectionString?: string;
   /**
    * dev/test 用に起動時マイグレーションを走らせる。本番（NODE_ENV=production）では拒否される。
@@ -37,9 +39,14 @@ export function createPgAuditPlugin(options: PgAuditOptions = {}): RussellPlugin
     id: "russell-plugin-audit-pg",
     name: "Postgres Audit Log (event_log)",
     async setup(ctx: AgentContext) {
-      const pool = new pg.Pool({
-        connectionString: options.connectionString ?? process.env.DATABASE_URL,
-      });
+      // db プラグインがあれば接続はそちらで作る（接続先と設定を1か所に揃える）。
+      // 接続文字列を明示されたときはそれに従う——テストなど、狙った DB へ繋ぐため。
+      const db = options.connectionString
+        ? undefined
+        : ctx.services.get<DbCapability<pg.Pool>>(DB_SERVICE);
+      const pool =
+        db?.createPool("audit") ??
+        new pg.Pool({ connectionString: options.connectionString ?? process.env.DATABASE_URL });
       // idle 接続が切れただけでプロセスを落とさない（pg.Pool は listener が無いと
       // unhandled 'error' event で死ぬ）。DB の再起動・フェイルオーバのたびに個体が
       // 落ちるのは fail-closed ではなく可用性の欠陥。判定は次のクエリの失敗で行う。

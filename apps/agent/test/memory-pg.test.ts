@@ -20,6 +20,9 @@ describe.skipIf(!DB)("memory-pg（DATABASE_URL 必須）", () => {
         provide(key: string, value: unknown) {
           if (key === "memory") capability = value as MemoryCapability;
         },
+        get() {
+          return undefined; // db プラグインなし＝env DATABASE_URL で繋ぐ
+        },
       },
       policy: { declareEffect() {} },
       tools: {

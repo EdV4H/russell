@@ -23,6 +23,7 @@ russell/                                   # このリポジトリ
 ├── plugins/
 │   ├── russell-plugin-surface-slack/      # @edv4h/russell-plugin-surface-slack
 │   ├── russell-plugin-surface-cli/
+│   ├── russell-plugin-db-pg/              # Postgres の接続先と接続の作り方（pg プラグインへ配る）
 │   ├── russell-plugin-memory-pg/
 │   ├── russell-plugin-audit-pg/           # event_log（監査・追記専用, §3.1）
 │   ├── russell-plugin-killswitch-pg/      # agent_stops（/russell stop の凍結状態, §12-4）
@@ -48,6 +49,7 @@ russell/                                   # このリポジトリ
 | `@edv4h/russell-core` | カーネル。`createAgent` + 全レジストリ実装 + 認知ループ + Policy Gate原値 | `russell-shared` のみ |
 | `@edv4h/russell-shared` | プラグイン契約・`AgentContext`・ドメイン型（Finding/Equipment/EffectClass/…）。全プラグインが import | ランタイム依存ほぼ無し |
 | `@edv4h/russell-migrate` | マイグレーションランナー（台帳 `schema_migrations`・expand→backfill→contract）。契約は [`34-migrations.md`](./34-migrations.md) | `pg` のみ（russell 依存なし） |
+| `@edv4h/russell-plugin-db-pg` | Postgres の接続先と接続の作り方を `DbCapability`（services `db`）で配る。プールは使う側が用途ごとに作る | `russell-shared` / `pg` |
 | `@edv4h/russell-plugin-killswitch-pg` | キルスイッチ通常経路（レベル1/2）。契約は [`35-killswitch.md`](./35-killswitch.md) | `russell-shared` / `russell-migrate` / `pg` |
 | `@edv4h/russell-plugin-model-*` | 会話に使うモデル。echo（ダミー）/ claude-code（開発用・手元の CLI）/ claude（本番）。選び方と隔離は [`36-model-providers.md`](./36-model-providers.md) | `russell-shared`（+ SDK） |
 | `@edv4h/russell-plugin-*` | 各機能。`createXxxPlugin()` を named export | `russell-shared`（+ 必要なら `russell-core`/helpers） |
