@@ -7,8 +7,13 @@
  */
 
 import { assertAutoMigrateAllowed, assertSchemaReady, runMigrations } from "@edv4h/russell-migrate";
-import type { AgentContext, RussellPlugin, SettingsCapability } from "@edv4h/russell-shared";
-import { SETTINGS_SERVICE } from "@edv4h/russell-shared";
+import type {
+  AgentContext,
+  DbCapability,
+  RussellPlugin,
+  SettingsCapability,
+} from "@edv4h/russell-shared";
+import { DB_SERVICE, SETTINGS_SERVICE } from "@edv4h/russell-shared";
 import pg from "pg";
 import { SETTINGS_MIGRATIONS } from "./migrations.js";
 import { readSetting, writeSetting } from "./store.js";
@@ -23,9 +28,14 @@ export function createPgSettingsPlugin(options: PgSettingsOptions = {}): Russell
     id: "russell-plugin-settings-pg",
     name: "Agent Settings (Postgres)",
     async setup(ctx: AgentContext) {
-      const pool = new pg.Pool({
-        connectionString: options.connectionString ?? process.env.DATABASE_URL,
-      });
+      // db プラグインがあれば接続はそちらで作る（接続先と設定を1か所に揃える）。
+      // 接続文字列を明示されたときはそれに従う——テストなど、狙った DB へ繋ぐため。
+      const db = options.connectionString
+        ? undefined
+        : ctx.services.get<DbCapability<pg.Pool>>(DB_SERVICE);
+      const pool =
+        db?.createPool("settings") ??
+        new pg.Pool({ connectionString: options.connectionString ?? process.env.DATABASE_URL });
       pool.on("error", (err) => {
         console.error("[settings-pg] Postgres 接続エラー:", err.message);
       });

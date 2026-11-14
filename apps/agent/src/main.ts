@@ -11,6 +11,7 @@
 import { createAgent } from "@edv4h/russell-core";
 import { createAlertsPlugin } from "@edv4h/russell-plugin-alerts";
 import { createPgAuditPlugin } from "@edv4h/russell-plugin-audit-pg";
+import { createPgDbPlugin } from "@edv4h/russell-plugin-db-pg";
 import {
   createCalendarEquipmentPlugin,
   createGoogleEquipmentPlugin,
@@ -61,9 +62,11 @@ const MODEL_ID = useClaude ? "claude" : useClaudeCode ? "claude-code" : "echo";
 /**
  * スポンジプリセットが Bob 用に組むプラグイン配列。
  * 配列順は load-bearing（provider を consumer より前に）:
- *   audit → killswitch → services/memory → models → surfaces。
+ *   db → audit → killswitch → services/memory → models → surfaces。
  *
- * audit が先頭なのは、以降のプラグインの setup 中に起きる記録も残すため。
+ * db が audit より前なのは、audit も含めて pg を使うプラグインがそこから接続を作るため
+ * （接続先と設定を1か所に揃える）。db 自身は setup 中に何も記録しない。
+ * audit がその次なのは、以降のプラグインの setup 中に起きる記録も残すため。
  * killswitch がその次なのは、凍結状態が読めるようになってから他を立てるため
  * （通信面が立った時点で `/russell stop` が効く状態になっている）。
  * DATABASE_URL が無い（オフライン stack）ときは通常経路を持たない＝env（レベル3）だけが効く。
@@ -78,7 +81,14 @@ function assembleSpongePlugins(): RussellPlugin[] {
   const issued = (id: EquipmentId) => INDIVIDUAL.equipment.includes(id);
 
   return [
-    ...(usePg ? [createPgAuditPlugin(), createPgKillSwitchPlugin(), createPgSettingsPlugin()] : []),
+    ...(usePg
+      ? [
+          createPgDbPlugin(),
+          createPgAuditPlugin(),
+          createPgKillSwitchPlugin(),
+          createPgSettingsPlugin(),
+        ]
+      : []),
     usePg ? createPgMemoryPlugin() : createInMemoryMemoryPlugin(),
     // **支給する装備だけを組み立てる**（§9.1）。載っていないものは作りもしない——
     // 個体は持っていない能力の存在を知らない（§9.2）。

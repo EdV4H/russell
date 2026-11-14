@@ -16,13 +16,14 @@ import { assertAutoMigrateAllowed, assertSchemaReady, runMigrations } from "@edv
 import type {
   AgentContext,
   AuditRegistry,
+  DbCapability,
   KillSwitchCapability,
   RussellPlugin,
   StopInput,
   StopScope,
   StopState,
 } from "@edv4h/russell-shared";
-import { KILL_SWITCH_SERVICE } from "@edv4h/russell-shared";
+import { DB_SERVICE, KILL_SWITCH_SERVICE } from "@edv4h/russell-shared";
 import pg from "pg";
 import { ALL_TARGET, KILLSWITCH_MIGRATIONS } from "./migrations.js";
 
@@ -36,7 +37,7 @@ const REASON_MAX = 500;
 const AGENT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 export interface PgKillSwitchOptions {
-  /** 接続文字列。未指定なら env DATABASE_URL。 */
+  /** 接続文字列。未指定なら db プラグイン、それも無ければ env DATABASE_URL。 */
   connectionString?: string;
   /**
    * dev/test 用に起動時マイグレーションを走らせる。本番（NODE_ENV=production）では拒否される。
@@ -78,9 +79,14 @@ export function createPgKillSwitchPlugin(options: PgKillSwitchOptions = {}): Rus
     id: "russell-plugin-killswitch-pg",
     name: "Postgres Kill Switch (agent_stops)",
     async setup(ctx: AgentContext) {
-      const pool = new pg.Pool({
-        connectionString: options.connectionString ?? process.env.DATABASE_URL,
-      });
+      // db プラグインがあれば接続はそちらで作る（接続先と設定を1か所に揃える）。
+      // 接続文字列を明示されたときはそれに従う——テストなど、狙った DB へ繋ぐため。
+      const db = options.connectionString
+        ? undefined
+        : ctx.services.get<DbCapability<pg.Pool>>(DB_SERVICE);
+      const pool =
+        db?.createPool("killswitch") ??
+        new pg.Pool({ connectionString: options.connectionString ?? process.env.DATABASE_URL });
       // idle 接続が切れただけでプロセスを落とさない（pg.Pool は listener が無いと
       // unhandled 'error' event で死ぬ）。凍結の判定は次のクエリの失敗で行い、
       // 読めなければ silent に倒れる（§12-7）——落ちるべきは判定であってプロセスではない。
